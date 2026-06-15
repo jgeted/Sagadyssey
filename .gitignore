@@ -1,14 +1,61 @@
+### Gradle ###
+.gradle
 build/
-.gradle/
-run/
+!gradle/wrapper/gradle-wrapper.jar
+!**/src/**/build/
+
+### IntelliJ IDEA ###
 .idea/
+*.iws
 *.iml
 *.ipr
-*.iws
 out/
+!**/src/**/out/
+
+.run/
+
+### Eclipse ###
+.apt_generated
+.classpath
+.eclipse/
+.factorypath
+.project
+.settings
+.springBeans
+.sts4-cache
 bin/
+!**/src/**/bin/
+
+### VS Code ###
+.vscode/
+
+### Mac OS ###
 .DS_Store
-Thumbs.db
+
+### Minecraft Modding ###
+run/
+!**/src/**/run/
+**/src/generated/**/.cache/
+repo/
+!**/src/**/repo/
+
+### AI 辅助工具 ###
+CLAUDE.md
 .claude/
+
+### 内部规划文档 ###
+一个想法.txt
+一个想法.docx
+代码规范.md
+工作分类.md
+工作日志.md
+项目梳理.md
+致T-项目介绍.md
+
+### 临时脚本 ###
+extract_docx.py
 build.bat
-build_log.txt
+
+### 模板 ###
+sagadyssey-template-1.21.1/
+TEMPLATE_LICENSE.txt
