@@ -1,0 +1,14 @@
+build/
+.gradle/
+run/
+.idea/
+*.iml
+*.ipr
+*.iws
+out/
+bin/
+.DS_Store
+Thumbs.db
+.claude/
+build.bat
+build_log.txt
