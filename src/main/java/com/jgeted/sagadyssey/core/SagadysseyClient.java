@@ -1,12 +1,15 @@
 package com.jgeted.sagadyssey.core;
 
 import com.jgeted.sagadyssey.core.gui.ResearchScreen;
+import com.jgeted.sagadyssey.npc.client.NpcRenderer;
+import com.jgeted.sagadyssey.npc.registry.NpcEntityTypes;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
+import net.neoforged.neoforge.client.event.EntityRenderersEvent;
 import net.neoforged.neoforge.client.event.RegisterKeyMappingsEvent;
 import org.lwjgl.glfw.GLFW;
 
@@ -24,6 +27,11 @@ public class SagadysseyClient {
     @SubscribeEvent
     public static void registerKeys(RegisterKeyMappingsEvent event) {
         event.register(RESEARCH_KEY);
+    }
+
+    @SubscribeEvent
+    public static void registerRenderers(EntityRenderersEvent.RegisterRenderers event) {
+        event.registerEntityRenderer(NpcEntityTypes.NPC_BASE.get(), NpcRenderer::new);
     }
 
     @EventBusSubscriber(value = Dist.CLIENT, bus = EventBusSubscriber.Bus.GAME)

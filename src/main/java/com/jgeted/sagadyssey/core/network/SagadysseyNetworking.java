@@ -1,5 +1,6 @@
 package com.jgeted.sagadyssey.core.network;
 
+import com.jgeted.sagadyssey.npc.network.NpcInteractionPacket;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
 import net.neoforged.neoforge.network.registration.PayloadRegistrar;
@@ -39,6 +40,13 @@ public class SagadysseyNetworking {
                 ResearchSyncPayload.TYPE,
                 ResearchSyncPayload.STREAM_CODEC,
                 ResearchSyncPayload::handle
+        );
+
+        // 客户端→服务端：NPC 交互
+        registrar.playToServer(
+                NpcInteractionPacket.TYPE,
+                NpcInteractionPacket.STREAM_CODEC,
+                NpcInteractionPacket::handle
         );
     }
 }

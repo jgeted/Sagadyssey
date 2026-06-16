@@ -7,6 +7,7 @@ import com.jgeted.sagadyssey.core.config.SagadysseyConfig;
 import com.jgeted.sagadyssey.core.network.SagadysseyNetworking;
 import com.jgeted.sagadyssey.core.research.ResearchAttachments;
 import com.jgeted.sagadyssey.core.research.ResearchRegistry;
+import com.jgeted.sagadyssey.npc.registry.NpcEntityTypes;
 import com.jgeted.sagadyssey.registry.ModBlocks;
 import com.jgeted.sagadyssey.registry.ModCreativeTabs;
 import com.jgeted.sagadyssey.registry.ModItems;
@@ -22,6 +23,7 @@ import net.neoforged.neoforge.client.gui.ConfigurationScreen;
 import net.neoforged.neoforge.client.gui.IConfigScreenFactory;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.RegisterCommandsEvent;
+import net.neoforged.neoforge.event.entity.EntityAttributeCreationEvent;
 import org.slf4j.Logger;
 import com.mojang.logging.LogUtils;
 
@@ -53,6 +55,12 @@ public class Sagadyssey {
 
         // 注册 Attachment（研究点数数据）
         ResearchAttachments.ATTACHMENT_TYPES.register(modEventBus);
+
+        // 注册 NPC 实体 + 生成蛋
+        NpcEntityTypes.REGISTRY.register(modEventBus);
+        NpcEntityTypes.SPAWN_EGGS.register(modEventBus);
+        modEventBus.addListener(NpcEntityTypes::registerAttributes);
+        LOGGER.info("NPC 实体已注册");
 
         // 初始化技能树
         ResearchRegistry.init();
