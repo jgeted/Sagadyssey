@@ -23,14 +23,6 @@ A medieval-themed Minecraft 1.21.1 expansion mod built with NeoForge.
    - **Linux:** `~/.minecraft/mods`
 3. Launch the NeoForge 1.21.1 client
 
-### No Release Available?
-
-If no release has been published yet, you can get a build from GitHub Actions:
-
-1. Open the [Actions page](https://github.com/jgeted/Sagadyssey/actions)
-2. Click the latest successful build (green checkmark)
-3. Download the `.jar` from the **Artifacts** section at the bottom of the page
-
 ---
 
 ## Build & Development (Developers)
@@ -64,10 +56,6 @@ cd Sagadyssey
 ```
 
 Minecraft will launch automatically after building, with the mod loaded.
-
-### Network Setup (Mainland China)
-
-If `maven.neoforged.net` is inaccessible (SSL handshake failure / connection reset), refer to `CLAUDE.md` for proxy configuration instructions.
 
 ---
 
