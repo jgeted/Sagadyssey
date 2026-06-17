@@ -1,0 +1,73 @@
+package com.jgeted.sagadyssey.npc.ai;
+
+import com.jgeted.sagadyssey.npc.entity.NpcBase;
+import net.minecraft.world.entity.ai.goal.Goal;
+import net.minecraft.world.entity.player.Player;
+
+import java.util.EnumSet;
+
+/**
+ * 低血量撤退+回血。
+ * HP < 30% → 向主人撤退，停止攻击，缓慢回血。
+ * HP ≥ 60% → 恢复正常行为。
+ */
+public class LowHpRetreatGoal extends Goal {
+
+    private final NpcBase npc;
+    private int regenTimer;
+
+    private static final float RETREAT_THRESHOLD = 0.30F;
+    private static final float RECOVER_THRESHOLD = 0.60F;
+    private static final double OWNER_TOO_FAR = 256.0D;
+
+    public LowHpRetreatGoal(NpcBase npc) {
+        this.npc = npc;
+        this.setFlags(EnumSet.of(Flag.MOVE));
+    }
+
+    @Override
+    public boolean canUse() {
+        if (npc.getOwnerUUID() == null) return false;
+        float hpRatio = npc.getHealth() / npc.getMaxHealth();
+        if (hpRatio > RETREAT_THRESHOLD) return false;
+
+        Player owner = npc.level().getPlayerByUUID(npc.getOwnerUUID());
+        return owner != null && owner.isAlive()
+                && npc.distanceToSqr(owner) < OWNER_TOO_FAR;
+    }
+
+    @Override
+    public boolean canContinueToUse() {
+        if (npc.getOwnerUUID() == null) return false;
+        float hpRatio = npc.getHealth() / npc.getMaxHealth();
+        if (hpRatio >= RECOVER_THRESHOLD) return false;
+
+        Player owner = npc.level().getPlayerByUUID(npc.getOwnerUUID());
+        return owner != null && owner.isAlive();
+    }
+
+    @Override
+    public void start() {
+        npc.setTarget(null);
+        npc.getNavigation().stop();
+        regenTimer = 0;
+    }
+
+    @Override
+    public void tick() {
+        Player owner = npc.level().getPlayerByUUID(npc.getOwnerUUID());
+        if (owner != null) {
+            npc.getNavigation().moveTo(owner, 1.3D);
+        }
+
+        if (++regenTimer >= 20) {
+            regenTimer = 0;
+            npc.heal(1.0F);
+        }
+    }
+
+    @Override
+    public void stop() {
+        npc.getNavigation().stop();
+    }
+}

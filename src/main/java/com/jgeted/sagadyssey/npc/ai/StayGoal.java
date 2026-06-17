@@ -4,6 +4,8 @@ import com.jgeted.sagadyssey.npc.entity.NpcBase;
 import com.jgeted.sagadyssey.npc.entity.NpcCommand;
 import net.minecraft.world.entity.ai.goal.Goal;
 
+import java.util.EnumSet;
+
 /**
  * 待命行为：当 NPC 命令为 STAY 时，阻止所有移动类目标执行。
  * 优先级高于 RandomStroll，但低于 Float（溺水时仍可上浮）。
@@ -14,6 +16,7 @@ public class StayGoal extends Goal {
 
     public StayGoal(NpcBase npc) {
         this.npc = npc;
+        this.setFlags(EnumSet.of(Goal.Flag.MOVE));
     }
 
     @Override

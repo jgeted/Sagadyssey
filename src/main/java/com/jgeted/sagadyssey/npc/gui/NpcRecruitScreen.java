@@ -1,5 +1,6 @@
 package com.jgeted.sagadyssey.npc.gui;
 
+import com.jgeted.sagadyssey.npc.faction.NpcFaction;
 import com.jgeted.sagadyssey.npc.network.NpcInteractionPacket;
 import com.jgeted.sagadyssey.npc.network.NpcStatsPayload;
 import net.minecraft.client.gui.GuiGraphics;
@@ -30,6 +31,7 @@ public class NpcRecruitScreen extends Screen {
     private final int kills;
     private final int moral;
     private final int recruitmentCost;
+    private final String factionName;
 
     // 布局常量
     private static final int PANEL_WIDTH = 176;
@@ -53,18 +55,19 @@ public class NpcRecruitScreen extends Screen {
         this.kills = data.kills();
         this.moral = data.moral();
         this.recruitmentCost = data.recruitmentCost();
+        this.factionName = data.factionName();
     }
 
     @Override
     protected void init() {
         super.init();
         this.panelLeft = (this.width - PANEL_WIDTH) / 2;
-        this.panelTop = (this.height - 150) / 2;
+        this.panelTop = (this.height - 166) / 2;
 
         // Hire 按钮（放在属性区域下方）
         int btnW = 120;
         int btnX = panelLeft + (PANEL_WIDTH - btnW) / 2;
-        int btnY = panelTop + 118;
+        int btnY = panelTop + 136;
 
         addRenderableWidget(Button.builder(
                 Component.literal("招募（花费 " + recruitmentCost + " 绿宝石）"),
@@ -82,12 +85,12 @@ public class NpcRecruitScreen extends Screen {
         graphics.fill(0, 0, this.width, this.height, 0x88_000000);
 
         // === 主面板背景 ===
-        graphics.fill(panelLeft, panelTop, panelLeft + PANEL_WIDTH, panelTop + 150, 0xCC_1A1A2E);
+        graphics.fill(panelLeft, panelTop, panelLeft + PANEL_WIDTH, panelTop + 166, 0xCC_1A1A2E);
         // 金色边框
         graphics.fill(panelLeft - 1, panelTop - 1, panelLeft + PANEL_WIDTH + 1, panelTop, 0xFF_AA5500);
-        graphics.fill(panelLeft - 1, panelTop + 150, panelLeft + PANEL_WIDTH + 1, panelTop + 151, 0xFF_AA5500);
-        graphics.fill(panelLeft - 1, panelTop, panelLeft, panelTop + 150, 0xFF_AA5500);
-        graphics.fill(panelLeft + PANEL_WIDTH, panelTop, panelLeft + PANEL_WIDTH + 1, panelTop + 150, 0xFF_AA5500);
+        graphics.fill(panelLeft - 1, panelTop + 166, panelLeft + PANEL_WIDTH + 1, panelTop + 167, 0xFF_AA5500);
+        graphics.fill(panelLeft - 1, panelTop, panelLeft, panelTop + 166, 0xFF_AA5500);
+        graphics.fill(panelLeft + PANEL_WIDTH, panelTop, panelLeft + PANEL_WIDTH + 1, panelTop + 166, 0xFF_AA5500);
 
         // === 标题 ===
         Component title = Component.literal(npcName).withStyle(style -> style.withBold(true));
@@ -102,10 +105,21 @@ public class NpcRecruitScreen extends Screen {
         // === 分割线 ===
         graphics.fill(panelLeft + 8, panelTop + 36, panelLeft + PANEL_WIDTH - 8, panelTop + 37, 0x55_AA5500);
 
+        // === 阵营 ===
+        NpcFaction faction = NpcFaction.valueOf(factionName);
+        Component factionComp = Component.literal("阵营：" + faction.getDisplayName());
+        int factionColor = switch (faction) {
+            case HOSTILE -> 0xFF_FF5555;
+            case NEUTRAL -> 0xFF_FFFF55;
+            case FRIENDLY -> 0xFF_55FF55;
+        };
+        int factionX = panelLeft + (PANEL_WIDTH - font.width(factionComp)) / 2;
+        graphics.drawString(font, factionComp, factionX, panelTop + 42, factionColor);
+
         // === 属性面板（两列布局） ===
         int col1X = panelLeft + 12;
         int col2X = panelLeft + 92;
-        int rowY = panelTop + 42;
+        int rowY = panelTop + 60;
         int rowH = 14;
 
         drawStat(graphics, col1X, rowY, "生命", String.format("%.0f / %.0f", currentHp, maxHp), 0xFF_55FF55);
@@ -128,7 +142,7 @@ public class NpcRecruitScreen extends Screen {
         Component costText = Component.literal("招募费用：" + recruitmentCost + " 绿宝石")
                 .withStyle(style -> style.withColor(0xFF55FF55));
         int costX = panelLeft + (PANEL_WIDTH - font.width(costText)) / 2;
-        graphics.drawString(font, costText, costX, panelTop + 105, 0xFF_55FF55);
+        graphics.drawString(font, costText, costX, panelTop + 120, 0xFF_55FF55);
 
         super.render(graphics, mouseX, mouseY, partialTick);
     }

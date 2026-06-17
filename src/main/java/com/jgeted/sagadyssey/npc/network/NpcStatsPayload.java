@@ -1,8 +1,9 @@
 package com.jgeted.sagadyssey.npc.network;
 
 import com.jgeted.sagadyssey.Sagadyssey;
-import com.jgeted.sagadyssey.npc.entity.NpcBase;
 import com.jgeted.sagadyssey.npc.entity.NpcCommand;
+import com.jgeted.sagadyssey.npc.faction.NpcFaction;
+import com.jgeted.sagadyssey.npc.entity.NpcBase;
 import com.jgeted.sagadyssey.npc.gui.NpcCommandScreen;
 import com.jgeted.sagadyssey.npc.gui.NpcRecruitScreen;
 import io.netty.buffer.ByteBuf;
@@ -31,7 +32,8 @@ public record NpcStatsPayload(
         int moral,
         int recruitmentCost,
         boolean isOwned,
-        String commandName
+        String commandName,
+        String factionName
 ) implements CustomPacketPayload {
 
     public static final Type<NpcStatsPayload> TYPE = new Type<>(
@@ -55,6 +57,7 @@ public record NpcStatsPayload(
                 buf.writeInt(packet.recruitmentCost);
                 buf.writeBoolean(packet.isOwned);
                 buf.writeByte(NpcCommand.valueOf(packet.commandName()).ordinal());
+                writeString(buf, packet.factionName());
             },
             buf -> new NpcStatsPayload(
                     buf.readInt(),
@@ -71,7 +74,8 @@ public record NpcStatsPayload(
                     buf.readInt(),
                     buf.readInt(),
                     buf.readBoolean(),
-                    NpcCommand.values()[buf.readByte()].name()
+                    NpcCommand.values()[buf.readByte()].name(),
+                    readString(buf)
             )
     );
 
@@ -115,6 +119,10 @@ public record NpcStatsPayload(
      * 从 NpcBase 实体收集属性数据，构建数据包。
      */
     public static NpcStatsPayload from(NpcBase npc) {
+        int cost = npc.getRecruitmentCost();
+        if (npc.getFaction() == NpcFaction.HOSTILE) {
+            cost *= 2;
+        }
         return new NpcStatsPayload(
                 npc.getId(),
                 npc.getNpcName(),
@@ -128,9 +136,10 @@ public record NpcStatsPayload(
                 npc.getExperience(),
                 npc.getKills(),
                 npc.getMoral(),
-                npc.getRecruitmentCost(),
+                cost,
                 npc.isOwned(),
-                npc.getCommand().name()
+                npc.getCommand().name(),
+                npc.getFaction().name()
         );
     }
 }

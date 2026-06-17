@@ -1,9 +1,11 @@
 package com.jgeted.sagadyssey.npc.entity;
 
+import com.jgeted.sagadyssey.npc.faction.NpcFaction;
 import com.jgeted.sagadyssey.npc.network.NpcInteractionPacket;
 import com.jgeted.sagadyssey.npc.profession.NpcProfession;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.world.ContainerHelper;
+import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.SimpleContainer;
@@ -14,6 +16,7 @@ import net.minecraft.world.entity.ai.attributes.AttributeSupplier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.ai.goal.FloatGoal;
 import net.minecraft.world.entity.ai.goal.LookAtPlayerGoal;
+import net.minecraft.world.entity.ai.goal.MeleeAttackGoal;
 import net.minecraft.world.entity.ai.goal.RandomLookAroundGoal;
 import net.minecraft.world.entity.ai.goal.RandomStrollGoal;
 import net.minecraft.world.entity.player.Player;
@@ -60,6 +63,9 @@ public class NpcBase extends PathfinderMob {
     /** 当前行为指令 */
     private NpcCommand command = NpcCommand.IDLE;
 
+    /** 阵营 */
+    private NpcFaction faction = NpcFaction.NEUTRAL;
+
     /** 主人 UUID，null 表示未被招募 */
     @Nullable
     private UUID ownerUUID = null;
@@ -97,6 +103,16 @@ public class NpcBase extends PathfinderMob {
         if (wasNone && profession != NpcProfession.NONE) {
             applyInitialEquipment(profession);
         }
+
+        // 应用职业基础属性
+        this.getAttribute(Attributes.MAX_HEALTH).setBaseValue(profession.getMaxHp());
+        this.getAttribute(Attributes.ATTACK_DAMAGE).setBaseValue(profession.getAttackDamage());
+        this.getAttribute(Attributes.MOVEMENT_SPEED).setBaseValue(profession.getSpeed());
+        this.getAttribute(Attributes.ARMOR).setBaseValue(profession.getArmor());
+
+        if (this.getHealth() > this.getMaxHealth()) {
+            this.setHealth(this.getMaxHealth());
+        }
     }
 
     public int getNpcLevel() { return npcLevel; }
@@ -118,6 +134,9 @@ public class NpcBase extends PathfinderMob {
 
     public NpcCommand getCommand() { return command; }
     public void setCommand(NpcCommand command) { this.command = command; }
+
+    public NpcFaction getFaction() { return faction; }
+    public void setFaction(NpcFaction faction) { this.faction = faction; }
 
     @Nullable
     public UUID getOwnerUUID() { return ownerUUID; }
@@ -142,7 +161,7 @@ public class NpcBase extends PathfinderMob {
     public void setArrowSlot(ItemStack stack) { this.arrowSlot = stack; }
 
     /** 首次分配职业时给予初始装备 */
-    private void applyInitialEquipment(NpcProfession profession) {
+    public void applyInitialEquipment(NpcProfession profession) {
         switch (profession) {
             case NONE -> {}
             case WARRIOR -> {
@@ -185,7 +204,8 @@ public class NpcBase extends PathfinderMob {
                 equipmentInventory.setItem(1, new ItemStack(Items.BREAD, 4));
             }
             case TRADER -> {
-                equipmentInventory.setItem(0, new ItemStack(Items.EMERALD, 8));
+                equipmentInventory.setItem(0, new ItemStack(Items.PAPER, 3));
+                equipmentInventory.setItem(1, new ItemStack(Items.BOOK, 1));
             }
         }
     }
@@ -219,11 +239,15 @@ public class NpcBase extends PathfinderMob {
     @Override
     protected void registerGoals() {
         this.goalSelector.addGoal(0, new FloatGoal(this));
+        this.goalSelector.addGoal(0, new com.jgeted.sagadyssey.npc.ai.LowHpRetreatGoal(this));
         this.goalSelector.addGoal(1, new com.jgeted.sagadyssey.npc.ai.StayGoal(this));
+        this.goalSelector.addGoal(1, new MeleeAttackGoal(this, 1.0D, true));
         this.goalSelector.addGoal(2, new com.jgeted.sagadyssey.npc.ai.FollowOwnerGoal(this, 1.0D, 3.0F, 12.0F));
         this.goalSelector.addGoal(3, new RandomStrollGoal(this, 1.0D));
         this.goalSelector.addGoal(4, new LookAtPlayerGoal(this, Player.class, 8.0F));
         this.goalSelector.addGoal(5, new RandomLookAroundGoal(this));
+        this.targetSelector.addGoal(0, new com.jgeted.sagadyssey.npc.ai.ProtectOwnerGoal(this));
+        this.targetSelector.addGoal(1, new com.jgeted.sagadyssey.npc.ai.NpcHostileGoal(this));
     }
 
     /** 属性定义（注册实体时调用） */
@@ -234,6 +258,16 @@ public class NpcBase extends PathfinderMob {
                 .add(Attributes.ATTACK_DAMAGE, 1.0D)
                 .add(Attributes.ARMOR, 0.0D)
                 .add(Attributes.FOLLOW_RANGE, 16.0D);
+    }
+
+    @Override
+    public boolean hurt(DamageSource source, float amount) {
+        if (source.getEntity() instanceof Player player) {
+            if (this.faction != NpcFaction.HOSTILE && !isOwnedBy(player.getUUID())) {
+                this.faction = NpcFaction.HOSTILE;
+            }
+        }
+        return super.hurt(source, amount);
     }
 
     // === 右键交互 ===
@@ -260,6 +294,7 @@ public class NpcBase extends PathfinderMob {
         tag.putInt("Moral", this.moral);
         tag.putInt("RecruitmentCost", this.recruitmentCost);
         tag.putString("NpcCommand", this.command.name());
+        tag.putString("Faction", this.faction.name());
         if (this.ownerUUID != null) {
             tag.putUUID("OwnerUUID", this.ownerUUID);
         }
@@ -311,6 +346,13 @@ public class NpcBase extends PathfinderMob {
                 this.command = NpcCommand.valueOf(tag.getString("NpcCommand"));
             } catch (IllegalArgumentException e) {
                 this.command = NpcCommand.IDLE;
+            }
+        }
+        if (tag.contains("Faction")) {
+            try {
+                this.faction = NpcFaction.valueOf(tag.getString("Faction"));
+            } catch (IllegalArgumentException e) {
+                this.faction = NpcFaction.NEUTRAL;
             }
         }
 

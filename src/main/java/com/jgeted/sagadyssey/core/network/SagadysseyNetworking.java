@@ -1,6 +1,7 @@
 package com.jgeted.sagadyssey.core.network;
 
 import com.jgeted.sagadyssey.npc.network.NpcInteractionPacket;
+import com.jgeted.sagadyssey.npc.network.NpcProfessionPacket;
 import com.jgeted.sagadyssey.npc.network.NpcStatsPayload;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
@@ -55,6 +56,13 @@ public class SagadysseyNetworking {
                 NpcStatsPayload.TYPE,
                 NpcStatsPayload.STREAM_CODEC,
                 NpcStatsPayload::handle
+        );
+
+        // 客户端→服务端：NPC 职业切换
+        registrar.playToServer(
+                NpcProfessionPacket.TYPE,
+                NpcProfessionPacket.STREAM_CODEC,
+                NpcProfessionPacket::handle
         );
     }
 }

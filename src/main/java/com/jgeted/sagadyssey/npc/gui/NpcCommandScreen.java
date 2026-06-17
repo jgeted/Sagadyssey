@@ -59,10 +59,11 @@ public class NpcCommandScreen extends Screen {
         this.panelLeft = (this.width - PANEL_WIDTH) / 2;
         this.panelTop = (this.height - PANEL_HEIGHT) / 2;
 
-        int btnW = 70;
-        int btnH = 20;
-        int leftX = panelLeft + 18;
-        int rightX = panelLeft + PANEL_WIDTH - 18 - btnW;
+        int btnW = 76;
+        int leftX = panelLeft + 10;
+        int rightX = panelLeft + 90;
+        int btnY1 = panelTop + 110;
+        int btnY2 = panelTop + 138;
 
         addRenderableWidget(Button.builder(
                 Component.literal("跟随我" + (commandName.equals("FOLLOW") ? " ✓" : "")),
@@ -70,7 +71,7 @@ public class NpcCommandScreen extends Screen {
                     PacketDistributor.sendToServer(new NpcInteractionPacket(npcId, "follow"));
                     this.onClose();
                 })
-                .bounds(leftX, panelTop + 110, btnW, btnH)
+                .bounds(leftX, btnY1, btnW, 20)
                 .build());
 
         addRenderableWidget(Button.builder(
@@ -79,7 +80,7 @@ public class NpcCommandScreen extends Screen {
                     PacketDistributor.sendToServer(new NpcInteractionPacket(npcId, "stay"));
                     this.onClose();
                 })
-                .bounds(rightX, panelTop + 110, btnW, btnH)
+                .bounds(rightX, btnY1, btnW, 20)
                 .build());
 
         addRenderableWidget(Button.builder(
@@ -88,7 +89,15 @@ public class NpcCommandScreen extends Screen {
                     PacketDistributor.sendToServer(new NpcInteractionPacket(npcId, "open_equip"));
                     this.onClose();
                 })
-                .bounds(panelLeft + 48, panelTop + 138, 80, 20)
+                .bounds(leftX, btnY2, btnW, 20)
+                .build());
+
+        addRenderableWidget(Button.builder(
+                Component.literal("切换职业"),
+                btn -> {
+                    this.minecraft.setScreen(new NpcProfessionScreen(npcId, npcName, professionName));
+                })
+                .bounds(rightX, btnY2, btnW, 20)
                 .build());
     }
 

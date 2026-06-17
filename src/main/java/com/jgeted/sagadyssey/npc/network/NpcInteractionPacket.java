@@ -4,6 +4,7 @@ import com.jgeted.sagadyssey.Sagadyssey;
 import com.jgeted.sagadyssey.npc.container.NpcEquipMenuProvider;
 import com.jgeted.sagadyssey.npc.entity.NpcBase;
 import com.jgeted.sagadyssey.npc.entity.NpcCommand;
+import com.jgeted.sagadyssey.npc.faction.NpcFaction;
 import io.netty.buffer.ByteBuf;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.codec.StreamCodec;
@@ -112,11 +113,15 @@ public record NpcInteractionPacket(int npcId, String action) implements CustomPa
         }
 
         int cost = npc.getRecruitmentCost();
+        if (npc.getFaction() == NpcFaction.HOSTILE) {
+            cost *= 2;
+        }
 
         // 检查玩家有没有足够绿宝石
         if (!hasEnoughEmeralds(player, cost)) {
+            String factionTag = npc.getFaction() == NpcFaction.HOSTILE ? "§c（敌对招募费用翻倍）" : "";
             player.displayClientMessage(
-                    Component.literal("§c绿宝石不足！需要 " + cost + " 个绿宝石"), true);
+                    Component.literal("§c绿宝石不足！需要 " + cost + " 个绿宝石" + factionTag), true);
             return;
         }
 
