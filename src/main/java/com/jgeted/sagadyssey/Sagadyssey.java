@@ -1,12 +1,15 @@
 package com.jgeted.sagadyssey;
 
 import com.jgeted.sagadyssey.client.TestScreen;
+import com.jgeted.sagadyssey.core.command.NpcSpawnCommand;
 import com.jgeted.sagadyssey.core.command.ResearchCommand;
 import com.jgeted.sagadyssey.core.command.TestNetworkCommand;
 import com.jgeted.sagadyssey.core.config.SagadysseyConfig;
 import com.jgeted.sagadyssey.core.network.SagadysseyNetworking;
 import com.jgeted.sagadyssey.core.research.ResearchAttachments;
 import com.jgeted.sagadyssey.core.research.ResearchRegistry;
+import com.jgeted.sagadyssey.core.registry.ModMenuTypes;
+import com.jgeted.sagadyssey.npc.gui.NpcEquipScreen;
 import com.jgeted.sagadyssey.npc.registry.NpcEntityTypes;
 import com.jgeted.sagadyssey.registry.ModBlocks;
 import com.jgeted.sagadyssey.registry.ModCreativeTabs;
@@ -50,6 +53,7 @@ public class Sagadyssey {
         // 注册所有内容
         ModBlocks.REGISTRY.register(modEventBus);
         ModItems.REGISTRY.register(modEventBus);
+        ModMenuTypes.REGISTRY.register(modEventBus);
         ModMenus.REGISTRY.register(modEventBus);
         ModCreativeTabs.REGISTRY.register(modEventBus);
 
@@ -74,7 +78,8 @@ public class Sagadyssey {
         NeoForge.EVENT_BUS.addListener(RegisterCommandsEvent.class, event -> {
             TestNetworkCommand.register(event.getDispatcher());
             ResearchCommand.register(event.getDispatcher());
-            LOGGER.info("命令已注册: /saga test, /research");
+            NpcSpawnCommand.register(event.getDispatcher());
+            LOGGER.info("命令已注册: /saga test, /research, /saga npc spawn");
         });
 
         // 注册 GUI 事件
@@ -83,5 +88,6 @@ public class Sagadyssey {
 
     private void onRegisterMenuScreens(RegisterMenuScreensEvent event) {
         event.register(ModMenus.TEST_MENU.get(), TestScreen::new);
+        event.register(ModMenuTypes.NPC_EQUIP.get(), NpcEquipScreen::new);
     }
 }
