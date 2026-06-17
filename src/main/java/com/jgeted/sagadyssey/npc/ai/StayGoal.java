@@ -7,8 +7,7 @@ import net.minecraft.world.entity.ai.goal.Goal;
 import java.util.EnumSet;
 
 /**
- * 待命行为：当 NPC 命令为 STAY 时，阻止所有移动类目标执行。
- * 优先级高于 RandomStroll，但低于 Float（溺水时仍可上浮）。
+ * 待命行为：当 NPC 命令为 STAY 时，阻止所有水平位移。
  */
 public class StayGoal extends Goal {
 
@@ -21,7 +20,7 @@ public class StayGoal extends Goal {
 
     @Override
     public boolean canUse() {
-        return npc.getCommand() == NpcCommand.STAY;
+        return npc.isAlive() && npc.getCommand() == NpcCommand.STAY;
     }
 
     @Override
@@ -36,6 +35,8 @@ public class StayGoal extends Goal {
 
     @Override
     public void tick() {
-        npc.setDeltaMovement(npc.getDeltaMovement().multiply(1.0D, 0.0D, 1.0D));
+        npc.setDeltaMovement(0.0D, npc.getDeltaMovement().y, 0.0D);
+        npc.xxa = 0.0F;
+        npc.zza = 0.0F;
     }
 }

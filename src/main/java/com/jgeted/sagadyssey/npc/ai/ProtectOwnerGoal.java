@@ -81,12 +81,16 @@ public class ProtectOwnerGoal extends Goal {
     }
 
     private boolean isThreat(LivingEntity entity, Player owner) {
-        if (entity == owner.getLastHurtMob()) return true;
-        if (owner.getLastHurtByMob() == entity) return true;
+        // 1. 正在瞄准主人
         if (entity instanceof Mob mob && mob.getTarget() == owner) return true;
-        if (entity.getLastHurtByMob() == owner) return true;
+        // 2. 主人正在攻击的目标
+        if (entity == owner.getLastHurtMob()) return true;
+        // 3. 原版怪物
         if (entity instanceof net.minecraft.world.entity.monster.Enemy) return true;
-        if (entity instanceof NpcBase otherNpc && otherNpc.getFaction() == NpcFaction.HOSTILE) return true;
+        // 4. 敌对阵营 NPC
+        if (entity instanceof NpcBase otherNpc
+                && otherNpc.getFaction() == NpcFaction.HOSTILE
+                && !otherNpc.isOwnedBy(owner.getUUID())) return true;
         return false;
     }
 }

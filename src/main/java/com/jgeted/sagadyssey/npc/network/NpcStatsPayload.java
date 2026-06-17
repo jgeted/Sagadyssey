@@ -6,16 +6,21 @@ import com.jgeted.sagadyssey.npc.faction.NpcFaction;
 import com.jgeted.sagadyssey.npc.entity.NpcBase;
 import com.jgeted.sagadyssey.npc.gui.NpcCommandScreen;
 import com.jgeted.sagadyssey.npc.gui.NpcRecruitScreen;
+import com.jgeted.sagadyssey.npc.trade.NpcTradeOffer;
 import io.netty.buffer.ByteBuf;
 import net.minecraft.client.Minecraft;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.item.ItemStack;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
 
+import java.util.ArrayList;
+import java.util.List;
+
 /**
- * 服务端→客户端：NPC 完整属性数据。
- * 玩家右键 NPC 时，服务端收集所有属性发回客户端，客户端据此打开对应 GUI。
+ * 服务端→客户端：NPC 完整属性数据（含交易列表）。
  */
 public record NpcStatsPayload(
         int npcId,
@@ -33,7 +38,8 @@ public record NpcStatsPayload(
         int recruitmentCost,
         boolean isOwned,
         String commandName,
-        String factionName
+        String factionName,
+        List<int[]> rawTrades
 ) implements CustomPacketPayload {
 
     public static final Type<NpcStatsPayload> TYPE = new Type<>(
@@ -58,35 +64,63 @@ public record NpcStatsPayload(
                 buf.writeBoolean(packet.isOwned);
                 buf.writeByte(NpcCommand.valueOf(packet.commandName()).ordinal());
                 writeString(buf, packet.factionName());
+                // 交易数据
+                buf.writeInt(packet.rawTrades.size());
+                for (int[] t : packet.rawTrades) {
+                    buf.writeInt(t[0]); buf.writeInt(t[1]); buf.writeInt(t[2]);
+                    buf.writeInt(t[3]); buf.writeInt(t[4]); buf.writeInt(t[5]);
+                    buf.writeInt(t[6]);
+                }
             },
-            buf -> new NpcStatsPayload(
-                    buf.readInt(),
-                    readString(buf),
-                    readString(buf),
-                    buf.readFloat(),
-                    buf.readFloat(),
-                    buf.readFloat(),
-                    buf.readFloat(),
-                    buf.readFloat(),
-                    buf.readInt(),
-                    buf.readInt(),
-                    buf.readInt(),
-                    buf.readInt(),
-                    buf.readInt(),
-                    buf.readBoolean(),
-                    NpcCommand.values()[buf.readByte()].name(),
-                    readString(buf)
-            )
+            buf -> {
+                int npcId = buf.readInt();
+                String npcName = readString(buf);
+                String profName = readString(buf);
+                float curHp = buf.readFloat();
+                float maxHp = buf.readFloat();
+                float atk = buf.readFloat();
+                float spd = buf.readFloat();
+                float arm = buf.readFloat();
+                int lvl = buf.readInt();
+                int exp = buf.readInt();
+                int kills = buf.readInt();
+                int moral = buf.readInt();
+                int cost = buf.readInt();
+                boolean owned = buf.readBoolean();
+                String cmd = NpcCommand.values()[buf.readByte()].name();
+                String factionName = readString(buf);
+                int tradeCount = buf.readInt();
+                List<int[]> trades = new ArrayList<>();
+                for (int i = 0; i < tradeCount; i++) {
+                    trades.add(new int[]{
+                            buf.readInt(), buf.readInt(), buf.readInt(),
+                            buf.readInt(), buf.readInt(), buf.readInt(),
+                            buf.readInt()
+                    });
+                }
+                return new NpcStatsPayload(npcId, npcName, profName, curHp, maxHp, atk, spd, arm,
+                        lvl, exp, kills, moral, cost, owned, cmd, factionName, trades);
+            }
     );
 
-    /** 写入字符串：4 字节长度 + 内容 */
+    /** 将 rawTrades 还原为 NpcTradeOffer 列表 */
+    public List<NpcTradeOffer> buildTrades() {
+        List<NpcTradeOffer> result = new ArrayList<>();
+        for (int[] t : rawTrades) {
+            ItemStack costItem = new ItemStack(BuiltInRegistries.ITEM.byId(t[0]));
+            ItemStack resultItem = new ItemStack(BuiltInRegistries.ITEM.byId(t[3]));
+            if (costItem.isEmpty() || resultItem.isEmpty()) continue;
+            result.add(new NpcTradeOffer(costItem, t[1], t[2], resultItem, t[4], t[5], t[6]));
+        }
+        return result;
+    }
+
     private static void writeString(ByteBuf buf, String s) {
         byte[] bytes = s.getBytes();
         buf.writeInt(bytes.length);
         buf.writeBytes(bytes);
     }
 
-    /** 读取字符串：4 字节长度 + 内容 */
     private static String readString(ByteBuf buf) {
         int len = buf.readInt();
         byte[] bytes = new byte[len];
@@ -99,29 +133,32 @@ public record NpcStatsPayload(
         return TYPE;
     }
 
-    /**
-     * 客户端处理：根据 isOwned 决定打开招募界面还是装备界面。
-     * 目前装备界面未实现，已拥有 NPC 暂不打开任何界面。
-     */
     public static void handle(final NpcStatsPayload data, final IPayloadContext context) {
         context.enqueueWork(() -> {
             Minecraft mc = Minecraft.getInstance();
             if (data.isOwned) {
                 mc.setScreen(new NpcCommandScreen(data));
             } else {
-                // 未被招募 → 打开招募界面
                 mc.setScreen(new NpcRecruitScreen(data));
             }
         });
     }
 
-    /**
-     * 从 NpcBase 实体收集属性数据，构建数据包。
-     */
     public static NpcStatsPayload from(NpcBase npc) {
         int cost = npc.getRecruitmentCost();
         if (npc.getFaction() == NpcFaction.HOSTILE) {
             cost *= 2;
+        }
+        // 序列化交易数据
+        List<int[]> raw = new ArrayList<>();
+        for (NpcTradeOffer t : npc.getActiveTrades()) {
+            raw.add(new int[]{
+                    BuiltInRegistries.ITEM.getId(t.costItem().getItem()),
+                    t.costMin(), t.costMax(),
+                    BuiltInRegistries.ITEM.getId(t.resultItem().getItem()),
+                    t.resultMin(), t.resultMax(),
+                    t.minNpcLevel()
+            });
         }
         return new NpcStatsPayload(
                 npc.getId(),
@@ -139,7 +176,8 @@ public record NpcStatsPayload(
                 cost,
                 npc.isOwned(),
                 npc.getCommand().name(),
-                npc.getFaction().name()
+                npc.getFaction().name(),
+                raw
         );
     }
 }

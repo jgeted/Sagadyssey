@@ -2,6 +2,7 @@ package com.jgeted.sagadyssey.npc.gui;
 
 import com.jgeted.sagadyssey.npc.container.NpcEquipMenu;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.player.Inventory;
@@ -24,6 +25,12 @@ public class NpcEquipScreen extends AbstractContainerScreen<NpcEquipMenu> {
     @Override
     protected void init() {
         super.init();
+        // × 关闭按钮
+        addRenderableWidget(Button.builder(
+                Component.literal("✕").withStyle(s -> s.withColor(0xFF_FF5555)),
+                btn -> this.onClose())
+                .bounds(leftPos + imageWidth - 20, topPos + 4, 16, 16)
+                .build());
     }
 
     @Override

@@ -3,6 +3,8 @@ package com.jgeted.sagadyssey.core.network;
 import com.jgeted.sagadyssey.npc.network.NpcInteractionPacket;
 import com.jgeted.sagadyssey.npc.network.NpcProfessionPacket;
 import com.jgeted.sagadyssey.npc.network.NpcStatsPayload;
+import com.jgeted.sagadyssey.npc.network.NpcTradePacket;
+import com.jgeted.sagadyssey.npc.network.NpcTradeResponsePacket;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
 import net.neoforged.neoforge.network.registration.PayloadRegistrar;
@@ -63,6 +65,20 @@ public class SagadysseyNetworking {
                 NpcProfessionPacket.TYPE,
                 NpcProfessionPacket.STREAM_CODEC,
                 NpcProfessionPacket::handle
+        );
+
+        // 客户端→服务端：NPC 交易
+        registrar.playToServer(
+                NpcTradePacket.TYPE,
+                NpcTradePacket.STREAM_CODEC,
+                NpcTradePacket::handle
+        );
+
+        // 服务端→客户端：交易回应（经验刷新）
+        registrar.playToClient(
+                NpcTradeResponsePacket.TYPE,
+                NpcTradeResponsePacket.STREAM_CODEC,
+                NpcTradeResponsePacket::handle
         );
     }
 }

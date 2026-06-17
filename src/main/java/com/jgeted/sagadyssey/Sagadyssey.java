@@ -9,6 +9,7 @@ import com.jgeted.sagadyssey.core.network.SagadysseyNetworking;
 import com.jgeted.sagadyssey.core.research.ResearchAttachments;
 import com.jgeted.sagadyssey.core.research.ResearchRegistry;
 import com.jgeted.sagadyssey.core.registry.ModMenuTypes;
+import com.jgeted.sagadyssey.npc.event.NpcExperienceEvents;
 import com.jgeted.sagadyssey.npc.gui.NpcEquipScreen;
 import com.jgeted.sagadyssey.npc.registry.NpcEntityTypes;
 import com.jgeted.sagadyssey.registry.ModBlocks;
@@ -81,6 +82,9 @@ public class Sagadyssey {
             NpcSpawnCommand.register(event.getDispatcher());
             LOGGER.info("命令已注册: /saga test, /research, /saga npc spawn");
         });
+
+        // 注册 NPC 经验事件
+        NeoForge.EVENT_BUS.register(NpcExperienceEvents.class);
 
         // 注册 GUI 事件
         modEventBus.addListener(this::onRegisterMenuScreens);

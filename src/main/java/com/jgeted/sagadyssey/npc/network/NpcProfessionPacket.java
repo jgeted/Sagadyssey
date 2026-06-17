@@ -100,6 +100,15 @@ public record NpcProfessionPacket(int npcId, String professionName) implements C
                 return;
             }
 
+            // 转职降一级：计算降级后经验
+            int currentLevel = npc.getNpcLevel();
+            int penaltyExp = switch (currentLevel) {
+                case 2 -> 0;
+                case 3 -> 200;
+                case 4 -> 600;
+                default -> 0;
+            };
+
             // 清除装备栏（保留背包）
             npc.setItemSlot(EquipmentSlot.HEAD, ItemStack.EMPTY);
             npc.setItemSlot(EquipmentSlot.CHEST, ItemStack.EMPTY);
@@ -112,6 +121,7 @@ public record NpcProfessionPacket(int npcId, String professionName) implements C
 
             npc.setProfession(newProfession);
             npc.applyInitialEquipment(newProfession);
+            npc.setExperience(penaltyExp);  // 应用降级经验
 
             player.displayClientMessage(
                     Component.literal("§a成功将 " + npc.getNpcName() + " 切换为 "

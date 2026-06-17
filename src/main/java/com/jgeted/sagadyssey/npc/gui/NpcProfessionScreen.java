@@ -64,6 +64,13 @@ public class NpcProfessionScreen extends Screen {
                     .bounds(x, y, btnW, btnH)
                     .build());
         }
+
+        // × 关闭按钮
+        addRenderableWidget(Button.builder(
+                Component.literal("✕").withStyle(s -> s.withColor(0xFF_FF5555)),
+                btn -> this.onClose())
+                .bounds(panelLeft + PANEL_WIDTH - 20, panelTop + 4, 16, 16)
+                .build());
     }
 
     @Override

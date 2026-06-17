@@ -2,11 +2,14 @@ package com.jgeted.sagadyssey.npc.gui;
 
 import com.jgeted.sagadyssey.npc.network.NpcInteractionPacket;
 import com.jgeted.sagadyssey.npc.network.NpcStatsPayload;
+import com.jgeted.sagadyssey.npc.trade.NpcTradeOffer;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import net.neoforged.neoforge.network.PacketDistributor;
+
+import java.util.List;
 
 /**
  * NPC 命令界面。
@@ -30,8 +33,10 @@ public class NpcCommandScreen extends Screen {
     private final int moral;
     private final String commandName;
 
+    private final List<NpcTradeOffer> trades;
+
     private static final int PANEL_WIDTH = 176;
-    private static final int PANEL_HEIGHT = 170;
+    private static final int PANEL_HEIGHT = 196;
 
     private int panelLeft;
     private int panelTop;
@@ -51,6 +56,7 @@ public class NpcCommandScreen extends Screen {
         this.kills = data.kills();
         this.moral = data.moral();
         this.commandName = data.commandName();
+        this.trades = data.buildTrades();
     }
 
     @Override
@@ -98,6 +104,23 @@ public class NpcCommandScreen extends Screen {
                     this.minecraft.setScreen(new NpcProfessionScreen(npcId, npcName, professionName));
                 })
                 .bounds(rightX, btnY2, btnW, 20)
+                .build());
+
+        // 第三行：交易
+        int btnY3 = panelTop + 166;
+        addRenderableWidget(Button.builder(
+                Component.literal("交易"),
+                btn -> {
+                    this.minecraft.setScreen(new NpcTradeScreen(npcId, npcName, professionName, npcLevel, experience, trades));
+                })
+                .bounds(leftX, btnY3, btnW, 20)
+                .build());
+
+        // × 关闭按钮
+        addRenderableWidget(Button.builder(
+                Component.literal("✕").withStyle(s -> s.withColor(0xFF_FF5555)),
+                btn -> this.onClose())
+                .bounds(panelLeft + PANEL_WIDTH - 20, panelTop + 4, 16, 16)
                 .build());
     }
 

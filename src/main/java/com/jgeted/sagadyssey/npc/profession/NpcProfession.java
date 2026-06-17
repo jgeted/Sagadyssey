@@ -46,4 +46,14 @@ public enum NpcProfession {
     public double getAttackDamage() { return attackDamage; }
     public double getSpeed() { return speed; }
     public double getArmor() { return armor; }
+
+    /** 通过显示名称反查枚举（交易界面需要） */
+    public static NpcProfession fromDisplayName(String displayName) {
+        for (NpcProfession prof : values()) {
+            if (prof.displayName.equals(displayName)) {
+                return prof;
+            }
+        }
+        return NONE;
+    }
 }

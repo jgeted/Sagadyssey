@@ -41,14 +41,25 @@ public class NpcEquipMenu extends AbstractContainerMenu {
 
     // === 客户端构造函数（MenuType 工厂调用） ===
     public NpcEquipMenu(int containerId, Inventory playerInventory, FriendlyByteBuf buf) {
-        this(containerId, playerInventory,
-                (NpcBase) playerInventory.player.level().getEntity(buf.readInt()));
+        this(containerId, playerInventory, () -> {
+            var e = playerInventory.player.level().getEntity(buf.readInt());
+            if (e instanceof NpcBase npc) return npc;
+            return null;
+        });
     }
 
     // === 服务端构造函数（MenuProvider 调用） ===
     public NpcEquipMenu(int containerId, Inventory playerInventory, NpcBase npc) {
+        this(containerId, playerInventory, () -> npc);
+    }
+
+    private NpcEquipMenu(int containerId, Inventory playerInventory, java.util.function.Supplier<NpcBase> npcSupplier) {
         super(ModMenuTypes.NPC_EQUIP.get(), containerId);
-        this.npc = npc;
+        this.npc = npcSupplier.get();
+        if (this.npc == null) {
+            this.access = null;
+            return;
+        }
         this.access = ContainerLevelAccess.create(npc.level(), npc.blockPosition());
 
         // NPC 装备槽适配器：将 Container 操作映射到实体装备
@@ -294,7 +305,7 @@ public class NpcEquipMenu extends AbstractContainerMenu {
 
         @Override
         public void setItem(int index, ItemStack stack) {
-            LOGGER.info("EquipContainer.setItem: index={}, item={}", index,
+            LOGGER.debug("EquipContainer.setItem: index={}, item={}", index,
                     stack.isEmpty() ? "EMPTY" : stack.getItem().getDescriptionId());
             npc.setItemSlot(EQUIP_SLOTS[index], stack);
         }
