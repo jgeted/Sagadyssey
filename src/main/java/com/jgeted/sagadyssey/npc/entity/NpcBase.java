@@ -183,19 +183,26 @@ public class NpcBase extends PathfinderMob {
         if (this.profession == NpcProfession.TRADER) {
             int count = NpcTradeRegistry.PICK_COUNTS.get(NpcProfession.TRADER)[nextLevel - 1];
             List<NpcTradeOffer> pool = NpcTradeRegistry.getMerchantPool(nextLevel);
-            // 加价 + resolve
             Random rand = new Random(seed + nextLevel * 31L);
-            List<NpcTradeOffer> markedUp = new ArrayList<>();
-            for (NpcTradeOffer t : pool) {
-                markedUp.add(NpcTradeRegistry.applyMerchantMarkup(t, this.merchantMarkupRate));
+            // Lv4 固定交易不加价
+            if (nextLevel < 4) {
+                List<NpcTradeOffer> markedUp = new ArrayList<>();
+                for (NpcTradeOffer t : pool) {
+                    markedUp.add(NpcTradeRegistry.applyMerchantMarkup(t, this.merchantMarkupRate));
+                }
+                Collections.shuffle(markedUp, rand);
+                picked = markedUp.subList(0, Math.min(count, markedUp.size()))
+                        .stream().map(t -> t.resolve(rand)).toList();
+            } else {
+                List<NpcTradeOffer> copy = new ArrayList<>(pool);
+                Collections.shuffle(copy, rand);
+                picked = copy.subList(0, Math.min(count, copy.size()))
+                        .stream().map(t -> t.resolve(rand)).toList();
             }
-            Collections.shuffle(markedUp, rand);
-            picked = markedUp.subList(0, Math.min(count, markedUp.size()))
-                    .stream().map(t -> t.resolve(rand)).toList();
         } else {
             int[] counts = NpcTradeRegistry.PICK_COUNTS.getOrDefault(profession, new int[]{0, 0, 0, 0});
             int count = counts[nextLevel - 1];
-            picked = NpcTradeRegistry.pickRandom(profession, nextLevel, seed, count);
+            picked = NpcTradeRegistry.pickRandom(profession, nextLevel, seed, count, this.level().registryAccess());
         }
 
         activeTrades.addAll(picked);
