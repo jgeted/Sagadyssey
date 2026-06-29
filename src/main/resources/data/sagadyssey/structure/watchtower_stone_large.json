@@ -1,0 +1,26 @@
+{
+  "id": "watchtower_stone_large",
+  "nbt": "sagadyssey:watchtower_stone_large",
+  "name": "大型石质瞭望塔",
+  "category": "watchtower",
+  "size": "large",
+
+  "biomes": "#sagadyssey:has_watchtower",
+  "step": "surface_structures",
+
+  "terrain_adaptation": "beard_thin",
+
+  "start_height": {
+    "type": "uniform",
+    "min_inclusive": { "absolute": 62 },
+    "max_inclusive": { "absolute": 100 }
+  },
+
+  "spacing": 28,
+  "separation": 14,
+  "max_distance_from_center": 100,
+
+  "weight": 5,
+  "allow_underground": false,
+  "allow_water": false
+}
