@@ -20,7 +20,7 @@ public class ProtectOwnerGoal extends Goal {
     private final NpcBase npc;
     private int scanCooldown;
 
-    private static final double SCAN_RANGE = 12.0D;
+    private static final double SCAN_RANGE = 16.0D;
 
     public ProtectOwnerGoal(NpcBase npc) {
         this.npc = npc;
@@ -36,14 +36,22 @@ public class ProtectOwnerGoal extends Goal {
             scanCooldown--;
             return false;
         }
-        scanCooldown = 10;
+        scanCooldown = 3;
 
         Player owner = npc.level().getPlayerByUUID(npc.getOwnerUUID());
         if (owner == null || !owner.isAlive()) return false;
 
-        AABB box = owner.getBoundingBox().inflate(SCAN_RANGE);
-        List<LivingEntity> nearby = npc.level().getEntitiesOfClass(LivingEntity.class, box,
+        // 同时扫描 NPC 自身周围和主人周围
+        AABB npcBox = npc.getBoundingBox().inflate(SCAN_RANGE);
+        List<LivingEntity> nearby = npc.level().getEntitiesOfClass(LivingEntity.class, npcBox,
                 e -> e.isAlive() && e != owner && e != npc && isThreat(e, owner));
+
+        AABB ownerBox = owner.getBoundingBox().inflate(SCAN_RANGE);
+        List<LivingEntity> ownerNearby = npc.level().getEntitiesOfClass(LivingEntity.class, ownerBox,
+                e -> e.isAlive() && e != owner && e != npc && isThreat(e, owner));
+        for (LivingEntity e : ownerNearby) {
+            if (!nearby.contains(e)) nearby.add(e);
+        }
 
         if (!nearby.isEmpty()) {
             LivingEntity target = nearby.get(0);
@@ -64,6 +72,7 @@ public class ProtectOwnerGoal extends Goal {
         Player owner = npc.level().getPlayerByUUID(npc.getOwnerUUID());
         if (owner == null || !owner.isAlive()) return false;
 
+        if (npc.distanceToSqr(owner) > 256.0D) return false;
         return npc.distanceToSqr(target) <= SCAN_RANGE * SCAN_RANGE && isThreat(target, owner);
     }
 
@@ -81,13 +90,11 @@ public class ProtectOwnerGoal extends Goal {
     }
 
     private boolean isThreat(LivingEntity entity, Player owner) {
-        // 1. 正在瞄准主人
-        if (entity instanceof Mob mob && mob.getTarget() == owner) return true;
-        // 2. 主人正在攻击的目标
-        if (entity == owner.getLastHurtMob()) return true;
-        // 3. 原版怪物
-        if (entity instanceof net.minecraft.world.entity.monster.Enemy) return true;
-        // 4. 敌对阵营 NPC
+        // 1. 正在攻击这个 NPC → 自卫
+        if (entity instanceof Mob mob && mob.getTarget() == npc) return true;
+        // 2. 主人正在攻击且主人在 NPC 附近（10 格内）→ 助战
+        if (entity == owner.getLastHurtMob() && npc.distanceToSqr(owner) < 100.0D) return true;
+        // 3. 敌对阵营 NPC
         if (entity instanceof NpcBase otherNpc
                 && otherNpc.getFaction() == NpcFaction.HOSTILE
                 && !otherNpc.isOwnedBy(owner.getUUID())) return true;

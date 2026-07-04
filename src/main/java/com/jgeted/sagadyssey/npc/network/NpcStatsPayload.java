@@ -9,7 +9,6 @@ import com.jgeted.sagadyssey.npc.gui.NpcRecruitScreen;
 import com.jgeted.sagadyssey.npc.trade.NpcTradeOffer;
 import io.netty.buffer.ByteBuf;
 import net.minecraft.client.Minecraft;
-import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
@@ -39,7 +38,7 @@ public record NpcStatsPayload(
         boolean isOwned,
         String commandName,
         String factionName,
-        List<int[]> rawTrades
+        List<byte[]> rawTrades
 ) implements CustomPacketPayload {
 
     public static final Type<NpcStatsPayload> TYPE = new Type<>(
@@ -64,12 +63,11 @@ public record NpcStatsPayload(
                 buf.writeBoolean(packet.isOwned);
                 buf.writeByte(NpcCommand.valueOf(packet.commandName()).ordinal());
                 writeString(buf, packet.factionName());
-                // 交易数据
+                // 交易数据：每个交易 = 完整 ItemStack 字节序列
                 buf.writeInt(packet.rawTrades.size());
-                for (int[] t : packet.rawTrades) {
-                    buf.writeInt(t[0]); buf.writeInt(t[1]); buf.writeInt(t[2]);
-                    buf.writeInt(t[3]); buf.writeInt(t[4]); buf.writeInt(t[5]);
-                    buf.writeInt(t[6]);
+                for (byte[] t : packet.rawTrades) {
+                    buf.writeInt(t.length);
+                    buf.writeBytes(t);
                 }
             },
             buf -> {
@@ -90,13 +88,12 @@ public record NpcStatsPayload(
                 String cmd = NpcCommand.values()[buf.readByte()].name();
                 String factionName = readString(buf);
                 int tradeCount = buf.readInt();
-                List<int[]> trades = new ArrayList<>();
+                List<byte[]> trades = new ArrayList<>();
                 for (int i = 0; i < tradeCount; i++) {
-                    trades.add(new int[]{
-                            buf.readInt(), buf.readInt(), buf.readInt(),
-                            buf.readInt(), buf.readInt(), buf.readInt(),
-                            buf.readInt()
-                    });
+                    int len = buf.readInt();
+                    byte[] data = new byte[len];
+                    buf.readBytes(data);
+                    trades.add(data);
                 }
                 return new NpcStatsPayload(npcId, npcName, profName, curHp, maxHp, atk, spd, arm,
                         lvl, exp, kills, moral, cost, owned, cmd, factionName, trades);
@@ -106,11 +103,22 @@ public record NpcStatsPayload(
     /** 将 rawTrades 还原为 NpcTradeOffer 列表 */
     public List<NpcTradeOffer> buildTrades() {
         List<NpcTradeOffer> result = new ArrayList<>();
-        for (int[] t : rawTrades) {
-            ItemStack costItem = new ItemStack(BuiltInRegistries.ITEM.byId(t[0]));
-            ItemStack resultItem = new ItemStack(BuiltInRegistries.ITEM.byId(t[3]));
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.level == null) return result;
+        for (byte[] t : rawTrades) {
+            io.netty.buffer.ByteBuf buf = io.netty.buffer.Unpooled.wrappedBuffer(t);
+            net.minecraft.network.RegistryFriendlyByteBuf fbuf =
+                    new net.minecraft.network.RegistryFriendlyByteBuf(buf, mc.level.registryAccess());
+            ItemStack costItem = ItemStack.OPTIONAL_STREAM_CODEC.decode(fbuf);
+            int costMin = fbuf.readInt();
+            int costMax = fbuf.readInt();
+            ItemStack resultItem = ItemStack.OPTIONAL_STREAM_CODEC.decode(fbuf);
+            int resultMin = fbuf.readInt();
+            int resultMax = fbuf.readInt();
+            int minNpcLevel = fbuf.readInt();
             if (costItem.isEmpty() || resultItem.isEmpty()) continue;
-            result.add(new NpcTradeOffer(costItem, t[1], t[2], resultItem, t[4], t[5], t[6]));
+            result.add(new NpcTradeOffer(costItem, costMin, costMax,
+                    resultItem, resultMin, resultMax, minNpcLevel));
         }
         return result;
     }
@@ -149,16 +157,23 @@ public record NpcStatsPayload(
         if (npc.getFaction() == NpcFaction.HOSTILE) {
             cost *= 2;
         }
-        // 序列化交易数据
-        List<int[]> raw = new ArrayList<>();
+        // 序列化交易数据（完整 ItemStack，含附魔）
+        List<byte[]> raw = new ArrayList<>();
         for (NpcTradeOffer t : npc.getActiveTrades()) {
-            raw.add(new int[]{
-                    BuiltInRegistries.ITEM.getId(t.costItem().getItem()),
-                    t.costMin(), t.costMax(),
-                    BuiltInRegistries.ITEM.getId(t.resultItem().getItem()),
-                    t.resultMin(), t.resultMax(),
-                    t.minNpcLevel()
-            });
+            io.netty.buffer.ByteBuf buf = io.netty.buffer.Unpooled.buffer();
+            net.minecraft.network.RegistryFriendlyByteBuf fbuf =
+                    new net.minecraft.network.RegistryFriendlyByteBuf(buf, npc.level().registryAccess());
+            ItemStack.OPTIONAL_STREAM_CODEC.encode(fbuf, t.costItem());
+            fbuf.writeInt(t.costMin());
+            fbuf.writeInt(t.costMax());
+            ItemStack.OPTIONAL_STREAM_CODEC.encode(fbuf, t.resultItem());
+            fbuf.writeInt(t.resultMin());
+            fbuf.writeInt(t.resultMax());
+            fbuf.writeInt(t.minNpcLevel());
+            byte[] bytes = new byte[buf.readableBytes()];
+            buf.readBytes(bytes);
+            buf.release();
+            raw.add(bytes);
         }
         return new NpcStatsPayload(
                 npc.getId(),

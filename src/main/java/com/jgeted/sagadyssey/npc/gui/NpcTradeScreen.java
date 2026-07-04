@@ -23,10 +23,10 @@ public class NpcTradeScreen extends Screen {
     private int displayExp;
     private final List<NpcTradeOffer> trades;
 
-    private static final int PANEL_WIDTH = 196;
-    private static final int LINE_H = 24;
+    private static final int PANEL_WIDTH = 270;
+    private static final int LINE_H = 26;
     private static final int HEADER_H = 66;
-    private static final int MAX_VISIBLE_TRADES = 7;
+    private static final int MAX_VISIBLE_TRADES = 5;
 
     private int panelLeft;
     private int panelTop;
@@ -70,8 +70,8 @@ public class NpcTradeScreen extends Screen {
         for (int i = scrollOffset; i < end; i++) {
             int displayRow = extraRows + (i - scrollOffset);
             int y = panelTop + HEADER_H + displayRow * LINE_H;
-            int btnW = 48;
-            int btnX = panelLeft + PANEL_WIDTH - btnW - 12;
+            int btnW = 40;
+            int btnX = panelLeft + PANEL_WIDTH - btnW - 6;
             int index = i;
             addRenderableWidget(Button.builder(
                     Component.literal("交易"),
@@ -93,7 +93,7 @@ public class NpcTradeScreen extends Screen {
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
         int extraRows = (profession == NpcProfession.TRADER) ? 2 : 0;
-        int maxScroll = Math.max(0, trades.size() + extraRows - MAX_VISIBLE_TRADES);
+        int maxScroll = Math.max(0, trades.size() - MAX_VISIBLE_TRADES);
         if (maxScroll <= 0) return super.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
         scrollOffset = Math.clamp(scrollOffset - (int) scrollY, 0, maxScroll);
         this.rebuildWidgets();
@@ -160,8 +160,8 @@ public class NpcTradeScreen extends Screen {
 
         // 交易列表（仅可见范围）
         int costX = panelLeft + 12;
-        int arrowX = panelLeft + 100;
-        int resultX = panelLeft + 120;
+        int arrowX = panelLeft + 85;
+        int resultX = panelLeft + 100;
         int end = Math.min(scrollOffset + MAX_VISIBLE_TRADES, trades.size());
         for (int i = scrollOffset; i < end; i++) {
             NpcTradeOffer offer = trades.get(i);
@@ -173,6 +173,39 @@ public class NpcTradeScreen extends Screen {
             graphics.drawString(font, "→", arrowX, y, 0xAA_AAAAAA);
             graphics.drawString(font, offer.resultAmount() + "×", resultX, y, 0xFF_AAFFAA);
             graphics.renderItem(offer.resultItem(), resultX + 20, y - 4);
+            // 结果物品有附魔时在图标右侧显示（空间不足时显示第一个+计数）
+            var stack = offer.getResultStack();
+            if (stack.isEnchanted()) {
+                var enchants = stack.get(net.minecraft.core.component.DataComponents.ENCHANTMENTS);
+                if (enchants != null && !enchants.isEmpty()) {
+                    int enchX = resultX + 20;
+                    int maxW = panelLeft + PANEL_WIDTH - 46 - enchX;
+                    int total = enchants.keySet().size();
+                    int shown = 0;
+                    StringBuilder sb = new StringBuilder();
+                    for (var entry : enchants.entrySet()) {
+                        String name = entry.getKey().value().description().getString();
+                        String roman = switch (entry.getIntValue()) {
+                            case 1 -> "I"; case 2 -> "II"; case 3 -> "III";
+                            case 4 -> "IV"; case 5 -> "V"; default -> String.valueOf(entry.getIntValue());
+                        };
+                        String text = name + " " + roman;
+                        if (shown == 0) {
+                            sb.append(text);
+                        } else {
+                            String test = sb + ", " + text;
+                            if (font.width(test) <= maxW) {
+                                sb.append(", ").append(text);
+                            } else {
+                                break;
+                            }
+                        }
+                        shown++;
+                    }
+                    if (shown < total) sb.append(" +").append(total - shown);
+                    graphics.drawString(font, sb.toString(), enchX, y + 11, 0xFF_FF55FF);
+                }
+            }
         }
 
         super.render(graphics, mouseX, mouseY, partialTick);

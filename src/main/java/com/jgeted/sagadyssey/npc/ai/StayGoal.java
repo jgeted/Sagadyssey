@@ -20,7 +20,13 @@ public class StayGoal extends Goal {
 
     @Override
     public boolean canUse() {
-        return npc.isAlive() && npc.getCommand() == NpcCommand.STAY;
+        if (!npc.isAlive() || npc.getCommand() != NpcCommand.STAY) return false;
+        // 近身有敌时放行，让 MeleeAttackGoal 接管反击（6 格内）
+        if (npc.getTarget() != null && npc.getTarget().isAlive()
+                && npc.distanceToSqr(npc.getTarget()) < 36.0D) {
+            return false;
+        }
+        return true;
     }
 
     @Override

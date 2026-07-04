@@ -13,6 +13,7 @@ import net.minecraft.world.InteractionResult;
 import net.minecraft.world.SimpleContainer;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.PathfinderMob;
 import net.minecraft.world.entity.ai.attributes.AttributeSupplier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
@@ -286,6 +287,19 @@ public class NpcBase extends PathfinderMob {
         this.ownerUUID = playerUUID;
     }
 
+    /** 检查实体是否为盟友（主人 或 同主人的 NPC） */
+    private boolean isAlliedTo(LivingEntity entity) {
+        if (entity instanceof Player player) {
+            return isOwnedBy(player.getUUID());
+        }
+        if (entity instanceof NpcBase other) {
+            if (this.ownerUUID != null && this.ownerUUID.equals(other.ownerUUID)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     public SimpleContainer getEquipmentInventory() { return equipmentInventory; }
 
     public ItemStack getBowSlot() { return bowSlot; }
@@ -376,7 +390,7 @@ public class NpcBase extends PathfinderMob {
         this.goalSelector.addGoal(0, new com.jgeted.sagadyssey.npc.ai.LowHpRetreatGoal(this));
         this.goalSelector.addGoal(1, new com.jgeted.sagadyssey.npc.ai.StayGoal(this));
         this.goalSelector.addGoal(1, new MeleeAttackGoal(this, 1.0D, true));
-        this.goalSelector.addGoal(2, new com.jgeted.sagadyssey.npc.ai.FollowOwnerGoal(this, 1.0D, 3.0F, 12.0F));
+        this.goalSelector.addGoal(2, new com.jgeted.sagadyssey.npc.ai.FollowOwnerGoal(this, 1.0D, 3.0F, 64.0F));
         this.goalSelector.addGoal(3, new RandomStrollGoal(this, 1.0D));
         this.goalSelector.addGoal(4, new LookAtPlayerGoal(this, Player.class, 8.0F));
         this.goalSelector.addGoal(5, new RandomLookAroundGoal(this));
@@ -400,6 +414,10 @@ public class NpcBase extends PathfinderMob {
             if (this.faction != NpcFaction.HOSTILE && !isOwnedBy(player.getUUID())) {
                 this.faction = NpcFaction.HOSTILE;
             }
+        }
+        // 被非盟友攻击时立即反击
+        if (source.getEntity() instanceof LivingEntity attacker && attacker.isAlive() && !isAlliedTo(attacker)) {
+            this.setTarget(attacker);
         }
         return super.hurt(source, amount);
     }

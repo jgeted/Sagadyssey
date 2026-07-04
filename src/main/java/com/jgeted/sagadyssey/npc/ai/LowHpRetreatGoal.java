@@ -1,6 +1,7 @@
 package com.jgeted.sagadyssey.npc.ai;
 
 import com.jgeted.sagadyssey.npc.entity.NpcBase;
+import com.jgeted.sagadyssey.npc.entity.NpcCommand;
 import net.minecraft.world.entity.ai.goal.Goal;
 import net.minecraft.world.entity.player.Player;
 
@@ -27,6 +28,7 @@ public class LowHpRetreatGoal extends Goal {
 
     @Override
     public boolean canUse() {
+        if (npc.getCommand() == NpcCommand.STAY) return false;
         if (npc.getOwnerUUID() == null) return false;
         float hpRatio = npc.getHealth() / npc.getMaxHealth();
         if (hpRatio > RETREAT_THRESHOLD) return false;
@@ -38,6 +40,7 @@ public class LowHpRetreatGoal extends Goal {
 
     @Override
     public boolean canContinueToUse() {
+        if (npc.getCommand() == NpcCommand.STAY) return false;
         if (npc.getOwnerUUID() == null) return false;
         float hpRatio = npc.getHealth() / npc.getMaxHealth();
         if (hpRatio >= RECOVER_THRESHOLD) return false;

@@ -18,7 +18,7 @@ public class NpcHostileGoal extends Goal {
 
     private static final double DETECT_RANGE = 16.0D;
     private final NpcBase npc;
-    private Player pendingTarget;
+    private LivingEntity pendingTarget;
     private int scanCooldown;
 
     public NpcHostileGoal(NpcBase npc) {
@@ -41,7 +41,7 @@ public class NpcHostileGoal extends Goal {
         List<Player> players = npc.level().getEntitiesOfClass(Player.class, box,
                 p -> p.isAlive() && !p.isSpectator() && !p.isCreative());
 
-        Player best = null;
+        LivingEntity best = null;
         double bestDist = Double.MAX_VALUE;
         for (Player p : players) {
             if (npc.isOwnedBy(p.getUUID())) continue;
@@ -49,6 +49,19 @@ public class NpcHostileGoal extends Goal {
             if (dist < bestDist) {
                 bestDist = dist;
                 best = p;
+            }
+        }
+
+        // 追加：扫描附近的招募 NPC（非主人、非 HOSTILE 阵营）
+        List<NpcBase> nearbyNpcs = npc.level().getEntitiesOfClass(NpcBase.class, box,
+                n -> n.isAlive() && n.getOwnerUUID() != null && !n.isOwnedBy(npc.getOwnerUUID())
+                        && n.getFaction() != NpcFaction.HOSTILE);
+
+        for (NpcBase n : nearbyNpcs) {
+            double dist = npc.distanceToSqr(n);
+            if (dist < bestDist) {
+                bestDist = dist;
+                best = n;
             }
         }
 
