@@ -155,40 +155,129 @@ watchtower.nbt       ← 瞭望塔
 
 JSON 文件定义的是"这个建筑怎么在世界中生成"的规则，不需要在游戏里操作，直接用文本编辑器写。
 
-### 示例
+> ### 🔒 JSON 格式已锁定（2026-07-04）
+>
+> **以下格式为最终版本，不可更改。** jgeted 的代码将严格按照此格式解析。
+> 如需新增字段，必须先和 jgeted 沟通，由 jgeted 更新本文档后才能使用。
+> 未经沟通擅自修改格式的 JSON 文件会被打回。
 
-一个典型的结构配置可能长这样（具体格式以项目实际为准）：
+### 完整字段定义
 
-```json
+```jsonc
 {
-  "type": "sagadyssey:camp",
-  "structure": "sagadyssey:camp_small",
-  "biomes": "#sagadyssey:has_camp",
-  "step": "surface_structures",
-  "spawn_overrides": {},
-  "terrain_adaptation": "beard_thin",
-  "start_height": {
-    "type": "uniform",
-    "min_inclusive": { "absolute": 60 },
-    "max_inclusive": { "absolute": 90 }
+  // ===== 必填字段（全部必填，不能省略） =====
+
+  "id": "camp_bandit_small",          // 唯一标识符，必须和 JSON 文件名完全一致
+  "nbt": "sagadyssey:camp_bandit_small", // 对应 NBT 文件，格式 "sagadyssey:{文件名}"
+  "name": "小型强盗营地",               // 中文显示名
+  "category": "camp",                 // 结构类别（见下方允许值）
+  "size": "small",                    // 尺寸档位（见下方允许值）
+  "biomes": "#sagadyssey:has_camp",   // 群系标签，格式 "#sagadyssey:has_{category}"
+
+  "step": "surface_structures",       // 生成阶段，固定填 "surface_structures"
+  "terrain_adaptation": "beard_thin", // 地形适配，固定填 "beard_thin"
+
+  "start_height": {                   // 生成高度范围
+    "type": "uniform",                // 固定填 "uniform"
+    "min_inclusive": { "absolute": 62 }, // 最低生成高度
+    "max_inclusive": { "absolute": 90 }  // 最高生成高度
   },
-  "size": [1, 0],
-  "max_distance_from_center": 80,
-  "separation": 8,
-  "spacing": 16
+
+  "spacing": 20,                      // 平均间距（区块），越大越稀疏
+  "separation": 10,                   // 最小间距（区块），必须 < spacing
+  "max_distance_from_center": 80,     // 距世界原点最大生成距离
+
+  "weight": 10,                       // 生成权重（同类别中相对概率，越大越常见）
+  "allow_underground": false,         // 是否允许地下生成
+  "allow_water": false                // 是否允许水中生成
 }
 ```
 
-| 字段 | 含义 |
-|------|------|
-| `structure` | 对应的 NBT 结构名称 |
-| `biomes` | 允许生成的群系（可以是标签） |
-| `terrain_adaptation` | 地形适配方式（`beard_thin` = 轻微削平地形） |
-| `start_height` | 生成高度范围 |
-| `separation` | 两个结构之间的最小间距（区块） |
-| `spacing` | 结构分布的平均间距（区块） |
+### 字段允许值
 
-> **重要**：以上只是示例格式，实际的 JSON 结构取决于 jgeted 的代码怎么读取。第一次编辑前**务必问 jgeted 要一个模板或参考文件**。
+| 字段 | 允许值 | 说明 |
+|------|--------|------|
+| `category` | `"camp"` / `"house"` / `"watchtower"` | 目前仅此三种，新增需 jgeted 批准 |
+| `size` | `"small"` / `"medium"` / `"large"` | 影响默认间距和高度范围 |
+| `step` | `"surface_structures"` | 固定值，不要改 |
+| `terrain_adaptation` | `"beard_thin"` | 固定值，不要改 |
+| `start_height.type` | `"uniform"` | 固定值，不要改 |
+| `allow_underground` | `false` | 固定值，不要改 |
+| `allow_water` | `false` | 固定值，不要改 |
+
+### 数值参考范围
+
+| 参数 | small | medium | large |
+|------|-------|--------|-------|
+| `spacing`（平均间距） | 8-20 | 12-20 | 28-32 |
+| `separation`（最小间距） | 4-10 | 6-10 | 14-16 |
+| `start_height.min` | 62 | 62 | 62 |
+| `start_height.max` | 90 | 90 | 100 |
+| `max_distance_from_center` | 80 | 80 | 100-120 |
+| `weight` | 10-30 | 20 | 3-5 |
+
+> **约束**：`separation` 必须严格小于 `spacing`，否则游戏会报错。
+
+### NBT 文件命名规范
+
+格式：`{category}_{描述}_{size}.nbt`
+
+- 全部小写，用下划线分隔
+- `category` 和 `size` 必须和 JSON 中的值对应
+- 描述部分用简短英文，如 `bandit`、`cottage`、`stone`
+
+**已有的命名示例：**
+```
+camp_bandit_small.nbt        → JSON: "id": "camp_bandit_small"
+house_cottage_small.nbt      → JSON: "id": "house_cottage_small"
+house_cottage_medium.nbt     → JSON: "id": "house_cottage_medium"
+house_cottage_large.nbt      → JSON: "id": "house_cottage_large"
+watchtower_stone_large.nbt   → JSON: "id": "watchtower_stone_large"
+```
+
+### 完整模板（直接复制修改）
+
+**新建 JSON 时，复制下面的模板，只改 `{...}` 里的内容：**
+
+```json
+{
+  "id": "{category}_{描述}_{size}",
+  "nbt": "sagadyssey:{category}_{描述}_{size}",
+  "name": "{中文显示名}",
+  "category": "{camp|house|watchtower}",
+  "size": "{small|medium|large}",
+
+  "biomes": "#sagadyssey:has_{category}",
+  "step": "surface_structures",
+
+  "terrain_adaptation": "beard_thin",
+
+  "start_height": {
+    "type": "uniform",
+    "min_inclusive": { "absolute": 62 },
+    "max_inclusive": { "absolute": 90 }
+  },
+
+  "spacing": {参考上表},
+  "separation": {参考上表},
+  "max_distance_from_center": 80,
+
+  "weight": {参考上表},
+  "allow_underground": false,
+  "allow_water": false
+}
+```
+
+### 自检清单（写完 JSON 后逐条检查）
+
+- [ ] `id` 和 JSON 文件名完全一致（不含 `.json` 后缀）
+- [ ] `nbt` = `"sagadyssey:" + id`
+- [ ] `category` 是 `camp` / `house` / `watchtower` 之一
+- [ ] `size` 是 `small` / `medium` / `large` 之一
+- [ ] `biomes` = `"#sagadyssey:has_" + category`
+- [ ] `separation` < `spacing`
+- [ ] NBT 文件名和 `id` 一致：`{id}.nbt`
+- [ ] JSON 语法正确（用 https://jsonlint.com 验证）
 
 ---
 
