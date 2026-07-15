@@ -1,0 +1,14 @@
+{
+    "structures": [
+        {
+            "structure": "sagadyssey:house_cottage_large",
+            "weight": 3
+        }
+    ],
+    "placement": {
+        "type": "minecraft:random_spread",
+        "salt": 1004,
+        "spacing": 32,
+        "separation": 16
+    }
+}

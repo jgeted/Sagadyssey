@@ -1,0 +1,12 @@
+{
+    "required": true,
+    "package": "com.jgeted.sagadyssey.mixin",
+    "compatibilityLevel": "JAVA_21",
+    "mixins": [
+        "ChunkGeneratorStructureStateMixin",
+        "JigsawPlacementMixin",
+        "StructureMixin"
+    ],
+    "client": [],
+    "server": []
+}
