@@ -3,12 +3,14 @@ package com.jgeted.sagadyssey;
 import com.jgeted.sagadyssey.client.TestScreen;
 import com.jgeted.sagadyssey.core.command.NpcSpawnCommand;
 import com.jgeted.sagadyssey.core.command.ResearchCommand;
+import com.jgeted.sagadyssey.core.command.StructureDiagnosticCommand;
 import com.jgeted.sagadyssey.core.command.TestNetworkCommand;
 import com.jgeted.sagadyssey.core.config.SagadysseyConfig;
 import com.jgeted.sagadyssey.core.network.SagadysseyNetworking;
 import com.jgeted.sagadyssey.core.research.ResearchAttachments;
 import com.jgeted.sagadyssey.core.research.ResearchRegistry;
 import com.jgeted.sagadyssey.core.registry.ModMenuTypes;
+import com.jgeted.sagadyssey.core.structure.SagadysseyStructures;
 import com.jgeted.sagadyssey.npc.event.NpcExperienceEvents;
 import com.jgeted.sagadyssey.npc.gui.NpcEquipScreen;
 import com.jgeted.sagadyssey.npc.registry.NpcEntityTypes;
@@ -38,7 +40,7 @@ import com.mojang.logging.LogUtils;
 @Mod(Sagadyssey.MOD_ID)
 public class Sagadyssey {
     public static final String MOD_ID = "sagadyssey";
-    private static final Logger LOGGER = LogUtils.getLogger();
+    public static final Logger LOGGER = LogUtils.getLogger();
 
     public Sagadyssey(IEventBus modEventBus, ModContainer modContainer) {
         LOGGER.info("Sagadyssey 初始化开始");
@@ -80,11 +82,18 @@ public class Sagadyssey {
             TestNetworkCommand.register(event.getDispatcher());
             ResearchCommand.register(event.getDispatcher());
             NpcSpawnCommand.register(event.getDispatcher());
-            LOGGER.info("命令已注册: /saga test, /research, /saga npc spawn");
+            StructureDiagnosticCommand.register(event.getDispatcher());
+            LOGGER.info("命令已注册: /saga test, /research, /saga npc spawn, /saga structures dump");
         });
 
         // 注册 NPC 经验事件
         NeoForge.EVENT_BUS.register(NpcExperienceEvents.class);
+
+        // 注册结构生成系统（建筑 NBT + JSON 配置）
+        SagadysseyStructures.STRUCTURE_TYPE_REGISTRY.register(modEventBus);
+        SagadysseyStructures.PIECE_TYPE_REGISTRY.register(modEventBus);
+        SagadysseyStructures.init();
+        LOGGER.info("结构生成系统已加载（{} 个结构）", SagadysseyStructures.getAllIds().size());
 
         // 注册 GUI 事件
         modEventBus.addListener(this::onRegisterMenuScreens);

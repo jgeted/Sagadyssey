@@ -1,0 +1,14 @@
+{
+    "structures": [
+        {
+            "structure": "sagadyssey:camp_bandit_small",
+            "weight": 1
+        }
+    ],
+    "placement": {
+        "type": "minecraft:random_spread",
+        "salt": 2002,
+        "spacing": 48,
+        "separation": 24
+    }
+}
