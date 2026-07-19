@@ -1,5 +1,8 @@
 package com.jgeted.sagadyssey.core.network;
 
+import com.jgeted.sagadyssey.npc.faction.network.FactionDataSyncPayload;
+import com.jgeted.sagadyssey.npc.faction.network.FactionStandingsUpdatePayload;
+import com.jgeted.sagadyssey.npc.faction.network.RequestStandingsRefreshPacket;
 import com.jgeted.sagadyssey.npc.network.NpcInteractionPacket;
 import com.jgeted.sagadyssey.npc.network.NpcProfessionPacket;
 import com.jgeted.sagadyssey.npc.network.NpcStatsPayload;
@@ -79,6 +82,29 @@ public class SagadysseyNetworking {
                 NpcTradeResponsePacket.TYPE,
                 NpcTradeResponsePacket.STREAM_CODEC,
                 NpcTradeResponsePacket::handle
+        );
+
+        // === 阵营声望网络包 ===
+
+        // 服务端→客户端：全量声望同步
+        registrar.playToClient(
+                FactionDataSyncPayload.TYPE,
+                FactionDataSyncPayload.STREAM_CODEC,
+                FactionDataSyncPayload::handle
+        );
+
+        // 服务端→客户端：增量声望更新
+        registrar.playToClient(
+                FactionStandingsUpdatePayload.TYPE,
+                FactionStandingsUpdatePayload.STREAM_CODEC,
+                FactionStandingsUpdatePayload::handle
+        );
+
+        // 客户端→服务端：GUI 数据保鲜请求
+        registrar.playToServer(
+                RequestStandingsRefreshPacket.TYPE,
+                RequestStandingsRefreshPacket.STREAM_CODEC,
+                RequestStandingsRefreshPacket::handle
         );
     }
 }

@@ -1,7 +1,8 @@
 package com.jgeted.sagadyssey.npc.ai;
 
 import com.jgeted.sagadyssey.npc.entity.NpcBase;
-import com.jgeted.sagadyssey.npc.faction.NpcFaction;
+import com.jgeted.sagadyssey.npc.faction.FactionAttachments;
+import com.jgeted.sagadyssey.npc.faction.FactionRegistry;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.ai.goal.Goal;
 import net.minecraft.world.entity.player.Player;
@@ -12,7 +13,9 @@ import java.util.List;
 
 /**
  * 敌对 NPC 攻击目标选择器。
- * 当 NPC 阵营为 HOSTILE 时，搜索范围内非主人的玩家作为攻击目标。
+ * <p>
+ * 基于新 Faction 系统：当玩家对 NPC 所属阵营的声望为 HATED 时，
+ * NPC 主动攻击该玩家。同时保留对旧 HOSTILE 阵营 NPC 的扫描。
  */
 public class NpcHostileGoal extends Goal {
 
@@ -28,7 +31,9 @@ public class NpcHostileGoal extends Goal {
 
     @Override
     public boolean canUse() {
-        if (npc.getFaction() != NpcFaction.HOSTILE) {
+        // 新系统：如果 NPC 的阵营不是 canBeHostile，则不主动攻击
+        var npcFaction = npc.getFaction();
+        if (npcFaction == null || !npcFaction.canBeHostile()) {
             return false;
         }
 
@@ -45,6 +50,11 @@ public class NpcHostileGoal extends Goal {
         double bestDist = Double.MAX_VALUE;
         for (Player p : players) {
             if (npc.isOwnedBy(p.getUUID())) continue;
+
+            // 新系统：检查玩家对该阵营的声望
+            var standings = FactionAttachments.getStandings(p);
+            if (!standings.isHostile(npcFaction)) continue;
+
             double dist = npc.distanceToSqr(p);
             if (dist < bestDist) {
                 bestDist = dist;
@@ -52,10 +62,12 @@ public class NpcHostileGoal extends Goal {
             }
         }
 
-        // 追加：扫描附近的招募 NPC（非主人、非 HOSTILE 阵营）
+        // 扫描附近的招募 NPC（非主人、非相同阵营）
         List<NpcBase> nearbyNpcs = npc.level().getEntitiesOfClass(NpcBase.class, box,
-                n -> n.isAlive() && n.getOwnerUUID() != null && !n.isOwnedBy(npc.getOwnerUUID())
-                        && n.getFaction() != NpcFaction.HOSTILE);
+                n -> n.isAlive() && n.getOwnerUUID() != null
+                        && !n.isOwnedBy(npc.getOwnerUUID())
+                        && n.getFaction() != null
+                        && n.getFaction().canBeHostile());
 
         for (NpcBase n : nearbyNpcs) {
             double dist = npc.distanceToSqr(n);

@@ -2,6 +2,7 @@ package com.jgeted.sagadyssey.core;
 
 import com.jgeted.sagadyssey.core.gui.ResearchScreen;
 import com.jgeted.sagadyssey.npc.client.NpcRenderer;
+import com.jgeted.sagadyssey.npc.faction.gui.ReputationChartScreen;
 import com.jgeted.sagadyssey.npc.registry.NpcEntityTypes;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
@@ -24,9 +25,16 @@ public class SagadysseyClient {
             "key.categories.sagadyssey"
     );
 
+    public static final KeyMapping REPUTATION_KEY = new KeyMapping(
+            "key.sagadyssey.reputation",
+            GLFW.GLFW_KEY_R,
+            "key.categories.sagadyssey"
+    );
+
     @SubscribeEvent
     public static void registerKeys(RegisterKeyMappingsEvent event) {
         event.register(RESEARCH_KEY);
+        event.register(REPUTATION_KEY);
     }
 
     @SubscribeEvent
@@ -40,6 +48,9 @@ public class SagadysseyClient {
         public static void onClientTick(ClientTickEvent.Post event) {
             while (RESEARCH_KEY.consumeClick()) {
                 Minecraft.getInstance().setScreen(new ResearchScreen());
+            }
+            while (REPUTATION_KEY.consumeClick()) {
+                Minecraft.getInstance().setScreen(new ReputationChartScreen());
             }
         }
     }

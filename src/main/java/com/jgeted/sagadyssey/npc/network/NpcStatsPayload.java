@@ -2,7 +2,7 @@ package com.jgeted.sagadyssey.npc.network;
 
 import com.jgeted.sagadyssey.Sagadyssey;
 import com.jgeted.sagadyssey.npc.entity.NpcCommand;
-import com.jgeted.sagadyssey.npc.faction.NpcFaction;
+import com.jgeted.sagadyssey.npc.faction.Faction;
 import com.jgeted.sagadyssey.npc.entity.NpcBase;
 import com.jgeted.sagadyssey.npc.gui.NpcCommandScreen;
 import com.jgeted.sagadyssey.npc.gui.NpcRecruitScreen;
@@ -154,7 +154,8 @@ public record NpcStatsPayload(
 
     public static NpcStatsPayload from(NpcBase npc) {
         int cost = npc.getRecruitmentCost();
-        if (npc.getFaction() == NpcFaction.HOSTILE) {
+        var faction = npc.getFaction();
+        if (faction != null && faction.canBeHostile()) {
             cost *= 2;
         }
         // 序列化交易数据（完整 ItemStack，含附魔）
@@ -191,7 +192,7 @@ public record NpcStatsPayload(
                 cost,
                 npc.isOwned(),
                 npc.getCommand().name(),
-                npc.getFaction().name(),
+                npc.getFaction() != null ? npc.getFaction().id() : "sagadyssey:wilderness",
                 raw
         );
     }

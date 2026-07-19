@@ -113,13 +113,15 @@ public record NpcInteractionPacket(int npcId, String action) implements CustomPa
         }
 
         int cost = npc.getRecruitmentCost();
-        if (npc.getFaction() == NpcFaction.HOSTILE) {
+        var faction = npc.getFaction();
+        boolean isHostileFaction = faction != null && faction.canBeHostile();
+        if (isHostileFaction) {
             cost *= 2;
         }
 
         // 检查玩家有没有足够绿宝石
         if (!hasEnoughEmeralds(player, cost)) {
-            String factionTag = npc.getFaction() == NpcFaction.HOSTILE ? "§c（敌对招募费用翻倍）" : "";
+            String factionTag = isHostileFaction ? "§c（敌对招募费用翻倍）" : "";
             player.displayClientMessage(
                     Component.literal("§c绿宝石不足！需要 " + cost + " 个绿宝石" + factionTag), true);
             return;

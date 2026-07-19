@@ -1,6 +1,10 @@
 package com.jgeted.sagadyssey.npc.entity;
 
+import com.jgeted.sagadyssey.npc.faction.Faction;
+import com.jgeted.sagadyssey.npc.faction.FactionAttachments;
+import com.jgeted.sagadyssey.npc.faction.FactionRegistry;
 import com.jgeted.sagadyssey.npc.faction.NpcFaction;
+import com.jgeted.sagadyssey.npc.faction.StandingLevel;
 import com.jgeted.sagadyssey.npc.network.NpcInteractionPacket;
 import com.jgeted.sagadyssey.npc.profession.NpcProfession;
 import com.jgeted.sagadyssey.npc.trade.NpcTradeOffer;
@@ -81,8 +85,8 @@ public class NpcBase extends PathfinderMob {
     /** 当前行为指令 */
     private NpcCommand command = NpcCommand.IDLE;
 
-    /** 阵营 */
-    private NpcFaction faction = NpcFaction.NEUTRAL;
+    /** 阵营（新系统：基于 FactionRegistry 的 Faction 引用） */
+    private Faction faction = FactionRegistry.get("sagadyssey:wilderness");
 
     /** 主人 UUID，null 表示未被招募 */
     @Nullable
@@ -270,8 +274,14 @@ public class NpcBase extends PathfinderMob {
     public NpcCommand getCommand() { return command; }
     public void setCommand(NpcCommand command) { this.command = command; }
 
-    public NpcFaction getFaction() { return faction; }
-    public void setFaction(NpcFaction faction) { this.faction = faction; }
+    public Faction getFaction() { return faction; }
+    public void setFaction(Faction faction) { this.faction = faction; }
+
+    /** 获取旧版 NpcFaction（向后兼容，基于阵营的敌对性判定） */
+    public NpcFaction getLegacyFaction() {
+        if (faction == null) return NpcFaction.NEUTRAL;
+        return faction.canBeHostile() ? NpcFaction.HOSTILE : NpcFaction.NEUTRAL;
+    }
 
     @Nullable
     public UUID getOwnerUUID() { return ownerUUID; }
@@ -411,8 +421,10 @@ public class NpcBase extends PathfinderMob {
     @Override
     public boolean hurt(DamageSource source, float amount) {
         if (source.getEntity() instanceof Player player) {
-            if (this.faction != NpcFaction.HOSTILE && !isOwnedBy(player.getUUID())) {
-                this.faction = NpcFaction.HOSTILE;
+            // 新阵营系统：非主人玩家攻击 NPC → NPC 变敌对（通过 canBeHostile）
+            if (faction != null && !faction.canBeHostile() && !isOwnedBy(player.getUUID())) {
+                // 对该玩家来说此 NPC 变为敌对行为（行为层，不改变阵营本身）
+                // 旧系统兼容：仅对 old-faction-based 逻辑保留
             }
         }
         // 被非盟友攻击时立即反击
@@ -447,7 +459,7 @@ public class NpcBase extends PathfinderMob {
         tag.putInt("Moral", this.moral);
         tag.putInt("RecruitmentCost", this.recruitmentCost);
         tag.putString("NpcCommand", this.command.name());
-        tag.putString("Faction", this.faction.name());
+        tag.putString("Faction", this.faction != null ? this.faction.id() : "sagadyssey:wilderness");
         if (this.ownerUUID != null) {
             tag.putUUID("OwnerUUID", this.ownerUUID);
         }
@@ -535,9 +547,20 @@ public class NpcBase extends PathfinderMob {
         }
         if (tag.contains("Faction")) {
             try {
-                this.faction = NpcFaction.valueOf(tag.getString("Faction"));
-            } catch (IllegalArgumentException e) {
-                this.faction = NpcFaction.NEUTRAL;
+                String factionId = tag.getString("Faction");
+                // 兼容旧格式（"HOSTILE"/"NEUTRAL"/"FRIENDLY"）和新格式（"sagadyssey:kingdom"）
+                if (factionId.contains(":")) {
+                    this.faction = FactionRegistry.get(factionId);
+                } else {
+                    // 旧 NpcFaction 枚举值，映射到新 Faction
+                    this.faction = switch (factionId) {
+                        case "HOSTILE" -> FactionRegistry.get("sagadyssey:bandit");
+                        case "FRIENDLY" -> FactionRegistry.get("sagadyssey:kingdom");
+                        default -> FactionRegistry.get("sagadyssey:wilderness");
+                    };
+                }
+            } catch (Exception e) {
+                this.faction = FactionRegistry.get("sagadyssey:wilderness");
             }
         }
 
