@@ -3,3 +3,6 @@
 # are changed when only line endings change.
 src/generated/**/.cache/* text eol=lf
 src/generated/**/*.json text eol=lf
+
+# Keep the Unix Gradle entrypoint portable on Linux CI.
+/gradlew text eol=lf
