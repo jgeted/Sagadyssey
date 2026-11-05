@@ -1,0 +1,8 @@
+{
+  "kind": "VISIT",
+  "facility": "sagadyssey:residence",
+  "duration_ticks": 400,
+  "capacity": 2,
+  "window_start": 1000,
+  "window_end": 12500
+}

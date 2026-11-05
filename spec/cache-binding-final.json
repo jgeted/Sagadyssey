@@ -1,0 +1,152 @@
+{
+  "status": "FROZEN_BEFORE_FINAL_TEST_RUN",
+  "globalDeadlineUnchanged": "2026-10-31T04:30:49Z",
+  "oldF01F02RemainUnsupportedAndNotReclassified": true,
+  "productionFinalization": "cached evidence lookup now uses existing SavedData get, never create-empty; unavailable/corrupt lookup Review; only GrowthData changes within authorized scope",
+  "finalCases": [
+    {
+      "id": "T01",
+      "phase": "counter-cache-t01",
+      "runLabel": "cache-t01-20261031-02",
+      "meaning": "same3 replay after actual inventory revisions changed; one legitimate later1 move; NBT job+ledger roundtrip; final S27 C2 E1, original Attempt1/actualId",
+      "mode": "component",
+      "maxTotalGameTicks": 1800,
+      "maxPreparationGameTicks": 1600,
+      "maxWallSeconds": 120,
+      "maxAttempts": 2,
+      "onHardFailure": "preserve first scene and stop this case, no threshold changes",
+      "remainingWallSeconds": 95.206
+    },
+    {
+      "id": "T02",
+      "phase": "counter-cache-t02",
+      "runLabel": "cache-t02-20261031-02",
+      "meaning": "same logical child changed quantity3to4; false+Review, no ledger/title/debit/Attempt changes; later original request stays blocked",
+      "mode": "component",
+      "maxTotalGameTicks": 1800,
+      "maxPreparationGameTicks": 1600,
+      "maxWallSeconds": 120,
+      "maxAttempts": 2,
+      "onHardFailure": "preserve first scene and stop this case, no threshold changes",
+      "remainingWallSeconds": 94.956
+    },
+    {
+      "id": "T03",
+      "phase": "counter-cache-t03",
+      "runLabel": "cache-t03-20261031-02",
+      "meaning": "same logical child changed performer CtoW and destination bag; false+Review, original goods and binding retained",
+      "mode": "component",
+      "maxTotalGameTicks": 1800,
+      "maxPreparationGameTicks": 1600,
+      "maxWallSeconds": 120,
+      "maxAttempts": 2,
+      "onHardFailure": "preserve first scene and stop this case, no threshold changes",
+      "remainingWallSeconds": 95.953
+    },
+    {
+      "id": "T04",
+      "phase": "counter-cache-t04",
+      "runLabel": "cache-t04-20261031-02",
+      "meaning": "same logical child changed destination Cbag to E; false+Review, E remains empty",
+      "mode": "component",
+      "maxTotalGameTicks": 1800,
+      "maxPreparationGameTicks": 1600,
+      "maxWallSeconds": 120,
+      "maxAttempts": 2,
+      "onHardFailure": "preserve first scene and stop this case, no threshold changes",
+      "remainingWallSeconds": 95.955
+    },
+    {
+      "id": "E01",
+      "phase": "counter-cache-e01",
+      "runLabel": "cache-e01-20261031-02",
+      "meaning": "successful original component receipt removed from independent in-memory test ledger copy; false+Review, no replacement transfer",
+      "mode": "component",
+      "maxTotalGameTicks": 1800,
+      "maxPreparationGameTicks": 1600,
+      "maxWallSeconds": 120,
+      "maxAttempts": 2,
+      "onHardFailure": "preserve first scene and stop this case, no threshold changes",
+      "remainingWallSeconds": 97.46000000000001
+    },
+    {
+      "id": "E02",
+      "phase": "counter-cache-e02",
+      "runLabel": "cache-e02-20261031-02",
+      "meaning": "original successful legacy receipt present but RequestIdentity absent; false+Review without inventing identity",
+      "mode": "component",
+      "maxTotalGameTicks": 1800,
+      "maxPreparationGameTicks": 1600,
+      "maxWallSeconds": 120,
+      "maxAttempts": 2,
+      "onHardFailure": "preserve first scene and stop this case, no threshold changes",
+      "remainingWallSeconds": 95.699
+    },
+    {
+      "id": "E03",
+      "phase": "counter-cache-e03",
+      "runLabel": "cache-e03-20261031-02",
+      "meaning": "A cached success points to B real successful actualId with same contents; A rejects transplanted child; existing2 physical successes remain S24 C6",
+      "mode": "component",
+      "maxTotalGameTicks": 1800,
+      "maxPreparationGameTicks": 1600,
+      "maxWallSeconds": 120,
+      "maxAttempts": 2,
+      "onHardFailure": "preserve first scene and stop this case, no threshold changes",
+      "remainingWallSeconds": 96.705
+    },
+    {
+      "id": "E04",
+      "phase": "counter-cache-e04",
+      "runLabel": "cache-e04-20261031-02",
+      "meaning": "only performer changed toW, legs still original Cbag and actorH; existing Person/Body C binding rejects",
+      "mode": "component",
+      "maxTotalGameTicks": 1800,
+      "maxPreparationGameTicks": 1600,
+      "maxWallSeconds": 120,
+      "maxAttempts": 2,
+      "onHardFailure": "preserve first scene and stop this case, no threshold changes",
+      "remainingWallSeconds": 96.956
+    },
+    {
+      "id": "F03",
+      "phase": "counter-cache-f03",
+      "runLabel": "cache-f03-20261031-01",
+      "meaning": "normal FOOD actual pick0, exact original cached replay then actual drop0 and lawful destination",
+      "maxTotalGameTicks": 6000,
+      "maxPreparationGameTicks": 4000,
+      "remainingWallSeconds": 150,
+      "maxAttempts": 1,
+      "controlledInitialExtraCarrots": 29,
+      "notOrdinaryColdStartProof": true
+    },
+    {
+      "id": "F04",
+      "phase": "counter-cache-f04",
+      "runLabel": "cache-f04-20261031-01",
+      "meaning": "normal FOOD actual pick0, changed q+1 refused toReview,400 normal ticks no false completion or new actualId",
+      "maxTotalGameTicks": 6000,
+      "maxPreparationGameTicks": 4000,
+      "remainingWallSeconds": 150,
+      "maxAttempts": 1,
+      "controlledInitialExtraCarrots": 29,
+      "notOrdinaryColdStartProof": true
+    }
+  ],
+  "controlledInitialInput": {
+    "cases": [
+      "F03",
+      "F04"
+    ],
+    "origin": "explicit finite external initial test input29 carrots; not new production or post-start resupply",
+    "location": "existing target private farmer RAW store0 slot26; must be empty",
+    "owner": "same original farmer, default private title; no new grant or policy",
+    "oldInventoryClaimsPreserved": true,
+    "quantity": 29,
+    "normalActors": 9,
+    "daylight": "fixed6000 as earlier F01/F02",
+    "otherResources": "original full checkpoint unchanged before initialization; no other free supply"
+  },
+  "passCriteriaUnchanged": "original requests confirm, altered/missing evidence refuse+Review without ledger/title/Attempt/actualId/business duplication; real normal FOOD; Review is safety only",
+  "noT05T06T08T09FaultMatrix": true
+}

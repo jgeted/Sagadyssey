@@ -14,9 +14,12 @@ import net.minecraft.world.level.levelgen.structure.BoundingBox;
 import net.minecraft.world.level.levelgen.structure.StructurePiece;
 import net.minecraft.world.level.levelgen.structure.StructurePieceAccessor;
 import net.minecraft.world.level.levelgen.structure.pieces.StructurePieceSerializationContext;
+import net.minecraft.world.level.levelgen.structure.templatesystem.BlockIgnoreProcessor;
 import net.minecraft.world.level.levelgen.structure.templatesystem.StructurePlaceSettings;
 import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemplate;
 import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemplateManager;
+import net.minecraft.server.level.ServerLevel;
+import com.jgeted.sagadyssey.social.settlement.SettlementRegistryData;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -74,9 +77,24 @@ public class SagadysseyStructurePiece extends StructurePiece {
 
         StructurePlaceSettings settings = new StructurePlaceSettings()
                 .setRotation(rotation)
+                .setIgnoreEntities(true)
+                .addProcessor(BlockIgnoreProcessor.STRUCTURE_BLOCK)
                 .setBoundingBox(box);
 
         template.placeInWorld(level, placePos, placePos, settings, random, 2);
+
+        // 世界生成可能在工作线程运行：只采集不可变值，再交给服务端主线程写 SavedData。
+        ServerLevel serverLevel = level.getLevel();
+        StructureConfig config = SagadysseyStructures.getConfig(templateLocation.getPath());
+        String structureId = templateLocation.getPath();
+        String category = config == null ? "unknown" : config.getCategory();
+        String size = config == null ? "unknown" : config.getSize();
+        String dimension = serverLevel.dimension().location().toString();
+        BlockPos registeredPos = placePos.immutable();
+        long gameTime = serverLevel.getGameTime();
+        serverLevel.getServer().execute(() -> SettlementRegistryData.get(serverLevel.getServer())
+                .registerGeneratedBuilding(serverLevel.getServer(), dimension, registeredPos,
+                        structureId, category, size, gameTime));
 
         LOGGER.debug("已放置结构: {} at {}", templateLocation, placePos);
     }

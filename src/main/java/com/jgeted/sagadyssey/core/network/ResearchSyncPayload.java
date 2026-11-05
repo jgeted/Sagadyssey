@@ -1,5 +1,6 @@
 package com.jgeted.sagadyssey.core.network;
 
+import com.jgeted.sagadyssey.core.LegacyFeatureFlags;
 import com.jgeted.sagadyssey.Sagadyssey;
 import com.jgeted.sagadyssey.core.research.ClientResearchCache;
 import io.netty.buffer.ByteBuf;
@@ -51,6 +52,7 @@ public record ResearchSyncPayload(int points, Set<String> unlocked) implements C
 
     public static void handle(final ResearchSyncPayload data, final IPayloadContext context) {
         context.enqueueWork(() -> {
+            if (!LegacyFeatureFlags.LEGACY_RESEARCH_ENABLED) return;
             ClientResearchCache.set(data.points, data.unlocked);
         });
     }

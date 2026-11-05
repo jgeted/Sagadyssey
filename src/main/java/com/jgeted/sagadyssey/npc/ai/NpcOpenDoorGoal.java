@@ -36,6 +36,7 @@ public class NpcOpenDoorGoal extends Goal {
 
     @Override
     public boolean canUse() {
+        if (com.jgeted.sagadyssey.npc.brain.execution.NpcBrainRuntime.isPlanned(npc)) return false;
         if (!npc.getNavigation().isInProgress()) return false;
         if (npc.getTarget() != null) return false;
         if (npc.isPassenger()) return false;
@@ -49,7 +50,8 @@ public class NpcOpenDoorGoal extends Goal {
 
     @Override
     public boolean canContinueToUse() {
-        if (doorPos == null) return false;
+        if (doorPos == null
+                || com.jgeted.sagadyssey.npc.brain.execution.NpcBrainRuntime.isPlanned(npc)) return false;
         // 门还开着就继续
         BlockState state = npc.level().getBlockState(doorPos);
         return isOpenableDoor(state) && isDoorOpen(state);

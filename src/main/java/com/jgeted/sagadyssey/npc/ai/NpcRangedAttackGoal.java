@@ -1,6 +1,7 @@
 package com.jgeted.sagadyssey.npc.ai;
 
 import com.jgeted.sagadyssey.npc.entity.NpcBase;
+import com.jgeted.sagadyssey.npc.entity.NpcAction;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.ai.goal.Goal;
@@ -17,7 +18,7 @@ import java.util.EnumSet;
 
 /**
  * NPC 远程攻击 AI。
- * 参考原版 RangedBowAttackGoal，适配 NpcBase 的弓槽/箭槽和职业攻击距离。
+ * 参考原版 RangedBowAttackGoal；武器与箭矢均来自实体装备或 36 格随身物品栏。
  */
 public class NpcRangedAttackGoal extends Goal {
 
@@ -31,9 +32,11 @@ public class NpcRangedAttackGoal extends Goal {
     private boolean strafingClockwise;
     private boolean strafingBackwards;
     private int strafingTime = -1;
+    private int crossbowChargeTicks;
 
     private static final float DEFAULT_ATTACK_RADIUS = 15.0F;
     private static final float CROSSBOW_ATTACK_RADIUS = 12.0F;
+    private static final int CROSSBOW_CHARGE_TICKS = 25;
 
     public NpcRangedAttackGoal(NpcBase npc, double speedModifier, int attackInterval, float maxAttackDistance) {
         this.npc = npc;
@@ -51,7 +54,7 @@ public class NpcRangedAttackGoal extends Goal {
         }
         this.attackRadius = radius;
 
-        this.setFlags(EnumSet.of(Flag.LOOK));
+        this.setFlags(EnumSet.of(Flag.MOVE,Flag.LOOK));
     }
 
     @Override
@@ -89,12 +92,15 @@ public class NpcRangedAttackGoal extends Goal {
     @Override
     public void start() {
         npc.setAggressive(true);
+        crossbowChargeTicks = 0;
     }
 
     @Override
     public void stop() {
         npc.setAggressive(false);
         seeTime = 0;
+        crossbowChargeTicks = 0;
+        npc.stopUsingItem();
         npc.releaseMutex(AiMutex.ATTACK);
     }
 
@@ -129,9 +135,11 @@ public class NpcRangedAttackGoal extends Goal {
         // 远程武器蓄力/射击
         ItemStack weapon = getRangedWeapon();
         if (weapon.getItem() instanceof BowItem) {
+            crossbowChargeTicks = 0;
             tickBow(weapon, target, distSqr, canSee);
+        } else if (weapon.getItem() instanceof CrossbowItem) {
+            tickCrossbow(weapon, target, distSqr, canSee);
         }
-        // 弩的射击逻辑后续扩展
     }
 
     private void tickBow(ItemStack bow, LivingEntity target, double distSqr, boolean canSee) {
@@ -160,7 +168,9 @@ public class NpcRangedAttackGoal extends Goal {
         // releaseUsing 只对玩家生效（源码中整个方法体在 instanceof Player 分支内），
         // 因此参照原版 AbstractSkeleton.performRangedAttack 手动生成箭实体
         ItemStack ammo = getAmmoStack();
+        if(ammo.isEmpty()){npc.stopUsingItem();return;}
         AbstractArrow arrow = ProjectileUtil.getMobArrow(npc, ammo, power, bow);
+        arrow.setBaseDamage(arrow.getBaseDamage() * npc.getMoraleDamageMultiplier());
 
         double d0 = target.getX() - npc.getX();
         double d1 = target.getY(0.3333333333333333) - arrow.getY();
@@ -169,14 +179,65 @@ public class NpcRangedAttackGoal extends Goal {
         arrow.shoot(d0, d1 + d3 * 0.2F, d2, 1.6F, (float) (14 - npc.level().getDifficulty().getId() * 4));
 
         npc.playSound(SoundEvents.SKELETON_SHOOT, 1.0F, 1.0F / (npc.getRandom().nextFloat() * 0.4F + 0.8F));
-        npc.level().addFreshEntity(arrow);
+        if(!com.jgeted.sagadyssey.social.combat.NpcAmmunitionService.launch(npc,arrow,ammo)){npc.stopUsingItem();return;}
 
         npc.swing(npc.getUsedItemHand());
+        npc.playAction(NpcAction.BOW_RELEASE, 10);
         npc.stopUsingItem();
 
         // 消耗箭
-        consumeArrow();
         this.attackTime = this.attackIntervalMin; // 进入射后冷却
+    }
+
+    private void tickCrossbow(ItemStack crossbow, LivingEntity target, double distSqr, boolean canSee) {
+        if (attackTime > 0) {
+            attackTime--;
+            crossbowChargeTicks = 0;
+            return;
+        }
+
+        if (!canSee || distSqr > maxAttackDistance * maxAttackDistance) {
+            crossbowChargeTicks = 0;
+            return;
+        }
+
+        crossbowChargeTicks++;
+        if (crossbowChargeTicks == 1) {
+            npc.playAction(NpcAction.CROSSBOW_LOAD, CROSSBOW_CHARGE_TICKS);
+            npc.playSound(SoundEvents.CROSSBOW_LOADING_START.value(), 0.7F, 1.0F);
+        } else if (crossbowChargeTicks == CROSSBOW_CHARGE_TICKS / 2) {
+            npc.playSound(SoundEvents.CROSSBOW_LOADING_MIDDLE.value(), 0.7F, 1.0F);
+        }
+
+        if (crossbowChargeTicks >= CROSSBOW_CHARGE_TICKS) {
+            performCrossbowAttack(target, crossbow);
+        }
+    }
+
+    private void performCrossbowAttack(LivingEntity target, ItemStack crossbow) {
+        ItemStack ammo = getAmmoStack();
+        if (ammo.isEmpty()) {
+            crossbowChargeTicks = 0;
+            return;
+        }
+
+        AbstractArrow arrow = ProjectileUtil.getMobArrow(npc, ammo, 1.0F, crossbow);
+        arrow.setBaseDamage(arrow.getBaseDamage() * npc.getMoraleDamageMultiplier());
+        double dx = target.getX() - npc.getX();
+        double dy = target.getY(0.3333333333333333D) - arrow.getY();
+        double dz = target.getZ() - npc.getZ();
+        double horizontal = Math.sqrt(dx * dx + dz * dz);
+        arrow.shoot(dx, dy + horizontal * 0.2D, dz, 1.9F,
+                (float) (10 - npc.level().getDifficulty().getId() * 2));
+
+        npc.playSound(SoundEvents.CROSSBOW_SHOOT, 1.0F,
+                1.0F / (npc.getRandom().nextFloat() * 0.3F + 0.85F));
+        if(!com.jgeted.sagadyssey.social.combat.NpcAmmunitionService.launch(npc,arrow,ammo)){crossbowChargeTicks=0;return;}
+        npc.swing(ProjectileUtil.getWeaponHoldingHand(npc, item -> item instanceof CrossbowItem));
+        npc.playAction(NpcAction.BOW_RELEASE, 10);
+
+        crossbowChargeTicks = 0;
+        attackTime = attackIntervalMin + 10;
     }
 
     /** 获取当前远程武器（弓或弩） */
@@ -185,39 +246,21 @@ public class NpcRangedAttackGoal extends Goal {
         if (mainHand.getItem() instanceof BowItem || mainHand.getItem() instanceof CrossbowItem) {
             return mainHand;
         }
-        ItemStack bowSlot = npc.getBowSlot();
-        if (bowSlot.getItem() instanceof BowItem || bowSlot.getItem() instanceof CrossbowItem) {
-            return bowSlot;
+        ItemStack offHand = npc.getOffhandItem();
+        if (offHand.getItem() instanceof BowItem || offHand.getItem() instanceof CrossbowItem) {
+            return offHand;
         }
         return ItemStack.EMPTY;
     }
 
-    /** 获取可用弹药：优先箭槽，其次扫描背包（9 格装备栏） */
+    /** 获取物品栏中的第一组可用弹药。 */
     private ItemStack getAmmoStack() {
-        ItemStack arrowSlot = npc.getArrowSlot();
-        if (!arrowSlot.isEmpty()) {
-            return arrowSlot;
-        }
-        for (int i = 0; i < npc.getEquipmentInventory().getContainerSize(); i++) {
-            ItemStack stack = npc.getEquipmentInventory().getItem(i);
-            if (stack.getItem() instanceof ArrowItem) {
-                return stack;
-            }
-        }
-        return ItemStack.EMPTY;
+        return npc.getPersonalInventory().first(stack -> stack.getItem() instanceof ArrowItem);
     }
 
     /** 检查是否有弹药 */
     private boolean hasAmmo() {
         return !getAmmoStack().isEmpty();
-    }
-
-    /** 消耗一根箭 */
-    private void consumeArrow() {
-        ItemStack ammo = getAmmoStack();
-        if (!ammo.isEmpty()) {
-            ammo.shrink(1);
-        }
     }
 
     /** 动态更新攻击间隔 */

@@ -1,5 +1,6 @@
 package com.jgeted.sagadyssey.core.network;
 
+import com.jgeted.sagadyssey.core.LegacyFeatureFlags;
 import com.jgeted.sagadyssey.Sagadyssey;
 import com.jgeted.sagadyssey.core.research.ResearchAttachments;
 import io.netty.buffer.ByteBuf;
@@ -21,16 +22,9 @@ public record ResearchUnlockPacket(String researchId) implements CustomPacketPay
 
     public static final StreamCodec<ByteBuf, ResearchUnlockPacket> STREAM_CODEC = StreamCodec.of(
             (buf, packet) -> {
-                byte[] bytes = packet.researchId.getBytes();
-                buf.writeInt(bytes.length);
-                buf.writeBytes(bytes);
+                NetworkStrings.write(buf, packet.researchId, 128);
             },
-            buf -> {
-                int length = buf.readInt();
-                byte[] bytes = new byte[length];
-                buf.readBytes(bytes);
-                return new ResearchUnlockPacket(new String(bytes));
-            }
+            buf -> new ResearchUnlockPacket(NetworkStrings.read(buf, 128))
     );
 
     @Override
@@ -43,7 +37,10 @@ public record ResearchUnlockPacket(String researchId) implements CustomPacketPay
      */
     public static void handle(final ResearchUnlockPacket data, final IPayloadContext context) {
         context.enqueueWork(() -> {
+            if (!LegacyFeatureFlags.LEGACY_RESEARCH_ENABLED) return;
             var player = context.player();
+            if (player instanceof net.minecraft.server.level.ServerPlayer serverPlayer
+                    && !NetworkRateLimiter.allow(serverPlayer, "research_unlock", 2)) return;
             boolean success = ResearchAttachments.tryUnlock(player, data.researchId());
             if (success) {
                 player.displayClientMessage(

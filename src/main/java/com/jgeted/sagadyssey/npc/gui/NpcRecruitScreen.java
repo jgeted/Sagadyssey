@@ -4,7 +4,15 @@ import com.jgeted.sagadyssey.npc.faction.Faction;
 import com.jgeted.sagadyssey.npc.faction.FactionRegistry;
 import com.jgeted.sagadyssey.npc.network.NpcInteractionPacket;
 import com.jgeted.sagadyssey.npc.network.NpcStatsPayload;
+import com.jgeted.sagadyssey.npc.appearance.NpcFaceVariant;
+import com.jgeted.sagadyssey.npc.appearance.NpcGender;
+import com.jgeted.sagadyssey.npc.identity.NpcIdentity;
+import com.jgeted.sagadyssey.npc.identity.NpcOffice;
+import com.jgeted.sagadyssey.npc.identity.NpcSocialClass;
+import com.jgeted.sagadyssey.npc.entity.NpcMoraleState;
+import com.jgeted.sagadyssey.npc.profession.NpcMerchantRegion;
 import com.jgeted.sagadyssey.npc.trade.NpcTradeOffer;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
@@ -23,6 +31,12 @@ public class NpcRecruitScreen extends Screen {
     private final int npcId;
     private final String npcName;
     private final String professionName;
+    private final NpcSocialClass socialClass;
+    private final NpcOffice office;
+    private final NpcGender gender;
+    private final NpcFaceVariant faceVariant;
+    private final NpcMerchantRegion merchantRegion;
+    private final boolean isTrader;
 
     // 属性数据
     private final float currentHp;
@@ -41,7 +55,7 @@ public class NpcRecruitScreen extends Screen {
 
     // 布局常量
     private static final int PANEL_WIDTH = 176;
-    private static final int PANEL_HEIGHT = 170;
+    private static final int PANEL_HEIGHT = 178;
 
     // 动态计算的坐标
     private int panelLeft;
@@ -52,6 +66,12 @@ public class NpcRecruitScreen extends Screen {
         this.npcId = data.npcId();
         this.npcName = data.npcName();
         this.professionName = data.professionName();
+        this.socialClass = NpcSocialClass.byName(data.socialClassName());
+        this.office = NpcOffice.byName(data.officeName());
+        this.gender = NpcGender.byName(data.genderName());
+        this.faceVariant = NpcFaceVariant.byName(data.faceVariantName());
+        this.isTrader = !data.merchantRegionName().isBlank();
+        this.merchantRegion = NpcMerchantRegion.byName(data.merchantRegionName());
         this.currentHp = data.currentHp();
         this.maxHp = data.maxHp();
         this.attackDamage = data.attackDamage();
@@ -63,7 +83,7 @@ public class NpcRecruitScreen extends Screen {
         this.moral = data.moral();
         this.recruitmentCost = data.recruitmentCost();
         this.factionName = data.factionName();
-        this.trades = data.buildTrades();
+        this.trades = data.buildTrades(Minecraft.getInstance().level.registryAccess());
     }
 
     @Override
@@ -79,7 +99,7 @@ public class NpcRecruitScreen extends Screen {
         if (!isHostile) {
             int tradeBtnW = 76;
             int tradeBtnX = panelLeft + (PANEL_WIDTH - tradeBtnW) / 2;
-            int tradeBtnY = panelTop + 106;
+            int tradeBtnY = panelTop + 114;
             addRenderableWidget(Button.builder(
                     Component.literal("交易"),
                     btn -> this.minecraft.setScreen(new NpcTradeScreen(npcId, npcName, professionName, npcLevel, experience, trades)))
@@ -90,15 +110,17 @@ public class NpcRecruitScreen extends Screen {
         // 招募按钮
         int recruitBtnW = 120;
         int recruitX = panelLeft + (PANEL_WIDTH - recruitBtnW) / 2;
-        int recruitY = panelTop + 132;
+        int recruitY = panelTop + 140;
         addRenderableWidget(Button.builder(
-                Component.literal("招募（花费 " + recruitmentCost + " 绿宝石）"),
+                Component.literal(NpcIdentity.isDirectlyRecruitable(socialClass, office)
+                        ? "招募（花费 " + recruitmentCost + " 绿宝石）"
+                        : "该身份不可直接招募"),
                 btn -> {
                     PacketDistributor.sendToServer(new NpcInteractionPacket(npcId, "recruit"));
                     this.onClose();
                 })
                 .bounds(recruitX, recruitY, recruitBtnW, 20)
-                .build());
+                .build()).active = NpcIdentity.isDirectlyRecruitable(socialClass, office);
 
         // × 关闭按钮
         addRenderableWidget(Button.builder(
@@ -127,12 +149,20 @@ public class NpcRecruitScreen extends Screen {
         graphics.drawString(font, title, titleX, panelTop + 8, 0xFF_D4A017);
 
         // === 职业 ===
-        Component prof = Component.literal("职业：" + professionName);
+        Component prof = Component.literal("身份：" + NpcIdentity.title(socialClass, office, factionName, gender).getString()
+                + " · 职业：" + professionName);
         int profX = panelLeft + (PANEL_WIDTH - font.width(prof)) / 2;
         graphics.drawString(font, prof, profX, panelTop + 22, 0xCC_CCCCCC);
 
+        String appearanceText = gender.displayName().getString()
+                + " · " + faceVariant.displayName().getString();
+        if (isTrader) appearanceText += " · " + merchantRegion.displayName().getString();
+        Component appearance = Component.literal(appearanceText);
+        int appearanceX = panelLeft + (PANEL_WIDTH - font.width(appearance)) / 2;
+        graphics.drawString(font, appearance, appearanceX, panelTop + 32, 0xAA_C7B89A);
+
         // === 分割线 ===
-        graphics.fill(panelLeft + 8, panelTop + 36, panelLeft + PANEL_WIDTH - 8, panelTop + 37, 0x55_AA5500);
+        graphics.fill(panelLeft + 8, panelTop + 44, panelLeft + PANEL_WIDTH - 8, panelTop + 45, 0x55_AA5500);
 
         // === 阵营 ===
         Faction faction = FactionRegistry.get(factionName);
@@ -144,12 +174,12 @@ public class NpcRecruitScreen extends Screen {
         int factionColor = faction != null ? faction.color() : 0xFF_FFFF55;
         Component factionComp = Component.literal("阵营：" + factionDisplayName);
         int factionX = panelLeft + (PANEL_WIDTH - font.width(factionComp)) / 2;
-        graphics.drawString(font, factionComp, factionX, panelTop + 42, factionColor);
+        graphics.drawString(font, factionComp, factionX, panelTop + 50, factionColor);
 
         // === 属性面板（两列布局） ===
         int col1X = panelLeft + 12;
         int col2X = panelLeft + 92;
-        int rowY = panelTop + 52;
+        int rowY = panelTop + 60;
         int rowH = 14;
 
         drawStat(graphics, col1X, rowY, "生命", String.format("%.0f / %.0f", currentHp, maxHp), 0xFF_55FF55);
@@ -165,7 +195,8 @@ public class NpcRecruitScreen extends Screen {
         rowY += rowH;
 
         drawStat(graphics, col1X, rowY, "护甲", String.format("%.1f", armor), 0xFF_AAAAFF);
-        drawStat(graphics, col2X, rowY, "士气", moral + " / 100", 0xFF_FF88FF);
+        drawStat(graphics, col2X, rowY, "士气",
+                moral + " (" + NpcMoraleState.fromValue(moral).displayName() + ")", 0xFF_FF88FF);
         rowY += rowH;
 
         super.render(graphics, mouseX, mouseY, partialTick);

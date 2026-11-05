@@ -1,5 +1,6 @@
 package com.jgeted.sagadyssey.core.command;
 
+import com.jgeted.sagadyssey.core.LegacyFeatureFlags;
 import com.jgeted.sagadyssey.core.research.ResearchAttachments;
 import com.jgeted.sagadyssey.core.research.ResearchNode;
 import com.jgeted.sagadyssey.core.research.ResearchRegistry;
@@ -25,6 +26,7 @@ import java.util.Set;
 public class ResearchCommand {
 
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
+        if (!LegacyFeatureFlags.LEGACY_RESEARCH_ENABLED) return;
         dispatcher.register(
                 Commands.literal("research")
                         // /research show — 查看点数

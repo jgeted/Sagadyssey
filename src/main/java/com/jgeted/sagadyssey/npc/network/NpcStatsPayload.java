@@ -4,11 +4,9 @@ import com.jgeted.sagadyssey.Sagadyssey;
 import com.jgeted.sagadyssey.npc.entity.NpcCommand;
 import com.jgeted.sagadyssey.npc.faction.Faction;
 import com.jgeted.sagadyssey.npc.entity.NpcBase;
-import com.jgeted.sagadyssey.npc.gui.NpcCommandScreen;
-import com.jgeted.sagadyssey.npc.gui.NpcRecruitScreen;
 import com.jgeted.sagadyssey.npc.trade.NpcTradeOffer;
 import io.netty.buffer.ByteBuf;
-import net.minecraft.client.Minecraft;
+import net.minecraft.core.RegistryAccess;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
@@ -27,6 +25,11 @@ public record NpcStatsPayload(
         int npcId,
         String npcName,
         String professionName,
+        String socialClassName,
+        String officeName,
+        String genderName,
+        String faceVariantName,
+        String merchantRegionName,
         float currentHp,
         float maxHp,
         float attackDamage,
@@ -40,6 +43,11 @@ public record NpcStatsPayload(
         boolean isOwned,
         String commandName,
         String farmModeName,
+        int logisticsStage,
+        String logisticsItem,
+        int logisticsDelivered,
+        int logisticsRequested,
+        int logisticsCargo,
         String factionName,
         String originalFaction,
         List<byte[]> rawTrades,
@@ -62,6 +70,11 @@ public record NpcStatsPayload(
                 buf.writeInt(packet.npcId);
                 writeString(buf, packet.npcName);
                 writeString(buf, packet.professionName);
+                writeString(buf, packet.socialClassName);
+                writeString(buf, packet.officeName);
+                writeString(buf, packet.genderName);
+                writeString(buf, packet.faceVariantName);
+                writeString(buf, packet.merchantRegionName);
                 buf.writeFloat(packet.currentHp);
                 buf.writeFloat(packet.maxHp);
                 buf.writeFloat(packet.attackDamage);
@@ -75,6 +88,11 @@ public record NpcStatsPayload(
                 buf.writeBoolean(packet.isOwned);
                 buf.writeByte(NpcCommand.valueOf(packet.commandName()).ordinal());
                 writeString(buf, packet.farmModeName());
+                buf.writeByte(packet.logisticsStage());
+                writeString(buf, packet.logisticsItem());
+                buf.writeInt(packet.logisticsDelivered());
+                buf.writeInt(packet.logisticsRequested());
+                buf.writeInt(packet.logisticsCargo());
                 writeString(buf, packet.factionName());
                 writeString(buf, packet.originalFaction());
                 // 交易数据：每个交易 = 完整 ItemStack 字节序列
@@ -97,6 +115,11 @@ public record NpcStatsPayload(
                 int npcId = buf.readInt();
                 String npcName = readString(buf);
                 String profName = readString(buf);
+                String socialClassName = readString(buf);
+                String officeName = readString(buf);
+                String genderName = readString(buf);
+                String faceVariantName = readString(buf);
+                String merchantRegionName = readString(buf);
                 float curHp = buf.readFloat();
                 float maxHp = buf.readFloat();
                 float atk = buf.readFloat();
@@ -110,6 +133,11 @@ public record NpcStatsPayload(
                 boolean owned = buf.readBoolean();
                 String cmd = NpcCommand.values()[buf.readByte()].name();
                 String farmModeName = readString(buf);
+                int logisticsStage = buf.readByte();
+                String logisticsItem = readString(buf);
+                int logisticsDelivered = buf.readInt();
+                int logisticsRequested = buf.readInt();
+                int logisticsCargo = buf.readInt();
                 String factionName = readString(buf);
                 String originalFaction = readString(buf);
                 int tradeCount = buf.readInt();
@@ -128,22 +156,24 @@ public record NpcStatsPayload(
                 String mountName = readString(buf);
                 boolean leadMountMode = buf.readBoolean();
                 boolean mountLeashed = buf.readBoolean();
-                return new NpcStatsPayload(npcId, npcName, profName, curHp, maxHp, atk, spd, arm,
-                        lvl, exp, kills, moral, cost, owned, cmd, farmModeName, factionName, originalFaction, trades,
+                return new NpcStatsPayload(npcId, npcName, profName, socialClassName, officeName,
+                        genderName, faceVariantName, merchantRegionName,
+                        curHp, maxHp, atk, spd, arm,
+                        lvl, exp, kills, moral, cost, owned, cmd, farmModeName,
+                        logisticsStage, logisticsItem, logisticsDelivered, logisticsRequested, logisticsCargo,
+                        factionName, originalFaction, trades,
                         hasMount, mountType, mountHp, mountMaxHp, mountSpeed, mountName,
                         leadMountMode, mountLeashed);
             }
     );
 
     /** 将 rawTrades 还原为 NpcTradeOffer 列表 */
-    public List<NpcTradeOffer> buildTrades() {
+    public List<NpcTradeOffer> buildTrades(RegistryAccess registryAccess) {
         List<NpcTradeOffer> result = new ArrayList<>();
-        Minecraft mc = Minecraft.getInstance();
-        if (mc.level == null) return result;
         for (byte[] t : rawTrades) {
             io.netty.buffer.ByteBuf buf = io.netty.buffer.Unpooled.wrappedBuffer(t);
             net.minecraft.network.RegistryFriendlyByteBuf fbuf =
-                    new net.minecraft.network.RegistryFriendlyByteBuf(buf, mc.level.registryAccess());
+                    new net.minecraft.network.RegistryFriendlyByteBuf(buf, registryAccess);
             ItemStack costItem = ItemStack.OPTIONAL_STREAM_CODEC.decode(fbuf);
             int costMin = fbuf.readInt();
             int costMax = fbuf.readInt();
@@ -177,23 +207,11 @@ public record NpcStatsPayload(
     }
 
     public static void handle(final NpcStatsPayload data, final IPayloadContext context) {
-        context.enqueueWork(() -> {
-            Minecraft mc = Minecraft.getInstance();
-            // 这是“打开界面”的响应包，只允许从游戏画面进入；不得覆盖玩家正在使用的其他 UI。
-            if (mc.player == null || mc.level == null || mc.screen != null) return;
-            var entity = mc.level.getEntity(data.npcId());
-            if (!(entity instanceof NpcBase npc) || !npc.isAlive()
-                    || mc.player.distanceToSqr(npc) > 64.0D) return;
-            if (data.isOwned) {
-                mc.setScreen(new NpcCommandScreen(data));
-            } else {
-                mc.setScreen(new NpcRecruitScreen(data));
-            }
-        });
+        ClientNpcStatsPayloadHandler.handle(data, context);
     }
 
     public static NpcStatsPayload from(NpcBase npc) {
-        int cost = npc.getRecruitmentCost();
+        int cost = npc.getAdjustedRecruitmentCost();
         var faction = npc.getFaction();
         if (faction != null && faction.canBeHostile()) {
             cost *= 2;
@@ -245,6 +263,12 @@ public record NpcStatsPayload(
                 npc.getId(),
                 npc.getNpcName(),
                 npc.getProfession().getDisplayName(),
+                npc.getSocialClass().name(),
+                npc.getOffice().name(),
+                npc.getGender().name(),
+                npc.getFaceVariant().name(),
+                npc.getProfession() == com.jgeted.sagadyssey.npc.profession.NpcProfession.TRADER
+                        ? npc.getMerchantRegion().name() : "",
                 npc.getCurrentHp(),
                 npc.getMaxHp(),
                 npc.getAttackDamage(),
@@ -258,6 +282,11 @@ public record NpcStatsPayload(
                 npc.isOwned(),
                 npc.getCommand().name(),
                 npc.getFarmMode().name(),
+                npc.getLogisticsStage(),
+                npc.getLogisticsItem(),
+                npc.getLogisticsDelivered(),
+                npc.getLogisticsRequested(),
+                npc.getLogisticsCargo(),
                 npc.getFaction() != null ? npc.getFaction().id() : "sagadyssey:wilderness",
                 npc.getOriginalFaction() != null ? npc.getOriginalFaction() : "",
                 raw,

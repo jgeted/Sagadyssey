@@ -17,16 +17,9 @@ public record ChatPayload(String message) implements CustomPacketPayload {
 
     public static final StreamCodec<ByteBuf, ChatPayload> STREAM_CODEC = StreamCodec.of(
             (buf, packet) -> {
-                byte[] bytes = packet.message.getBytes();
-                buf.writeInt(bytes.length);
-                buf.writeBytes(bytes);
+                NetworkStrings.write(buf, packet.message, 256);
             },
-            buf -> {
-                int length = buf.readInt();
-                byte[] bytes = new byte[length];
-                buf.readBytes(bytes);
-                return new ChatPayload(new String(bytes));
-            }
+            buf -> new ChatPayload(NetworkStrings.read(buf, 256))
     );
 
     @Override

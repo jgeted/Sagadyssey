@@ -1,10 +1,33 @@
 package com.jgeted.sagadyssey.npc.network;
 
 import com.jgeted.sagadyssey.Sagadyssey;
-import com.jgeted.sagadyssey.npc.container.NpcEquipMenuProvider;
+import com.jgeted.sagadyssey.core.network.NetworkStrings;
+import com.jgeted.sagadyssey.core.network.NetworkRateLimiter;
+import com.jgeted.sagadyssey.npc.command.CommandGroupAttachments;
 import com.jgeted.sagadyssey.npc.entity.NpcBase;
 import com.jgeted.sagadyssey.npc.entity.NpcCommand;
 import com.jgeted.sagadyssey.npc.faction.NpcFaction;
+import com.jgeted.sagadyssey.npc.identity.NpcDialogue;
+import com.jgeted.sagadyssey.npc.identity.NpcDialogueContext;
+import com.jgeted.sagadyssey.npc.identity.NpcIdentityRelations;
+import com.jgeted.sagadyssey.social.life.NpcLifeData;
+import com.jgeted.sagadyssey.social.character.CharacterRegistry;
+import com.jgeted.sagadyssey.social.service.AuthorityScope;
+import com.jgeted.sagadyssey.social.service.ServiceAuthorityVerdict;
+import com.jgeted.sagadyssey.social.service.ServiceRelationshipData;
+import com.jgeted.sagadyssey.social.scenario.ScenarioLabController;
+import com.jgeted.sagadyssey.worldsim.rights.AccessPolicy;
+import com.jgeted.sagadyssey.worldsim.rights.ItemFingerprint;
+import com.jgeted.sagadyssey.worldsim.rights.RightsStateData;
+import com.jgeted.sagadyssey.worldsim.rights.SubjectRef;
+import com.jgeted.sagadyssey.worldsim.transfer.ContainerIds;
+import com.jgeted.sagadyssey.worldsim.transfer.ExpectedRevision;
+import com.jgeted.sagadyssey.worldsim.transfer.TransferEndpoint;
+import com.jgeted.sagadyssey.worldsim.transfer.TransferIntent;
+import com.jgeted.sagadyssey.worldsim.transfer.TransferLedgerData;
+import com.jgeted.sagadyssey.worldsim.transfer.TransferLeg;
+import com.jgeted.sagadyssey.worldsim.transfer.TransferRequest;
+import com.jgeted.sagadyssey.worldsim.transfer.TransferService;
 import com.jgeted.sagadyssey.npc.profession.NpcProfession;
 import io.netty.buffer.ByteBuf;
 import net.minecraft.network.chat.Component;
@@ -21,6 +44,10 @@ import net.minecraft.world.item.Items;
 import net.neoforged.neoforge.network.PacketDistributor;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
 
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+
 /**
  * 客户端→服务端：NPC 交互请求。
  * action:
@@ -31,6 +58,8 @@ import net.neoforged.neoforge.network.handling.IPayloadContext;
  *   "work"           — 命令 NPC 开始工作（务农/伐木挖矿，按职业）
  */
 public record NpcInteractionPacket(int npcId, String action) implements CustomPacketPayload {
+    private static int expectedStatsNpcId = -1;
+    private static long expectedStatsUntilNanos;
 
     public static final Type<NpcInteractionPacket> TYPE = new Type<>(
             ResourceLocation.fromNamespaceAndPath(Sagadyssey.MOD_ID, "npc_interact")
@@ -39,22 +68,28 @@ public record NpcInteractionPacket(int npcId, String action) implements CustomPa
     public static final StreamCodec<ByteBuf, NpcInteractionPacket> STREAM_CODEC = StreamCodec.of(
             (buf, packet) -> {
                 buf.writeInt(packet.npcId);
-                byte[] bytes = packet.action.getBytes();
-                buf.writeInt(bytes.length);
-                buf.writeBytes(bytes);
+                NetworkStrings.write(buf, packet.action, 32);
             },
-            buf -> {
-                int npcId = buf.readInt();
-                int len = buf.readInt();
-                byte[] bytes = new byte[len];
-                buf.readBytes(bytes);
-                return new NpcInteractionPacket(npcId, new String(bytes));
-            }
+            buf -> new NpcInteractionPacket(buf.readInt(), NetworkStrings.read(buf, 32))
     );
 
     @Override
     public Type<? extends CustomPacketPayload> type() {
         return TYPE;
+    }
+
+    /** 客户端显式交互入口；回应只有在短时间内匹配该实体时才允许打开界面。 */
+    public static void requestStats(int npcId) {
+        expectedStatsNpcId = npcId;
+        expectedStatsUntilNanos = System.nanoTime() + 3_000_000_000L;
+        PacketDistributor.sendToServer(new NpcInteractionPacket(npcId, "request_stats"));
+    }
+
+    public static boolean consumeExpectedStatsResponse(int npcId) {
+        boolean expected = expectedStatsNpcId == npcId && System.nanoTime() <= expectedStatsUntilNanos;
+        expectedStatsNpcId = -1;
+        expectedStatsUntilNanos = 0L;
+        return expected;
     }
 
     /**
@@ -63,6 +98,7 @@ public record NpcInteractionPacket(int npcId, String action) implements CustomPa
     public static void handle(final NpcInteractionPacket data, final IPayloadContext context) {
         context.enqueueWork(() -> {
             ServerPlayer player = (ServerPlayer) context.player();
+            if (!NetworkRateLimiter.allow(player, "npc_interaction", 1)) return;
             Entity entity = player.serverLevel().getEntity(data.npcId);
 
             // NPC 不存在或已消失
@@ -71,9 +107,14 @@ public record NpcInteractionPacket(int npcId, String action) implements CustomPa
                         Component.literal("§c这个 NPC 已经不存在了"), true);
                 return;
             }
+            if (!npc.isAlive() || player.distanceToSqr(npc) > 64.0D) {
+                player.displayClientMessage(Component.literal("§c你离 NPC 太远了"), true);
+                return;
+            }
 
             switch (data.action) {
                 case "request_stats" -> handleRequestStats(player, npc);
+                case "talk" -> handleTalk(player, npc);
                 case "recruit" -> handleRecruit(player, npc);
                 case "follow" -> handleCommand(player, npc, "follow");
                 case "stay" -> handleCommand(player, npc, "stay");
@@ -100,7 +141,18 @@ public record NpcInteractionPacket(int npcId, String action) implements CustomPa
             player.displayClientMessage(Component.literal("§c你离 NPC 太远了"), true);
             return;
         }
-        NpcStatsPayload.openFor(player, npc);
+        npc.playAction(NpcIdentityRelations.greetingAction(npc, player), 30);
+        Component greeting = NpcDialogue.line(npc, NpcDialogueContext.GREETING, player);
+        player.sendSystemMessage(greeting);
+        NpcViewSnapshotPayload.openFor(player, npc, greeting.getString());
+    }
+
+    /** Keeps the context screen open while delivering an actual server-authoritative reply. */
+    private static void handleTalk(ServerPlayer player, NpcBase npc) {
+        npc.playAction(NpcIdentityRelations.greetingAction(npc, player), 30);
+        Component reply = NpcDialogue.line(npc, NpcDialogueContext.CONVERSATION, player);
+        player.sendSystemMessage(reply);
+        NpcViewSnapshotPayload.openFor(player, npc, reply.getString());
     }
 
     /**
@@ -114,21 +166,42 @@ public record NpcInteractionPacket(int npcId, String action) implements CustomPa
             return;
         }
 
-        // 已被别人招募
-        if (npc.isOwned() && !npc.isOwnedBy(player.getUUID())) {
-            player.displayClientMessage(
-                    Component.literal("§c这个 NPC 已经被其他人招募了"), true);
+        if (!npc.isSociallyRecruitable()) {
+            npc.playSocialGreeting();
+            player.displayClientMessage(Component.translatable(
+                    "dialogue.sagadyssey.recruitment.closed",
+                    npc.getIdentityTitle()), false);
             return;
         }
 
-        // 已经是你的 NPC
-        if (npc.isOwnedBy(player.getUUID())) {
-            player.displayClientMessage(
-                    Component.literal("§e这个 NPC 已经是你的了"), true);
+        if (ScenarioLabController.isLabNpc(player.getServer(), npc.getUUID())) {
+            player.displayClientMessage(Component.literal("§e这是实验场固定角色，会保留原有岗位；"
+                    + "你仍可与其交谈、交易并观察工作。"), false);
             return;
         }
 
-        int cost = npc.getRecruitmentCost();
+        UUID playerCharacterId = CharacterRegistry.currentId(player);
+        if (!player.isAlive() || playerCharacterId == null) {
+            player.sendSystemMessage(Component.literal("当前没有可用的在生人物，不能招募。"));
+            return;
+        }
+        ServiceRelationshipData services = ServiceRelationshipData.get(player.getServer());
+        if (!services.activeForAgent(npc.getCharacterId(), player.serverLevel().getGameTime()).isEmpty()
+                && !services.hasActiveBetween(playerCharacterId, npc.getCharacterId(),
+                player.serverLevel().getGameTime())) {
+            player.displayClientMessage(
+                    Component.literal("§c这个 NPC 正在履行另一份服务关系"), true);
+            return;
+        }
+
+        if (services.hasActiveBetween(playerCharacterId, npc.getCharacterId(),
+                player.serverLevel().getGameTime())) {
+            player.displayClientMessage(
+                    Component.literal("§e你们之间已经有生效中的服务关系"), true);
+            return;
+        }
+
+        int cost = npc.getAdjustedRecruitmentCost();
         var faction = npc.getFaction();
         boolean isHostileFaction = faction != null && faction.canBeHostile();
         if (isHostileFaction) {
@@ -143,19 +216,28 @@ public record NpcInteractionPacket(int npcId, String action) implements CustomPa
             return;
         }
 
-        // 扣绿宝石
-        if (!deductEmeralds(player, cost)) {
+        if (!paySigningFee(player, npc, playerCharacterId, cost)) {
             player.displayClientMessage(
-                    Component.literal("§c扣除绿宝石失败"), true);
+                    Component.literal("§c签约礼未能转入 NPC 的真实背包；请检查库存与空间"), true);
             return;
         }
 
-        // 设置主人（setOwner 内部已自动切阵营 + 保存原阵营）
-        npc.setOwner(player.getUUID());
+        // 旧字段只供旧客户端显示；权威来自 onRecruited 创建的服务关系。
+        npc.setOwner(player);
+        NpcLifeData.get(player.getServer()).onRecruited(npc,
+                playerCharacterId, player.serverLevel().getGameTime());
+        NpcLifeData.get(player.getServer()).remember(npc.getCharacterId(),
+                new com.jgeted.sagadyssey.social.life.NpcMemoryRecord("recruitment",
+                        playerCharacterId, "与 " + player.getName().getString() + " 建立有限服务关系",
+                        35, 55, player.serverLevel().getGameTime(),
+                        player.serverLevel().getGameTime() + 96000L),
+                player.serverLevel().getGameTime());
+        CommandGroupAttachments.registerNpc(player, npc);
 
         // 通知玩家
         player.displayClientMessage(
-                Component.literal("§a成功招募 " + npc.getNpcName() + "！花费 " + cost + " 绿宝石"), false);
+                Component.literal("§a已与 " + npc.getNpcName() + " 建立服务关系；"
+                        + cost + " 枚绿宝石已作为签约礼进入其背包"), false);
     }
 
     /**
@@ -172,34 +254,30 @@ public record NpcInteractionPacket(int npcId, String action) implements CustomPa
         return false;
     }
 
-    /**
-     * 从玩家背包中扣除指定数量的绿宝石。
-     * 优先从不满堆叠的格子扣。
-     */
-    private static boolean deductEmeralds(ServerPlayer player, int cost) {
-        int remaining = cost;
-
-        // 第一遍：从不满堆叠的格子扣
-        for (int i = 0; i < player.getInventory().items.size() && remaining > 0; i++) {
-            ItemStack stack = player.getInventory().items.get(i);
-            if (stack.is(Items.EMERALD) && stack.getCount() < stack.getMaxStackSize()) {
-                int toRemove = Math.min(remaining, stack.getCount());
-                stack.shrink(toRemove);
-                remaining -= toRemove;
-            }
-        }
-
-        // 第二遍：从满堆叠的格子扣
-        for (int i = 0; i < player.getInventory().items.size() && remaining > 0; i++) {
-            ItemStack stack = player.getInventory().items.get(i);
-            if (stack.is(Items.EMERALD)) {
-                int toRemove = Math.min(remaining, stack.getCount());
-                stack.shrink(toRemove);
-                remaining -= toRemove;
-            }
-        }
-
-        return remaining == 0;
+    private static boolean paySigningFee(ServerPlayer player, NpcBase npc,
+                                         UUID playerCharacterId, int cost) {
+        RightsStateData rights = RightsStateData.get(player.getServer());
+        SubjectRef payer = SubjectRef.character(playerCharacterId);
+        SubjectRef recipient = SubjectRef.character(npc.getCharacterId());
+        UUID sourceId = ContainerIds.playerPersonal(playerCharacterId);
+        UUID destinationId = ContainerIds.npcPersonal(npc.getCharacterId());
+        rights.ensureContext(sourceId, "player:" + playerCharacterId + ":personal",
+                payer, payer, AccessPolicy.PRIVATE);
+        rights.ensureContext(destinationId, "npc:" + npc.getCharacterId() + ":personal",
+                recipient, recipient, AccessPolicy.PRIVATE);
+        long now = player.serverLevel().getGameTime();
+        TransferRequest request = new TransferRequest(ContainerIds.named("signing_fee:"
+                + playerCharacterId + ':' + npc.getCharacterId() + ':' + now), payer,
+                TransferIntent.PAYMENT,
+                List.of(new TransferLeg(sourceId, destinationId,
+                        ItemFingerprint.of(new ItemStack(Items.EMERALD)), cost)),
+                List.of(new ExpectedRevision(sourceId, rights.context(sourceId).revision()),
+                        new ExpectedRevision(destinationId, rights.context(destinationId).revision())),
+                "voluntary_employment_signing_gift", now);
+        return new TransferService(rights, TransferLedgerData.get(player.getServer()))
+                .submit(request, Map.of(sourceId, new TransferEndpoint(sourceId, player.getInventory()),
+                        destinationId, new TransferEndpoint(destinationId,
+                                npc.getEquipmentInventory())), now).successful();
     }
 
     /**
@@ -209,31 +287,53 @@ public record NpcInteractionPacket(int npcId, String action) implements CustomPa
     private static void handleCommand(ServerPlayer player, NpcBase npc, String action) {
         String npcName = npc.getNpcName();
 
-        // 归属检查
-        if (!npc.isOwnedBy(player.getUUID())) {
-            player.displayClientMessage(
-                    Component.literal("§c这个 NPC 不属于你"), true);
-            return;
+        AuthorityScope scope = switch (action) {
+            case "follow" -> AuthorityScope.FOLLOW;
+            case "stay" -> AuthorityScope.HOLD_POSITION;
+            case "work" -> AuthorityScope.WORK;
+            default -> null;
+        };
+        if (scope == null) return;
+        if (action.equals("work")) {
+            boolean canWork = switch (npc.getProfession()) {
+                case WORKER, BLACKSMITH, FARMER, BARD, MEDIC, TRADER, COURIER -> true;
+                default -> false;
+            };
+            if (!canWork) {player.displayClientMessage(Component.literal("§e这个职业不会工作"), true);return;}
         }
+        NpcCommand requested = switch(action) {case "follow" -> NpcCommand.FOLLOW;case "stay" -> NpcCommand.STAY;default -> NpcCommand.WORK;};
+        var result = com.jgeted.sagadyssey.npc.brain.command.NpcCommandService.issue(player,npc,requested);
+        player.displayClientMessage(Component.literal((result.accepted()?"§a":"§c")+result.detail()),true);
+        if (!result.accepted()) return;
 
         switch (action) {
             case "follow" -> {
-                npc.setCommand(NpcCommand.FOLLOW);
                 player.displayClientMessage(
-                        Component.literal("§a已命令 " + npcName + " 跟随你"), true);
+                        Component.literal("§a已登记 " + npcName + " 的随行命令"), true);
+                player.sendSystemMessage(NpcDialogue.line(npc, NpcDialogueContext.COMMAND, player));
             }
             case "stay" -> {
-                npc.setCommand(NpcCommand.STAY);
                 player.displayClientMessage(
-                        Component.literal("§a已命令 " + npcName + " 原地待命"), true);
+                        Component.literal("§a已登记 " + npcName + " 的驻守命令"), true);
+                player.sendSystemMessage(NpcDialogue.line(npc, NpcDialogueContext.COMMAND, player));
             }
             case "work" -> {
-                if (npc.getProfession() != NpcProfession.FARMER && npc.getProfession() != NpcProfession.WORKER) {
+                boolean canWork = switch (npc.getProfession()) {
+                    case WORKER, BLACKSMITH, FARMER, BARD, MEDIC, TRADER, COURIER -> true;
+                    default -> false;
+                };
+                if (!canWork) {
                     player.displayClientMessage(Component.literal("§e这个职业不会工作"), true);
                     return;
                 }
-                npc.setCommand(NpcCommand.WORK);
-                player.displayClientMessage(Component.literal("§a已命令 " + npcName + " 开始工作"), true);
+                if (npc.getProfession() == NpcProfession.TRADER
+                        || npc.getProfession() == NpcProfession.COURIER) {
+                    player.displayClientMessage(Component.literal("§a已命令 " + npcName
+                            + " 的物流命令。可用 /saga logistics orders 查看队列"), true);
+                } else {
+                    player.displayClientMessage(Component.literal("§a已登记 " + npcName + " 的工作命令"), true);
+                }
+                player.sendSystemMessage(NpcDialogue.line(npc, NpcDialogueContext.COMMAND, player));
             }
         }
     }
@@ -246,21 +346,16 @@ public record NpcInteractionPacket(int npcId, String action) implements CustomPa
             player.displayClientMessage(Component.literal("§c你离 NPC 太远了"), true);
             return;
         }
-        if (!npc.isOwnedBy(player.getUUID())) {
-            player.displayClientMessage(Component.literal("§c这个 NPC 不属于你"), true);
-            return;
-        }
-        player.openMenu(new NpcEquipMenuProvider(npc), buf -> buf.writeInt(npc.getId()));
+        if (!requireAuthority(player, npc, AuthorityScope.MANAGE_ISSUED_EQUIPMENT, false)) return;
+        player.displayClientMessage(Component.literal("§e服务关系不授予查看或拿取私人背包的权利。"
+                + "配发装备将通过部分可见界面与直接递交完成。"), true);
     }
 
     /**
      * 处理解除坐骑绑定。
      */
     private static void handleUnbindMount(ServerPlayer player, NpcBase npc) {
-        if (!npc.isOwnedBy(player.getUUID())) {
-            player.displayClientMessage(Component.literal("§c这个 NPC 不属于你"), true);
-            return;
-        }
+        if (!requireAuthority(player, npc, AuthorityScope.OPERATE_MOUNT, false)) return;
         npc.unbindMount();
         player.displayClientMessage(Component.literal("§a已解除坐骑绑定"), true);
     }
@@ -269,10 +364,7 @@ public record NpcInteractionPacket(int npcId, String action) implements CustomPa
      * 处理请求周围可用坐骑列表。
      */
     private static void handleRequestMounts(ServerPlayer player, NpcBase npc) {
-        if (!npc.isOwnedBy(player.getUUID())) {
-            player.displayClientMessage(Component.literal("§c这个 NPC 不属于你"), true);
-            return;
-        }
+        if (!requireAuthority(player, npc, AuthorityScope.OPERATE_MOUNT, false)) return;
         var mounts = new java.util.ArrayList<String>();
         for (var horse : player.level().getEntitiesOfClass(AbstractHorse.class,
                 npc.getBoundingBox().inflate(10))) {
@@ -297,7 +389,7 @@ public record NpcInteractionPacket(int npcId, String action) implements CustomPa
     }
 
     private static void handleTetherMount(ServerPlayer player, NpcBase npc) {
-        if (!npc.isOwnedBy(player.getUUID())) return;
+        if (!requireAuthority(player, npc, AuthorityScope.OPERATE_MOUNT, false)) return;
         if (!npc.hasMount()) {
             player.displayClientMessage(Component.literal("§e没有绑定坐骑"), true);
             return;
@@ -312,7 +404,7 @@ public record NpcInteractionPacket(int npcId, String action) implements CustomPa
     }
 
     private static void handleLeadMount(ServerPlayer player, NpcBase npc) {
-        if (!npc.isOwnedBy(player.getUUID())) return;
+        if (!requireAuthority(player, npc, AuthorityScope.OPERATE_MOUNT, false)) return;
         if (!npc.hasMount()) {
             player.displayClientMessage(Component.literal("§e没有绑定坐骑"), true);
             return;
@@ -334,7 +426,7 @@ public record NpcInteractionPacket(int npcId, String action) implements CustomPa
      * 让 MountGoal 驱动 NPC 走向坐骑后再上马。
      */
     private static void handleMountUp(ServerPlayer player, NpcBase npc) {
-        if (!npc.isOwnedBy(player.getUUID())) return;
+        if (!requireAuthority(player, npc, AuthorityScope.OPERATE_MOUNT, false)) return;
         if (!npc.hasMount()) {
             player.displayClientMessage(Component.literal("§e没有绑定坐骑"), true);
             return;
@@ -365,7 +457,7 @@ public record NpcInteractionPacket(int npcId, String action) implements CustomPa
      * 处理解除拴马：把马从栅栏上解下来，回收栓绳。
      */
     private static void handleUntetherMount(ServerPlayer player, NpcBase npc) {
-        if (!npc.isOwnedBy(player.getUUID())) return;
+        if (!requireAuthority(player, npc, AuthorityScope.OPERATE_MOUNT, false)) return;
         if (!npc.hasMount()) {
             player.displayClientMessage(Component.literal("§e没有绑定坐骑"), true);
             return;
@@ -380,11 +472,28 @@ public record NpcInteractionPacket(int npcId, String action) implements CustomPa
      * 处理解散：将已招募 NPC 恢复原阵营、清除主人。
      */
     private static void handleDismiss(ServerPlayer player, NpcBase npc) {
-        if (!npc.isOwnedBy(player.getUUID())) return;
-        String oldOriginal = npc.getOriginalFaction();
+        if (!requireAuthority(player, npc, AuthorityScope.END_SERVICE, false)) return;
+        CommandGroupAttachments.unregisterNpc(player, npc);
         npc.dismiss();
-        String backTo = oldOriginal != null ? oldOriginal : "sagadyssey:wilderness";
+        NpcLifeData.get(player.getServer()).onDismissed(npc, player.serverLevel().getGameTime());
         player.displayClientMessage(
-                Component.literal("§a已解散 NPC，它回到了 " + backTo + " 阵营"), true);
+                Component.literal("§a服务关系已解除；NPC 的家庭、私人财产和社会身份保持不变"), true);
+    }
+
+    private static boolean requireAuthority(ServerPlayer player, NpcBase npc,
+                                            AuthorityScope scope, boolean dangerous) {
+        UUID principal = CharacterRegistry.currentId(player);
+        if (!player.isAlive() || principal == null) {
+            player.sendSystemMessage(Component.literal("当前没有可用的在生人物，不能行使授权。"));
+            return false;
+        }
+        ServiceAuthorityVerdict verdict = ServiceRelationshipData.get(player.getServer())
+                .authorize(principal, npc.getCharacterId(), scope, dangerous,
+                        player.serverLevel().getGameTime());
+        if (verdict.allowed()) return true;
+        player.displayClientMessage(Component.literal((verdict.status()
+                == ServiceAuthorityVerdict.Status.REFUSED ? "§eNPC 拒绝：" : "§c没有授权：")
+                + verdict.reason()), true);
+        return false;
     }
 }

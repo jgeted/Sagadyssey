@@ -22,12 +22,14 @@ public class MountGoal extends Goal {
 
     @Override
     public boolean canUse() {
-        return npc.isPendingMount() && npc.hasMount() && !npc.isPassenger();
+        return !com.jgeted.sagadyssey.npc.brain.execution.NpcBrainRuntime.isPlanned(npc)
+                && npc.isPendingMount() && npc.hasMount() && !npc.isPassenger();
     }
 
     @Override
     public boolean canContinueToUse() {
-        if (!npc.isPendingMount() || !npc.hasMount() || npc.isPassenger()) {
+        if (com.jgeted.sagadyssey.npc.brain.execution.NpcBrainRuntime.isPlanned(npc)
+                || !npc.isPendingMount() || !npc.hasMount() || npc.isPassenger()) {
             return false;
         }
         Entity mount = npc.getMount();

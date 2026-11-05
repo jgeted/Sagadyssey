@@ -7,7 +7,9 @@ import com.mojang.brigadier.arguments.StringArgumentType;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.commands.arguments.EntityArgument;
+import net.minecraft.commands.arguments.ResourceLocationArgument;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
 
 import java.util.Collection;
@@ -36,7 +38,7 @@ public class FactionCommand {
                                 // get <player> <faction>
                                 .then(Commands.literal("get")
                                         .then(Commands.argument("player", EntityArgument.player())
-                                                .then(Commands.argument("faction", StringArgumentType.word())
+                                                .then(Commands.argument("faction", ResourceLocationArgument.id())
                                                         .suggests((ctx, builder) -> {
                                                             for (var f : FactionRegistry.getAllFactions()) {
                                                                 builder.suggest(f.id());
@@ -46,7 +48,8 @@ public class FactionCommand {
                                                         .executes(ctx -> getStanding(
                                                                 ctx.getSource(),
                                                                 EntityArgument.getPlayer(ctx, "player"),
-                                                                StringArgumentType.getString(ctx, "faction"))
+                                                                normalizeFactionId(ResourceLocationArgument.getId(
+                                                                        ctx, "faction")))
                                                         )
                                                 )
                                         )
@@ -54,7 +57,7 @@ public class FactionCommand {
                                 // set <player> <faction> <value>
                                 .then(Commands.literal("set")
                                         .then(Commands.argument("player", EntityArgument.player())
-                                                .then(Commands.argument("faction", StringArgumentType.word())
+                                                .then(Commands.argument("faction", ResourceLocationArgument.id())
                                                         .suggests((ctx, builder) -> {
                                                             for (var f : FactionRegistry.getAllFactions()) {
                                                                 builder.suggest(f.id());
@@ -66,7 +69,8 @@ public class FactionCommand {
                                                                 .executes(ctx -> setStanding(
                                                                         ctx.getSource(),
                                                                         EntityArgument.getPlayer(ctx, "player"),
-                                                                        StringArgumentType.getString(ctx, "faction"),
+                                                                        normalizeFactionId(ResourceLocationArgument.getId(
+                                                                                ctx, "faction")),
                                                                         IntegerArgumentType.getInteger(ctx, "value"))
                                                                 )
                                                         )
@@ -213,5 +217,14 @@ public class FactionCommand {
         source.sendSuccess(() -> Component.literal(
                 "§a玩家阵营名称已设为：§e" + cleaned), true);
         return 1;
+    }
+
+    /**
+     * ResourceLocationArgument parses an unqualified ID as minecraft:&lt;path&gt;.
+     * Preserve the command's historical shorthand ("kingdom") while also
+     * accepting the fully-qualified IDs advertised by command suggestions.
+     */
+    static String normalizeFactionId(ResourceLocation id) {
+        return "minecraft".equals(id.getNamespace()) ? id.getPath() : id.toString();
     }
 }

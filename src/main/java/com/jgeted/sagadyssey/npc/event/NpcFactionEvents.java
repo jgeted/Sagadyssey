@@ -133,8 +133,25 @@ public class NpcFactionEvents {
         if (event.getLevel().isClientSide()) return;
         if (!(event.getEntity() instanceof ServerPlayer player)) return;
 
+        Faction faction = effectiveFaction(npc);
+        if (faction != null) {
+            FactionStandings standings = FactionAttachments.getStandings(player);
+            if (standings.discoverFaction(faction.id())) {
+                standings.recordInteraction(faction.id(), event.getLevel().getGameTime());
+                FactionAttachments.syncToClient(player);
+            }
+        }
+
         // TODO: 检查 NPC 是否处于"被拘禁"状态（需要 Structure 模块提供判定）
         // 如果被拘禁且玩家解救，给予 +15 声望
+    }
+
+    private static Faction effectiveFaction(NpcBase npc) {
+        Faction faction = npc.getFaction();
+        if (faction == null) return null;
+        if (!"sagadyssey:player".equals(faction.id())) return faction;
+        String original = npc.getOriginalFaction();
+        return original == null ? faction : FactionRegistry.get(original);
     }
 
     /**

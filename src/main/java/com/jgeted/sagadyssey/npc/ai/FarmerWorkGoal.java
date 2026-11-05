@@ -1,10 +1,11 @@
 package com.jgeted.sagadyssey.npc.ai;
 
-import com.jgeted.sagadyssey.Sagadyssey;
 import com.jgeted.sagadyssey.npc.entity.FarmMode;
+import com.jgeted.sagadyssey.npc.entity.NpcAction;
 import com.jgeted.sagadyssey.npc.entity.NpcBase;
 import com.jgeted.sagadyssey.npc.entity.NpcCommand;
 import com.jgeted.sagadyssey.npc.profession.NpcProfession;
+import com.jgeted.sagadyssey.social.life.NpcAgencyDecision;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerLevel;
@@ -12,6 +13,7 @@ import net.minecraft.tags.BlockTags;
 import net.minecraft.tags.FluidTags;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.ai.goal.Goal;
+import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.item.HoeItem;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
@@ -24,14 +26,12 @@ import net.minecraft.world.level.block.CropBlock;
 import net.minecraft.world.level.block.RotatedPillarBlock;
 import net.minecraft.world.level.block.state.BlockState;
 
-import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
 
 /**
  * 农民工作 AI：在 WORK 命令下自动种地。
- * 【测试版：挖沟 + 放水 + 种甘蔗 + 种可可豆原木】挖沟（挖一空二）→ 灌水（满灌）→ 种甘蔗；可可豆模式先种 2 格高原木柱。
- * 挖沟模式：挖一空二，循环（ROW_GAP = 3）。
+ * 五种模式分别维护普通作物、瓜类、甘蔗、可可豆或综合农田；所有工作均从当前世界状态重新规划。
  */
 public class FarmerWorkGoal extends Goal {
 
@@ -39,8 +39,6 @@ public class FarmerWorkGoal extends Goal {
     private static final int KIND_TILL = 1;
     private static final int KIND_PLANT = 2;
     private static final int KIND_HARVEST = 3;
-    private static final int KIND_DIG = 4;
-    private static final int KIND_FLOOD = 5;
     private static final int KIND_REFILL = 6;
     private static final int KIND_PLANT_CANE = 7;
     private static final int KIND_HARVEST_CANE = 8;
@@ -52,59 +50,21 @@ public class FarmerWorkGoal extends Goal {
     private static final int KIND_CRAFT_BONEMEAL = 14; // 分解骨块/骨头为骨粉
     private static final int KIND_CREATE_IRRIGATION = 15; // 挖一格水坑并放置水源
     private static final int KIND_CREATE_FARM_WELL = 16;  // 两桶水建立 2×2 无限水井
-
-    // 灌溉阶段
-    private static final int PHASE_BUILD_WELL = 0;
-    private static final int PHASE_DIG_TRENCHES = 1;
-    private static final int PHASE_FLOOD_TRENCHES = 2;
-    private static final int PHASE_PLANT = 3;
+    private static final int KIND_PLANT_MELON = 17;       // 综合模式下种植瓜茎
 
     private static final int SEARCH_RADIUS = 20;
     private static final double WORK_REACH_SQ = 9.0; // 3 格内可作业
-    private static final int WELL_LEN = 3;   // 井：3 格长
-    private static final int TRENCH_LEN = 9; // 沟：9 格长
-    private static final int ROW_GAP = 3;    // 相邻两条沟的垂直间距 = 挖一空二
     private static final int COCOA_LOG_GAP = 4;    // 可可豆原木柱间距：x、z 各空 3 格
-    private static final int COCOA_LOG_HEIGHT = 2; // 每根原木柱 2 格高
 
     private final NpcBase npc;
     private BlockPos workPos;
     private int workKind;
     private int actionCooldown;
     private int stuckTicks;
-    private BlockPos explorePos;
+    private int nextWorkScanTick;
     private int lastSeedSlot = -1;
-
-    // === 灌溉状态 ===
-    private int phase = PHASE_DIG_TRENCHES; // 【测试版：只挖坑】跳过建井，直接挖沟
-    private BlockPos wellPos = null;
-    // 井的挖掘进度
-    private BlockPos wellStart = null;
-    private Direction wellDir = null;
-    private int wellDug = 0;
-    // 沟的布局与已挖好的沟
-    private final List<Trench> trenches = new ArrayList<>();
-    private Direction farmDir = null;
-    private BlockPos farmOrigin = null;
-    private int farmRow = 0;
-    private int trenchLen = TRENCH_LEN; // 每条沟的长度（有范围时 = 范围该边整长）
-    private int digIndex = -1;      // 正在挖第几条沟
-    private int digProgress = 0;    // 当前沟挖了几格
-    private int floodIndex = 0;     // 正在灌第几条沟
-    private int floodProgress = 0;  // 当前沟灌了几格
-    // 可可豆：原木柱种植网格状态
-    private BlockPos logOrigin = null; // 网格起点（范围 min 角，地面层）
-    private int logCols = 0;           // X 方向能放几根柱子
-    private int logRows = 0;           // Z 方向能放几根柱子
-    private int logPillar = 0;         // 当前处理到第几根柱子（线性序号）
-    private int logStep = 0;           // 当前柱子放到第几格（0=底, 1=顶）
-    private boolean logsDone = false;  // 原木柱就绪后转去种可可豆
-
     /** 一个待做的工作点 */
     private record Work(BlockPos pos, int kind) {}
-
-    /** 一条已挖好的沟 */
-    private record Trench(BlockPos start, Direction dir, int len) {}
 
     public FarmerWorkGoal(NpcBase npc) {
         this.npc = npc;
@@ -113,48 +73,41 @@ public class FarmerWorkGoal extends Goal {
 
     @Override
     public boolean canUse() {
+        if (com.jgeted.sagadyssey.npc.brain.execution.NpcBrainRuntime.isPlanned(npc)) return false;
         if (!npc.isAlive() || npc.level().isClientSide) return false;
         if (npc.getProfession() != NpcProfession.FARMER) return false;
 
-        // 调试：每 5 秒打印一次状态。取模相位跟实体 id 对齐，
-        // 否则奇数 id 的 NPC 永远打不出日志
-        if ((npc.tickCount - npc.getId()) % 100 == 0) {
-            debugLogState();
-        }
-
         if (npc.getCommand() != NpcCommand.WORK) return false;
+        if (!com.jgeted.sagadyssey.social.life.NpcSchedulePlanner.allowsWork(npc)) return false;
         if (npc.getTarget() != null || npc.isPassenger()) return false;
-        // 每 20 tick 扫描一次，相位同样按实体 id 对齐
-        if ((npc.tickCount - npc.getId()) % 20 != 0) return false;
+        if (!canStoreLikelyOutput()) return false;
+        // GoalSelector 可能跳过精确取模相位；到达截止 tick 后的首次轮询即扫描。
+        if (npc.tickCount < nextWorkScanTick) return false;
+        nextWorkScanTick = npc.tickCount + 20;
 
         Work work = findWork();
-        if ((npc.tickCount - npc.getId()) % 100 == 0) {
-            debugLogResult(work);
-        }
         if (work != null) {
-            if (!npc.requestMutex(AiMutex.MOVE)) return false;
+            if (!NpcAgencyDecision.choose(npc, NpcAgencyDecision.Action.WORK,
+                    50.0D, 2.0D, false)) return false;
             this.workPos = work.pos();
             this.workKind = work.kind();
-            this.explorePos = null;
             return true;
         }
-
-        // 【测试版：只挖坑】挖完就停下，不做游荡探索
-        /*
-        if (!npc.requestMutex(AiMutex.MOVE)) return false;
-        this.workPos = null;
-        this.explorePos = randomExplorePos();
-        return this.explorePos != null;
-        */
+        npc.reportWorkActivity("农民等待", null,
+                npc.hasWorkZone()
+                        ? "指定农田目前没有可收获、播种、翻耕或灌溉的工作"
+                        : "附近目前没有可进行的农活");
         return false;
     }
 
     @Override
     public boolean canContinueToUse() {
+        if (com.jgeted.sagadyssey.npc.brain.execution.NpcBrainRuntime.isPlanned(npc)) return false;
         if (npc.getTarget() != null || npc.getCommand() != NpcCommand.WORK || npc.isPassenger()) {
             return false;
         }
-        return workPos != null || explorePos != null;
+        if (!com.jgeted.sagadyssey.social.life.NpcSchedulePlanner.allowsWork(npc)) return false;
+        return workPos != null;
     }
 
     @Override
@@ -163,25 +116,20 @@ public class FarmerWorkGoal extends Goal {
         stuckTicks = 0;
         if (workPos != null) {
             npc.getNavigation().moveTo(workPos.getX() + 0.5, workPos.getY(), workPos.getZ() + 0.5, 1.0);
-        } else if (explorePos != null) {
-            npc.getNavigation().moveTo(explorePos.getX() + 0.5, explorePos.getY(), explorePos.getZ() + 0.5, 1.0);
+            npc.reportWorkActivity("农民" + workKindName(workKind), workPos,
+                    "目标=" + workPos.toShortString());
         }
     }
 
     @Override
     public void stop() {
         workPos = null;
-        explorePos = null;
-        npc.releaseMutex(AiMutex.MOVE);
     }
 
     @Override
     public void tick() {
-        if (workPos != null) {
-            tickWork();
-        } else if (explorePos != null) {
-            tickExplore();
-        }
+        if (com.jgeted.sagadyssey.npc.brain.execution.NpcBrainRuntime.isPlanned(npc)) return;
+        if (workPos != null) tickWork();
     }
 
     private void tickWork() {
@@ -203,11 +151,25 @@ public class FarmerWorkGoal extends Goal {
         }
     }
 
-    private void tickExplore() {
-        if (npc.getNavigation().isDone()
-                || npc.distanceToSqr(explorePos.getX() + 0.5, explorePos.getY(), explorePos.getZ() + 0.5) <= 4.0) {
-            explorePos = null;
-        }
+    private static String workKindName(int kind) {
+        return switch (kind) {
+            case KIND_TILL -> "翻地";
+            case KIND_PLANT -> "播种";
+            case KIND_HARVEST -> "收获";
+            case KIND_REFILL -> "补水";
+            case KIND_PLANT_CANE -> "种甘蔗";
+            case KIND_HARVEST_CANE -> "收甘蔗";
+            case KIND_PLANT_LOG -> "放置可可原木";
+            case KIND_PLANT_COCOA -> "种可可豆";
+            case KIND_HARVEST_COCOA -> "收可可豆";
+            case KIND_HARVEST_PLANT -> "收获并补种";
+            case KIND_BONEMEAL -> "施骨粉";
+            case KIND_CRAFT_BONEMEAL -> "制作骨粉";
+            case KIND_CREATE_IRRIGATION -> "修灌溉渠";
+            case KIND_CREATE_FARM_WELL -> "修农田水井";
+            case KIND_PLANT_MELON -> "种瓜苗";
+            default -> "作业";
+        };
     }
 
     /** 按务农模式分流：可可豆/瓜类/农作物/综合各自独立，甘蔗走灌溉管线；正事干完统一兜底用骨粉催熟 */
@@ -222,12 +184,7 @@ public class FarmerWorkGoal extends Goal {
         } else if (npc.getFarmMode() == FarmMode.AUTO) {
             work = findAutoWork();
         } else {
-            work = switch (phase) {
-                case PHASE_DIG_TRENCHES -> digTrenches();
-                case PHASE_FLOOD_TRENCHES -> floodTrenches();
-                case PHASE_PLANT -> findPlantCane();
-                default -> null;
-            };
+            work = findCaneWork();
         }
         // 各模式正事做完后，用骨粉催熟；没骨粉但有骨头/骨块就先分解
         return work != null ? work : findBonemealWork();
@@ -333,7 +290,12 @@ public class FarmerWorkGoal extends Goal {
         Work cocoa = findCocoaPodWork();
         if (cocoa != null) return cocoa;
 
+        // 综合模式会维护现有水边甘蔗，但不会为了甘蔗改造整片普通农田。
+        Work canePlant = findPlantCane();
+        if (canePlant != null) return canePlant;
+
         Work plant = null;
+        Work melonPlant = null;
         Work till = null;
         for (int x = min.getX(); x <= max.getX(); x++) {
             for (int z = min.getZ(); z <= max.getZ(); z++) {
@@ -351,11 +313,15 @@ public class FarmerWorkGoal extends Goal {
                             && s.getBlock() instanceof CropBlock crop && crop.isMaxAge(s)) {
                         return new Work(p, KIND_HARVEST_PLANT);
                     }
-                    // 播种：空耕地（补种失败兜底 + 开垦后补种）；瓜茎旁一格不种，留空位结果实
-                    if (s.is(Blocks.FARMLAND) && npc.level().getBlockState(p.above()).isAir()
-                            && !isNearMelonStem(p.above())
-                            && findSeedSlot() >= 0) {
-                        if (plant == null) plant = new Work(p, KIND_PLANT);
+                    // 综合模式用 3×3 稀疏网格安排瓜茎，其余空耕地轮作普通作物。
+                    if (s.is(Blocks.FARMLAND) && npc.level().getBlockState(p.above()).isAir()) {
+                        boolean melonGrid = Math.floorMod(x - min.getX(), 3) == 0
+                                && Math.floorMod(z - min.getZ(), 3) == 0;
+                        if (melonGrid && hasMelonSpot(p.above()) && findMelonSeedSlot() >= 0) {
+                            if (melonPlant == null) melonPlant = new Work(p, KIND_PLANT_MELON);
+                        } else if (!isNearMelonStem(p.above()) && findSeedSlot() >= 0) {
+                            if (plant == null) plant = new Work(p, KIND_PLANT);
+                        }
                     }
                     // 翻地：近水泥土/草方块（踩坏耕地 + 新开垦）
                     if ((s.is(Blocks.DIRT) || s.is(Blocks.GRASS_BLOCK))
@@ -369,6 +335,7 @@ public class FarmerWorkGoal extends Goal {
         }
         Work irrigation = findIrrigationWork(min, max, groundY);
         if (irrigation != null) return irrigation;
+        if (melonPlant != null) return melonPlant;
         if (plant != null) return plant;
         if (till != null) return till;
         return null;
@@ -500,6 +467,70 @@ public class FarmerWorkGoal extends Goal {
         return null;
     }
 
+    /**
+     * CANE 模式使用无隐藏进度的闭环：收获成熟甘蔗、利用现有水边补种，
+     * 再按需挖单格水源。两桶水可先建立 2×2 无限水井，空桶随后会自动补水。
+     */
+    private Work findCaneWork() {
+        BlockPos min = npc.hasWorkZone() ? npc.getWorkZoneMin()
+                : npc.blockPosition().offset(-SEARCH_RADIUS, 0, -SEARCH_RADIUS);
+        BlockPos max = npc.hasWorkZone() ? npc.getWorkZoneMax()
+                : npc.blockPosition().offset(SEARCH_RADIUS, 0, SEARCH_RADIUS);
+        int groundY = npc.hasWorkZone() ? min.getY() : npc.blockPosition().below().getY();
+
+        Work direct = findPlantCane();
+        if (direct != null || !hasSugarcane()) return direct;
+
+        BlockPos irrigationPos = findCaneIrrigationCell(min, max, groundY);
+        if (irrigationPos == null) return null;
+
+        BlockPos infiniteSource = findInfiniteWaterNear();
+        if (infiniteSource == null && hasTwoWaterBuckets()) {
+            BlockPos wellCorner = findFarmWellCorner(irrigationPos, min, max, groundY);
+            if (wellCorner != null) return new Work(wellCorner, KIND_CREATE_FARM_WELL);
+        }
+        if (hasWaterBucket()) return new Work(irrigationPos, KIND_CREATE_IRRIGATION);
+        if (hasEmptyBucket() && infiniteSource != null) return new Work(infiniteSource, KIND_REFILL);
+        return null;
+    }
+
+    /** 找一个能让至少一侧种甘蔗的水源格，避免早期测试逻辑整条挖沟后停工。 */
+    private BlockPos findCaneIrrigationCell(BlockPos min, BlockPos max, int groundY) {
+        BlockPos best = null;
+        double bestDist = Double.MAX_VALUE;
+        for (int x = min.getX(); x <= max.getX(); x++) {
+            for (int z = min.getZ(); z <= max.getZ(); z++) {
+                BlockPos waterPos = new BlockPos(x, groundY, z);
+                if (!isCaneIrrigationCell(waterPos, min, max)) continue;
+                double dist = npc.distanceToSqr(x + 0.5D, groundY + 0.5D, z + 0.5D);
+                if (dist < bestDist) {
+                    bestDist = dist;
+                    best = waterPos;
+                }
+            }
+        }
+        return best;
+    }
+
+    private boolean isCaneIrrigationCell(BlockPos waterPos, BlockPos min, BlockPos max) {
+        if (!npc.isWorkAllowedAt(waterPos) || !npc.level().isLoaded(waterPos)) return false;
+        BlockState state = npc.level().getBlockState(waterPos);
+        if ((!state.is(BlockTags.DIRT) && !state.is(BlockTags.SAND))
+                || !npc.level().getBlockState(waterPos.above()).isAir()
+                || !npc.level().getBlockState(waterPos.below()).isSolid()) return false;
+
+        for (Direction side : Direction.Plane.HORIZONTAL) {
+            BlockPos soil = waterPos.relative(side);
+            if (soil.getX() < min.getX() || soil.getX() > max.getX()
+                    || soil.getZ() < min.getZ() || soil.getZ() > max.getZ()) continue;
+            BlockState soilState = npc.level().getBlockState(soil);
+            if ((soilState.is(BlockTags.DIRT) || soilState.is(BlockTags.SAND))
+                    && npc.level().getBlockState(soil.above()).isAir()
+                    && !nearWater(soil)) return true;
+        }
+        return false;
+    }
+
     /** 找可催熟的农田植物（作物/茎/甘蔗/可可豆）；没骨粉但有骨头/骨块则先分解 */
     private Work findBonemealWork() {
         BlockPos min = npc.hasWorkZone() ? npc.getWorkZoneMin() : npc.blockPosition().offset(-SEARCH_RADIUS, 0, -SEARCH_RADIUS);
@@ -512,12 +543,8 @@ public class FarmerWorkGoal extends Goal {
                 for (int y = groundY + 1; y <= groundY + 2; y++) {
                     BlockPos p = new BlockPos(x, y, z);
                     BlockState s = npc.level().getBlockState(p);
-                    // 只催农田植物，别浪费在草地/树苗上
-                    if (!(s.getBlock() instanceof CropBlock)
-                            && s.getBlock() != Blocks.SUGAR_CANE
-                            && s.getBlock() != Blocks.COCOA) {
-                        continue;
-                    }
+                    // 严格遵守当前模式，避免“种瓜”农民跑去给小麦撒骨粉。
+                    if (!isBonemealTargetForMode(s)) continue;
                     if (s.getBlock() instanceof BonemealableBlock bm
                             && bm.isValidBonemealTarget(npc.level(), p, s)) {
                         if (hasBoneMeal()) return new Work(p, KIND_BONEMEAL);
@@ -528,6 +555,19 @@ public class FarmerWorkGoal extends Goal {
             }
         }
         return null;
+    }
+
+    private boolean isBonemealTargetForMode(BlockState state) {
+        boolean simpleCrop = state.is(Blocks.WHEAT) || state.is(Blocks.CARROTS)
+                || state.is(Blocks.POTATOES) || state.is(Blocks.BEETROOTS);
+        boolean melonStem = state.is(Blocks.MELON_STEM) || state.is(Blocks.PUMPKIN_STEM);
+        return switch (npc.getFarmMode()) {
+            case CROP -> simpleCrop;
+            case MELON -> melonStem;
+            case CANE -> false; // Java 版原版甘蔗不能用骨粉催熟。
+            case COCOA -> state.is(Blocks.COCOA);
+            case AUTO -> simpleCrop || melonStem || state.is(Blocks.COCOA);
+        };
     }
 
     /** 用骨粉催熟 workPos 上的植物（复刻原版骨粉效果），催熟成功才消耗 1 个骨粉 */
@@ -552,7 +592,7 @@ public class FarmerWorkGoal extends Goal {
         if (blockSlot >= 0) {
             npc.getEquipmentInventory().getItem(blockSlot).shrink(1);
             ItemStack meal = new ItemStack(Items.BONE_MEAL, 9);
-            if (!npc.addToBag(meal)) npc.spawnAtLocation(meal);
+            if (!npc.addToBag(meal)) npc.spawnWorkOutput(meal);
             npc.swing(InteractionHand.MAIN_HAND);
             return;
         }
@@ -560,7 +600,7 @@ public class FarmerWorkGoal extends Goal {
         if (boneSlot >= 0) {
             npc.getEquipmentInventory().getItem(boneSlot).shrink(1);
             ItemStack meal = new ItemStack(Items.BONE_MEAL, 3);
-            if (!npc.addToBag(meal)) npc.spawnAtLocation(meal);
+            if (!npc.addToBag(meal)) npc.spawnWorkOutput(meal);
             npc.swing(InteractionHand.MAIN_HAND);
         }
     }
@@ -572,62 +612,36 @@ public class FarmerWorkGoal extends Goal {
 
     /** 可可豆阶段：先确保原木柱就绪，再在柱侧面种可可豆 */
     private Work findCocoaWork() {
-        if (!logsDone) {
-            Work log = ensureCocoaLogs();
-            if (log != null) return log;
-            logsDone = true;
-        }
-        return findCocoaPodWork();
+        Work pod = findCocoaPodWork();
+        return pod != null ? pod : ensureCocoaLogs();
     }
 
-    /** 确保范围内有原木柱（没有就用背包里的原木/木种 2 格高竖柱） */
+    /**
+     * 按世界中的实际方块逐格补齐 2 格高载体。寻路失败、服务器重载或更换工作区后
+     * 都会重新检查，不依赖会失真的内存进度；已有柱面的豆荚会优先于新建柱子。
+     */
     private Work ensureCocoaLogs() {
-        // 还没开始种：先看范围内是否已有载体（丛林原木/丛林木，有就不种），再看背包有没有材料
-        if (logOrigin == null) {
-            if (findJungleLogInZone() != null) return null; // 已有载体，无需补种
-            if (findJungleLogSlot() < 0) return null; // 没原木/木，等玩家给
+        if (!hasCocoaBeans() || findJungleLogSlot() < 0) return null;
+        BlockPos min = npc.hasWorkZone() ? npc.getWorkZoneMin()
+                : npc.blockPosition().offset(-SEARCH_RADIUS, 0, -SEARCH_RADIUS);
+        BlockPos max = npc.hasWorkZone() ? npc.getWorkZoneMax()
+                : npc.blockPosition().offset(SEARCH_RADIUS, 0, SEARCH_RADIUS);
+        int groundY = npc.hasWorkZone() ? min.getY() : npc.blockPosition().below().getY();
 
-            BlockPos min;
-            BlockPos max;
-            int groundY;
-            if (npc.hasWorkZone()) {
-                min = npc.getWorkZoneMin();
-                max = npc.getWorkZoneMax();
-                groundY = min.getY();
-            } else {
-                min = npc.blockPosition().offset(-SEARCH_RADIUS, 0, -SEARCH_RADIUS);
-                max = npc.blockPosition().offset(SEARCH_RADIUS, 0, SEARCH_RADIUS);
-                groundY = npc.blockPosition().below().getY();
+        for (int x = min.getX(); x <= max.getX(); x += COCOA_LOG_GAP) {
+            for (int z = min.getZ(); z <= max.getZ(); z += COCOA_LOG_GAP) {
+                BlockPos base = new BlockPos(x, groundY + 1, z);
+                BlockState bottom = npc.level().getBlockState(base);
+                BlockState top = npc.level().getBlockState(base.above());
+                if (bottom.isAir() && npc.level().getBlockState(base.below()).isSolid()) {
+                    return new Work(base, KIND_PLANT_LOG);
+                }
+                if (isJungleLogBlock(bottom) && top.isAir()) {
+                    return new Work(base.above(), KIND_PLANT_LOG);
+                }
             }
-            logOrigin = new BlockPos(min.getX(), groundY, min.getZ());
-            logCols = (max.getX() - min.getX()) / COCOA_LOG_GAP + 1;
-            logRows = (max.getZ() - min.getZ()) / COCOA_LOG_GAP + 1;
-            logPillar = 0;
-            logStep = 0;
         }
-
-        // 逐根柱子放：x、z 各空 3 格（间距 COCOA_LOG_GAP=4），每柱 2 格高、竖着放
-        while (true) {
-            if (logPillar >= logCols * logRows) return null; // 全部种完
-            int col = logPillar % logCols;
-            int row = logPillar / logCols;
-            // 柱子底部 = 地面层 +1（柱子坐在泥土上）
-            BlockPos base = new BlockPos(
-                    logOrigin.getX() + col * COCOA_LOG_GAP,
-                    logOrigin.getY() + 1,
-                    logOrigin.getZ() + row * COCOA_LOG_GAP);
-            BlockPos target = base.above(logStep);
-            if (!npc.level().getBlockState(target).isAir()) {
-                logPillar++; // 这个格子被占了，换下一根柱子
-                logStep = 0;
-                continue;
-            }
-            if (++logStep >= COCOA_LOG_HEIGHT) {
-                logPillar++;
-                logStep = 0;
-            }
-            return new Work(target, KIND_PLANT_LOG);
-        }
+        return null;
     }
 
     /** 可可豆收/种：先收成熟（age=2）的可可豆，再找空侧面贴新的 */
@@ -678,22 +692,6 @@ public class FarmerWorkGoal extends Goal {
         return cocoa.canSurvive(npc.level(), podPos);
     }
 
-    /** 在范围内找任意一个已存在的可可豆载体（丛林原木/丛林木，找到说明不用补种） */
-    private BlockPos findJungleLogInZone() {
-        BlockPos min = npc.hasWorkZone() ? npc.getWorkZoneMin() : npc.blockPosition().offset(-SEARCH_RADIUS, 0, -SEARCH_RADIUS);
-        BlockPos max = npc.hasWorkZone() ? npc.getWorkZoneMax() : npc.blockPosition().offset(SEARCH_RADIUS, 0, SEARCH_RADIUS);
-        int baseY = npc.hasWorkZone() ? npc.getWorkZoneMin().getY() : npc.blockPosition().below().getY();
-        for (int x = min.getX(); x <= max.getX(); x++) {
-            for (int z = min.getZ(); z <= max.getZ(); z++) {
-                for (int y = baseY; y <= baseY + 3; y++) {
-                    BlockPos p = new BlockPos(x, y, z);
-                    if (isJungleLogBlock(npc.level().getBlockState(p))) return p;
-                }
-            }
-        }
-        return null;
-    }
-
     /** 丛林原木/丛林木及其去皮变体都能作可可豆载体 */
     private boolean isJungleLogBlock(BlockState state) {
         return state.is(Blocks.JUNGLE_LOG) || state.is(Blocks.JUNGLE_WOOD)
@@ -736,105 +734,6 @@ public class FarmerWorkGoal extends Goal {
         return null; // 范围内种完了（或没有可种位置）
     }
 
-
-    /** 【测试版：只挖坑】灌溉状态机整段注释（建井 + 灌水不再参与） */
-    /*
-    private Work irrigationWork(boolean hasCane) {
-        if (!hasCane) return null; // 没甘蔗就不折腾灌溉
-        return switch (phase) {
-            case PHASE_BUILD_WELL -> buildWell();
-            case PHASE_DIG_TRENCHES -> digTrenches();
-            case PHASE_FLOOD_TRENCHES -> floodTrenches();
-            default -> null; // PHASE_PLANT
-        };
-    }
-    */
-
-    /** 【测试版：只挖坑】建井整段注释 */
-    /*
-    private Work buildWell() {
-        if (wellPos != null) {
-            phase = PHASE_DIG_TRENCHES;
-            return null;
-        }
-        if (!hasTwoWaterBuckets()) return null; // 等玩家给 2 桶水
-
-        if (wellStart == null) {
-            wellStart = findLineNear(Direction.EAST, npc.blockPosition().below(), WELL_LEN);
-            wellDir = Direction.EAST;
-            if (wellStart == null) {
-                wellDir = Direction.SOUTH;
-                wellStart = findLineNear(wellDir, npc.blockPosition().below(), WELL_LEN);
-            }
-            if (wellStart == null) return null;
-        }
-        if (wellDug < WELL_LEN) {
-            return new Work(wellStart.relative(wellDir, wellDug++), KIND_DIG);
-        }
-        BlockPos endA = wellStart;
-        BlockPos endB = wellStart.relative(wellDir, WELL_LEN - 1);
-        if (!npc.level().getFluidState(endA).is(FluidTags.WATER)) {
-            return new Work(endA, KIND_FLOOD);
-        }
-        if (!npc.level().getFluidState(endB).is(FluidTags.WATER)) {
-            return new Work(endB, KIND_FLOOD);
-        }
-        wellPos = wellStart.relative(wellDir, WELL_LEN / 2);
-        return null; // 井完成，下轮进入挖沟
-    }
-    */
-
-    /** 挖沟阶段：一条接一条挖（挖一空二，循环），直到范围内再也找不到可挖直线 */
-    private Work digTrenches() {
-        if (digIndex >= 0) {
-            Trench t = trenches.get(digIndex);
-            if (digProgress < t.len()) {
-                return new Work(t.start().relative(t.dir(), digProgress++), KIND_DIG);
-            }
-            digIndex = -1; // 这条挖完，找下一条
-        }
-        Trench next = findNextTrench();
-        if (next == null) {
-            // 全部挖完，进入灌水阶段
-            phase = PHASE_FLOOD_TRENCHES;
-            floodIndex = 0;
-            floodProgress = 0;
-            return null;
-        }
-        trenches.add(next);
-        digIndex = trenches.size() - 1;
-        digProgress = 0;
-        return new Work(next.start().relative(next.dir(), digProgress++), KIND_DIG);
-    }
-
-    /** 灌水阶段：逐条沟、每格都放成静止水源（满灌）；没桶了就去附近无限水打水 */
-    private Work floodTrenches() {
-        while (floodIndex < trenches.size()) {
-            Trench t = trenches.get(floodIndex);
-            if (floodProgress >= t.len()) {
-                floodIndex++;
-                floodProgress = 0;
-                continue;
-            }
-            BlockPos p = t.start().relative(t.dir(), floodProgress);
-            // 只要还不是静止水源（空气或流动水），就放一桶补成水源
-            var fluid = npc.level().getFluidState(p);
-            if (fluid.is(FluidTags.WATER) && fluid.isSource()) {
-                floodProgress++; // 已经是静止水源，跳过
-                continue;
-            }
-            if (!hasWaterBucket()) {
-                BlockPos water = findInfiniteWaterNear();
-                if (water == null) return null; // 附近没有无限水，先停下等玩家补
-                return new Work(water, KIND_REFILL); // 去打水，进度不动
-            }
-            floodProgress++;
-            return new Work(p, KIND_FLOOD);
-        }
-        phase = PHASE_PLANT; // 全部灌完，进入种植（暂未实现，先闲着）
-        return null;
-    }
-
     /** 在 NPC 附近找一处无限水源（水源块 + 至少 2 个相邻水源块） */
     private BlockPos findInfiniteWaterNear() {
         BlockPos center = npc.blockPosition();
@@ -862,81 +761,12 @@ public class FarmerWorkGoal extends Goal {
         return sources >= 2;
     }
 
-    /** 找下一条可挖的沟：锚定范围 min 角，沿较长边一排挖到底，垂直隔 ROW_GAP（挖一空二）推进，出范围即停 */
-    private Trench findNextTrench() {
-        if (farmDir == null) {
-            if (npc.hasWorkZone()) {
-                // 从范围 min 角起，长度 = 该边整长，方向取较长边
-                BlockPos min = npc.getWorkZoneMin();
-                BlockPos max = npc.getWorkZoneMax();
-                int widthX = max.getX() - min.getX() + 1;
-                int depthZ = max.getZ() - min.getZ() + 1;
-                if (widthX >= depthZ) {
-                    farmDir = Direction.EAST;
-                    trenchLen = widthX;
-                } else {
-                    farmDir = Direction.SOUTH;
-                    trenchLen = depthZ;
-                }
-                farmOrigin = min;
-                farmRow = 0;
-            } else {
-                // 没设范围：退回旧逻辑，从 NPC 脚下就近找一条固定长直线
-                BlockPos start = findLineNear(Direction.EAST, npc.blockPosition().below(), TRENCH_LEN);
-                Direction dir = Direction.EAST;
-                if (start == null) {
-                    dir = Direction.SOUTH;
-                    start = findLineNear(dir, npc.blockPosition().below(), TRENCH_LEN);
-                }
-                if (start == null) return null;
-                farmDir = dir;
-                farmOrigin = start;
-                farmRow = 0;
-                trenchLen = TRENCH_LEN;
-            }
-        }
-        BlockPos start = farmOrigin.relative(farmDir.getClockWise(), farmRow * ROW_GAP);
-        // 垂直方向越界 → 整片挖完，停下
-        if (!npc.isWorkAllowedAt(start)) return null;
-        farmRow++;
-        return new Trench(start, farmDir, trenchLen);
-    }
-
-    /** 在 pos 附近（同一层）找一条沿 dir、len 格连续可挖的直线，返回起点或 null */
-    private BlockPos findLineNear(Direction dir, BlockPos pos, int len) {
-        int radius = 20;
-        for (int r = 0; r < radius; r++) {
-            for (int d = -radius; d <= radius; d++) {
-                BlockPos base = pos.relative(dir, d).relative(dir.getClockWise(), r);
-                boolean ok = true;
-                for (int i = 0; i < len; i++) {
-                    BlockPos p = base.relative(dir, i);
-                    if (!npc.isWorkAllowedAt(p)) { ok = false; break; }
-                    if (!isDiggableGround(p)) { ok = false; break; }
-                    // 附近有水的就跳过（防止挖进已放水的沟）
-                    for (Direction side : Direction.Plane.HORIZONTAL) {
-                        if (npc.level().getFluidState(p.relative(side)).is(FluidTags.WATER)) { ok = false; break; }
-                    }
-                    if (!ok) break;
-                }
-                if (ok) return base;
-            }
-        }
-        return null;
-    }
-
     private void doWork() {
+        npc.playAction(actionForWorkKind(), 18);
         switch (workKind) {
-            case KIND_DIG -> {
-                digGround(workPos);
-                npc.swing(InteractionHand.MAIN_HAND);
-            }
-            case KIND_FLOOD -> {
-                placeWater(workPos);
-                npc.swing(InteractionHand.MAIN_HAND);
-            }
             case KIND_REFILL -> refillBucket(workPos);
             case KIND_PLANT_CANE -> plantCane();
+            case KIND_PLANT_MELON -> plantMelon();
             case KIND_HARVEST_CANE -> harvestCane(workPos);
             case KIND_PLANT_LOG -> plantLog();
             case KIND_PLANT_COCOA -> plantCocoa();
@@ -950,6 +780,19 @@ public class FarmerWorkGoal extends Goal {
             case KIND_PLANT -> plant();
             case KIND_TILL -> till();
         }
+    }
+
+    /** 将服务端农活类型映射为纯表现动作，方块交互仍由各工作方法负责。 */
+    private NpcAction actionForWorkKind() {
+        return switch (workKind) {
+            case KIND_TILL, KIND_CREATE_IRRIGATION, KIND_CREATE_FARM_WELL -> NpcAction.TILL;
+            case KIND_PLANT, KIND_PLANT_CANE, KIND_PLANT_MELON,
+                    KIND_PLANT_LOG, KIND_PLANT_COCOA -> NpcAction.PLANT;
+            case KIND_REFILL -> NpcAction.PLACE;
+            case KIND_HARVEST, KIND_HARVEST_CANE, KIND_HARVEST_COCOA,
+                    KIND_HARVEST_PLANT, KIND_BONEMEAL, KIND_CRAFT_BONEMEAL -> NpcAction.HARVEST;
+            default -> NpcAction.HARVEST;
+        };
     }
 
     /** 收获：打掉 workPos 上的方块，掉落进背包（简单作物成熟时收；瓜只收果实，茎留在原地） */
@@ -969,7 +812,7 @@ public class FarmerWorkGoal extends Goal {
         if (npc.getFarmMode() == FarmMode.MELON) {
             slot = findMelonSeedSlot();
             crop = slot >= 0 ? melonStemForSeed(npc.getEquipmentInventory().getItem(slot)) : null;
-        } else if (npc.getFarmMode() == FarmMode.AUTO) {
+        } else if (npc.getFarmMode() == FarmMode.AUTO || npc.getFarmMode() == FarmMode.CROP) {
             Block neighbor = cropForNeighbor(workPos);
             slot = neighbor != null ? findItemSlot(seedForCrop(neighbor)) : -1;
             if (slot >= 0) {
@@ -989,6 +832,21 @@ public class FarmerWorkGoal extends Goal {
         npc.swing(InteractionHand.MAIN_HAND);
     }
 
+    /** 综合模式专用瓜茎播种；与普通作物播种分开，避免自动模式永远选不到瓜种。 */
+    private void plantMelon() {
+        BlockPos stemPos = workPos.above();
+        if (!npc.level().getBlockState(workPos).is(Blocks.FARMLAND)
+                || !npc.level().getBlockState(stemPos).isAir()
+                || !hasMelonSpot(stemPos)) return;
+        int slot = findMelonSeedSlot();
+        if (slot < 0) return;
+        Block stem = melonStemForSeed(npc.getEquipmentInventory().getItem(slot));
+        if (stem == null) return;
+        npc.getEquipmentInventory().getItem(slot).shrink(1);
+        npc.level().setBlock(stemPos, stem.defaultBlockState(), Block.UPDATE_ALL);
+        npc.swing(InteractionHand.MAIN_HAND);
+    }
+
     /** 翻地：把近水的泥土/草方块锄成耕地 */
     private void till() {
         BlockState state = npc.level().getBlockState(workPos);
@@ -996,6 +854,7 @@ public class FarmerWorkGoal extends Goal {
                 && npc.level().getBlockState(workPos.above()).isAir()
                 && npc.getMainHandItem().getItem() instanceof HoeItem) {
             npc.level().setBlock(workPos, Blocks.FARMLAND.defaultBlockState(), Block.UPDATE_ALL);
+            npc.getMainHandItem().hurtAndBreak(1, npc, EquipmentSlot.MAINHAND);
             npc.swing(InteractionHand.MAIN_HAND);
         }
     }
@@ -1163,11 +1022,10 @@ public class FarmerWorkGoal extends Goal {
 
     /** 收甘蔗：从 base（底节）上方砍第二节和第三节，留底节继续生长 */
     private void harvestCane(BlockPos base) {
-        BlockPos cursor = base.above();
-        for (int i = 0; i < 2; i++) {
-            if (!npc.level().getBlockState(cursor).is(Blocks.SUGAR_CANE)) break;
-            harvestBlock(cursor);
-            cursor = cursor.above();
+        // 从顶向下收，避免先破坏第二节触发第三节自然掉落到地面、绕过背包收集。
+        for (int height = 2; height >= 1; height--) {
+            BlockPos cane = base.above(height);
+            if (npc.level().getBlockState(cane).is(Blocks.SUGAR_CANE)) harvestBlock(cane);
         }
         npc.swing(InteractionHand.MAIN_HAND);
     }
@@ -1180,7 +1038,7 @@ public class FarmerWorkGoal extends Goal {
                 npc.level().getBlockEntity(pos), npc, npc.getMainHandItem());
         for (ItemStack drop : drops) {
             if (!npc.addToBag(drop)) {
-                npc.spawnAtLocation(drop);
+                npc.spawnWorkOutput(drop);
             }
         }
         npc.level().destroyBlock(pos, false, npc);
@@ -1276,11 +1134,11 @@ public class FarmerWorkGoal extends Goal {
         return n >= 2;
     }
 
-    private boolean isDiggableGround(BlockPos pos) {
-        BlockState s = npc.level().getBlockState(pos);
-        return (s.is(BlockTags.DIRT) || s.is(BlockTags.SAND))
-                && npc.level().getBlockState(pos.above()).isAir()
-                && npc.level().getBlockState(pos.below()).isSolid();
+    private boolean canStoreLikelyOutput() {
+        return npc.hasBagSpaceFor(new ItemStack(Items.WHEAT))
+                || npc.hasBagSpaceFor(new ItemStack(Items.WHEAT_SEEDS))
+                || npc.hasBagSpaceFor(new ItemStack(Items.CARROT))
+                || npc.hasBagSpaceFor(new ItemStack(Items.POTATO));
     }
 
     private boolean digGround(BlockPos pos) {
@@ -1320,82 +1178,6 @@ public class FarmerWorkGoal extends Goal {
             }
         }
         return any;
-    }
-
-    /** 【测试版：只挖坑】井附近判定整段注释 */
-    /*
-    private boolean isNearWell(BlockPos p) {
-        if (wellPos == null) return false;
-        return Math.abs(p.getX() - wellPos.getX()) <= 2
-                && Math.abs(p.getZ() - wellPos.getZ()) <= 2
-                && Math.abs(p.getY() - wellPos.getY()) <= 1;
-    }
-    */
-
-    /** 【测试版：只挖坑】随机游荡整段注释 */
-    /*
-    private BlockPos randomExplorePos() {
-        RandomSource random = npc.getRandom();
-        if (npc.hasWorkZone()) {
-            BlockPos min = npc.getWorkZoneMin();
-            BlockPos max = npc.getWorkZoneMax();
-            int x = min.getX() + random.nextInt(Math.max(1, max.getX() - min.getX() + 1));
-            int z = min.getZ() + random.nextInt(Math.max(1, max.getZ() - min.getZ() + 1));
-            return new BlockPos(x, npc.getBlockY(), z);
-        }
-        int x = npc.getBlockX() + random.nextInt(SEARCH_RADIUS * 2 + 1) - SEARCH_RADIUS;
-        int z = npc.getBlockZ() + random.nextInt(SEARCH_RADIUS * 2 + 1) - SEARCH_RADIUS;
-        return new BlockPos(x, npc.getBlockY(), z);
-    }
-    */
-
-    private void debugLogState() {
-        String zone = npc.hasWorkZone()
-                ? npc.getWorkZoneMin().toShortString() + " → " + npc.getWorkZoneMax().toShortString()
-                : "无";
-        Sagadyssey.LOGGER.info("[务农调试] {} | 模式={} 命令={} | 阶段={} | 甘蔗={} 水桶={} 两桶={} 空桶={} | 井={} 沟数={} 挖={} 灌={} | 范围={}",
-                npc.getNpcName(), npc.getFarmMode(), npc.getCommand(), phaseName(),
-                hasSugarcane(), hasWaterBucket(), hasTwoWaterBuckets(), hasEmptyBucket(),
-                wellPos != null ? wellPos.toShortString() : "无",
-                trenches.size(), digProgress, floodProgress, zone);
-    }
-
-    private void debugLogResult(Work work) {
-        Sagadyssey.LOGGER.info("[务农调试] {} | findWork={}",
-                npc.getNpcName(),
-                work != null ? (kindName(work.kind()) + " @ " + work.pos().toShortString()) : "null(无活→游荡)");
-    }
-
-    private String phaseName() {
-        return switch (phase) {
-            case PHASE_BUILD_WELL -> "建井";
-            case PHASE_DIG_TRENCHES -> "挖沟";
-            case PHASE_FLOOD_TRENCHES -> "灌水";
-            case PHASE_PLANT -> "种植";
-            default -> "未知";
-        };
-    }
-
-    private static String kindName(int kind) {
-        return switch (kind) {
-            case KIND_TILL -> "翻地";
-            case KIND_PLANT -> "播种";
-            case KIND_HARVEST -> "收获";
-            case KIND_DIG -> "挖沟";
-            case KIND_FLOOD -> "灌水";
-            case KIND_REFILL -> "舀水";
-            case KIND_PLANT_CANE -> "种甘蔗";
-            case KIND_HARVEST_CANE -> "收甘蔗";
-            case KIND_PLANT_LOG -> "种原木";
-            case KIND_PLANT_COCOA -> "种可可豆";
-            case KIND_HARVEST_COCOA -> "收可可豆";
-            case KIND_HARVEST_PLANT -> "收+补种";
-            case KIND_BONEMEAL -> "催熟";
-            case KIND_CRAFT_BONEMEAL -> "合成骨粉";
-            case KIND_CREATE_IRRIGATION -> "建灌溉点";
-            case KIND_CREATE_FARM_WELL -> "建无限水井";
-            default -> "未知(" + kind + ")";
-        };
     }
 
 }

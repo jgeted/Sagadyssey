@@ -1,0 +1,8 @@
+{
+  "kind": "READ",
+  "facility": "sagadyssey:library",
+  "duration_ticks": 400,
+  "capacity": 4,
+  "window_start": 1000,
+  "window_end": 12500
+}

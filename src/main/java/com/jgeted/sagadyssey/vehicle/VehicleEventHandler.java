@@ -2,6 +2,8 @@ package com.jgeted.sagadyssey.vehicle;
 
 import com.jgeted.sagadyssey.core.config.SagadysseyConfig;
 import com.jgeted.sagadyssey.npc.entity.NpcBase;
+import com.jgeted.sagadyssey.npc.entity.NpcCommand;
+import com.jgeted.sagadyssey.npc.profession.NpcProfession;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
@@ -122,8 +124,12 @@ public class VehicleEventHandler {
     @SubscribeEvent
     public void onNpcSpawn(EntityJoinLevelEvent event) {
         if (event.getLevel().isClientSide()) return;
+        // Chunk/world reload is not a new spawn. Re-rolling here creates mounts, saddles
+        // and a lead in an existing body's inventory, breaking LOD asset reconciliation.
+        if (event.loadedFromDisk()) return;
         if (!(event.getEntity() instanceof NpcBase npc)) return;
         if (npc.hasMount()) return;
+        if (!canSpawnWithMount(npc)) return;
         if (npc.getRandom().nextFloat() >= SagadysseyConfig.MOUNT_SPAWN_CHANCE.get()) return;
 
         EntityType<?> mountType = selectMountFor(npc);
@@ -159,11 +165,9 @@ public class VehicleEventHandler {
             } catch (Exception ignored) {}
 
             horse.setTamed(true);
-            if (npc.getOwnerUUID() != null) {
-                Player owner = npc.level().getPlayerByUUID(npc.getOwnerUUID());
-                if (owner != null) {
-                    horse.tameWithName(owner);
-                }
+            Player owner = npc.getActiveOwner();
+            if (owner != null) {
+                horse.tameWithName(owner);
             }
             horse.getInventory().setItem(0, new ItemStack(Items.SADDLE));
 
@@ -175,9 +179,21 @@ public class VehicleEventHandler {
     /** 根据职业选择坐骑类型 */
     private static EntityType<?> selectMountFor(NpcBase npc) {
         return switch (npc.getProfession()) {
-            case WORKER, FARMER, BLACKSMITH, TRADER ->
+            case WORKER, FARMER, BLACKSMITH, TRADER, COURIER ->
                     npc.getRandom().nextBoolean() ? EntityType.DONKEY : EntityType.MULE;
             default -> EntityType.HORSE;
         };
+    }
+
+    /**
+     * 自动坐骑只分配给需要长距离机动的职业。生产者必须能立即使用工作站，
+     * 固定待命者也不应因为区块重新加载而逐渐堆积无用坐骑。
+     */
+    private static boolean canSpawnWithMount(NpcBase npc) {
+        if (npc.getCommand() == NpcCommand.STAY) return false;
+        NpcProfession profession = npc.getProfession();
+        return profession == NpcProfession.WARRIOR || profession == NpcProfession.ARCHER
+                || profession == NpcProfession.HEAVY || profession == NpcProfession.TRADER
+                || profession == NpcProfession.COURIER;
     }
 }

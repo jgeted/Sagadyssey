@@ -13,14 +13,13 @@ import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.ContainerLevelAccess;
 import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.Items;
 
 /**
  * NPC 装备菜单。
  * 槽位布局：
- *   0-3 护甲, 4 主手, 5 副手, 6 弓, 7 箭
- *   8-16 NPC 背包 (9 格)
- *   17-25 玩家快捷栏, 26-52 玩家主背包
+ *   0-3 护甲, 4 主手, 5 副手
+ *   6-41 NPC 随身物品栏 (36 格，与玩家一致)
+ *   42-68 玩家主背包, 69-77 玩家快捷栏
  */
 public class NpcEquipMenu extends AbstractContainerMenu {
 
@@ -65,7 +64,7 @@ public class NpcEquipMenu extends AbstractContainerMenu {
         // NPC 装备槽适配器：将 Container 操作映射到实体装备
         Container equipContainer = new EquipContainer(npc);
 
-        // === NPC 装备槽 (0-7) ===
+        // === NPC 装备槽 (0-5) ===
         for (int i = 0; i < 6; i++) {
             final int idx = i;
             addSlot(new Slot(equipContainer, idx, getX(idx), getY(idx)) {
@@ -78,81 +77,25 @@ public class NpcEquipMenu extends AbstractContainerMenu {
             });
         }
 
-        // 弓槽(6) — 只接受弓
-        Container bowContainer = new Container() {
-            @Override public int getContainerSize() { return 1; }
-            @Override public boolean isEmpty() { return npc.getBowSlot().isEmpty(); }
-            @Override public ItemStack getItem(int i) { return npc.getBowSlot(); }
-            @Override public void setItem(int i, ItemStack stack) { npc.setBowSlot(stack); setChanged(); }
-            @Override public ItemStack removeItem(int i, int amount) {
-                ItemStack current = npc.getBowSlot().copy();
-                ItemStack split = current.split(amount);
-                npc.setBowSlot(current.isEmpty() ? ItemStack.EMPTY : current);
-                return split;
-            }
-            @Override public ItemStack removeItemNoUpdate(int i) {
-                ItemStack s = npc.getBowSlot().copy();
-                npc.setBowSlot(ItemStack.EMPTY);
-                return s;
-            }
-            @Override public void setChanged() {}
-            @Override public boolean stillValid(Player p) { return npc.isAlive(); }
-            @Override public void clearContent() { npc.setBowSlot(ItemStack.EMPTY); }
-        };
-        addSlot(new Slot(bowContainer, 0, 80, 56) {
-            @Override
-            public boolean mayPlace(ItemStack stack) { return stack.is(Items.BOW); }
-            @Override
-            public int getMaxStackSize() { return 1; }
-        });
-
-        // 箭槽(7) — 只接受箭
-        Container arrowContainer = new Container() {
-            @Override public int getContainerSize() { return 1; }
-            @Override public boolean isEmpty() { return npc.getArrowSlot().isEmpty(); }
-            @Override public ItemStack getItem(int i) { return npc.getArrowSlot(); }
-            @Override public void setItem(int i, ItemStack stack) { npc.setArrowSlot(stack); setChanged(); }
-            @Override public ItemStack removeItem(int i, int amount) {
-                ItemStack current = npc.getArrowSlot().copy();
-                ItemStack split = current.split(amount);
-                npc.setArrowSlot(current.isEmpty() ? ItemStack.EMPTY : current);
-                return split;
-            }
-            @Override public ItemStack removeItemNoUpdate(int i) {
-                ItemStack s = npc.getArrowSlot().copy();
-                npc.setArrowSlot(ItemStack.EMPTY);
-                return s;
-            }
-            @Override public void setChanged() {}
-            @Override public boolean stillValid(Player p) { return npc.isAlive(); }
-            @Override public void clearContent() { npc.setArrowSlot(ItemStack.EMPTY); }
-        };
-        addSlot(new Slot(arrowContainer, 0, 98, 56) {
-            @Override
-            public boolean mayPlace(ItemStack stack) { return stack.is(Items.ARROW); }
-            @Override
-            public int getMaxStackSize() { return 64; }
-        });
-
-        // === NPC 背包槽 (8-16): 3×3 ===
-        Container bag = npc.getEquipmentInventory();
+        // === NPC 随身物品栏 (6-41): 4×9 ===
+        Container bag = npc.getPersonalInventory();
         int bagIdx = 0;
-        for (int row = 0; row < 3; row++) {
-            for (int col = 0; col < 3; col++) {
-                addSlot(new Slot(bag, bagIdx++, 8 + col * 18, 110 + row * 18));
+        for (int row = 0; row < 4; row++) {
+            for (int col = 0; col < 9; col++) {
+                addSlot(new Slot(bag, bagIdx++, 8 + col * 18, 82 + row * 18));
             }
         }
 
-        // === 玩家主背包 (17-43): 3×9 ===
+        // === 玩家主背包 (42-68): 3×9 ===
         for (int row = 0; row < 3; row++) {
             for (int col = 0; col < 9; col++) {
-                addSlot(new Slot(playerInventory, col + row * 9 + 9, 8 + col * 18, 185 + row * 18));
+                addSlot(new Slot(playerInventory, col + row * 9 + 9, 8 + col * 18, 176 + row * 18));
             }
         }
 
-        // === 玩家快捷栏 (44-52): 1×9 ===
+        // === 玩家快捷栏 (69-77): 1×9 ===
         for (int col = 0; col < 9; col++) {
-            addSlot(new Slot(playerInventory, col, 8 + col * 18, 241));
+            addSlot(new Slot(playerInventory, col, 8 + col * 18, 234));
         }
     }
 
@@ -193,24 +136,16 @@ public class NpcEquipMenu extends AbstractContainerMenu {
         ItemStack stack = slot.getItem();
         ItemStack copy = stack.copy();
 
-        if (index < 8) {
-            if (!this.moveItemStackTo(stack, 17, 53, false)) {
+        if (index < 6) {
+            if (!this.moveItemStackTo(stack, 42, 78, false)) {
                 return ItemStack.EMPTY;
             }
-        } else if (index < 17) {
-            if (!this.moveItemStackTo(stack, 17, 53, false)) {
+        } else if (index < 42) {
+            if (!this.moveItemStackTo(stack, 42, 78, false)) {
                 return ItemStack.EMPTY;
             }
         } else {
-            if (stack.is(Items.BOW) && !this.slots.get(6).hasItem()) {
-                if (!this.moveItemStackTo(stack, 6, 7, false)) {
-                    moveToBagOrSwap(stack);
-                }
-            } else if (stack.is(Items.ARROW)) {
-                if (!this.moveItemStackTo(stack, 7, 8, false)) {
-                    moveToBagOrSwap(stack);
-                }
-            } else if (isArmorItem(stack)) {
+            if (isArmorItem(stack)) {
                 EquipmentSlot armorSlot = stack.getEquipmentSlot();
                 if (armorSlot != null) {
                     int armorIdx = switch (armorSlot) {
@@ -250,8 +185,8 @@ public class NpcEquipMenu extends AbstractContainerMenu {
     }
 
     private void moveToBagOrSwap(ItemStack stack) {
-        if (!this.moveItemStackTo(stack, 8, 17, false)) {
-            this.moveItemStackTo(stack, 17, 53, false);
+        if (!this.moveItemStackTo(stack, 6, 42, false)) {
+            this.moveItemStackTo(stack, 42, 78, false);
         }
     }
 

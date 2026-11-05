@@ -57,12 +57,39 @@ neoForge {
 
             // Comma-separated list of namespaces to load gametests from. Empty = all namespaces.
             systemProperty 'neoforge.enabledGameTestNamespaces', project.mod_id
+            def copyWorld = providers.gradleProperty('phase10ClientWorld').orNull
+            if (copyWorld != null) {
+                if (!(copyWorld ==~ /phase10-client-[a-f0-9]{32}/)
+                        || !project.file("run/saves/${copyWorld}/phase10-copy-audit.nbt").isFile()) {
+                    throw new GradleException('phase10ClientWorld must be a prepared, verified migration-copy world')
+                }
+                programArguments.addAll '--quickPlaySingleplayer', copyWorld
+            }
         }
 
         server {
             server()
             programArgument '--nogui'
             systemProperty 'neoforge.enabledGameTestNamespaces', project.mod_id
+            def discoveryRun = providers.gradleProperty('societyDiscoveryRun').orNull
+            if (discoveryRun != null) {
+                if (!(discoveryRun ==~ /[A-Za-z0-9_-]{1,64}/)) throw new GradleException('societyDiscoveryRun must be an isolated label')
+                gameDirectory = project.file("run/society-discovery/${discoveryRun}")
+                systemProperty 'sagadyssey.society.discovery', providers.gradleProperty('p2Discovery').orElse('false').get() == 'true' ? 'false' : 'true'
+                systemProperty 'sagadyssey.p2.discovery', providers.gradleProperty('p2Discovery').orElse('false').get()
+            }
+            def copyRun = providers.gradleProperty('phase10MigrationRun').orNull
+            if (copyRun != null) {
+                if (!(copyRun ==~ /[A-Za-z0-9_-]{1,64}/)) {
+                    throw new GradleException('phase10MigrationRun must be an isolated directory label')
+                }
+                def copyPhase = providers.gradleProperty('phase10MigrationPhase').orElse('apply').get()
+                if (!(copyPhase in ['apply', 'restart', 'rollback'])) {
+                    throw new GradleException('phase10MigrationPhase must be apply, restart or rollback')
+                }
+                gameDirectory = project.file("run/phase10-migration/${copyRun}")
+                systemProperty 'sagadyssey.phase10.copyAudit', copyPhase
+            }
         }
 
         // This run config launches GameTestServer and runs all registered gametests, then exits.
@@ -70,7 +97,60 @@ neoForge {
         // The gametest system is also enabled by default for other run configs under the /test command.
         gameTestServer {
             type = "gameTestServer"
-            systemProperty 'neoforge.enabledGameTestNamespaces', project.mod_id
+            systemProperty 'sagadyssey.pickaxe.enabled', providers.gradleProperty('pickaxeBatchOnly').orElse('false').get()
+            systemProperty 'sagadyssey.pickaxe.phase', providers.gradleProperty('pickaxeBatchPhase').orElse('disabled').get()
+            systemProperty 'sagadyssey.cancelled.enabled', providers.gradleProperty('cancelRecoveryOnly').orElse('false').get()
+            systemProperty 'sagadyssey.cancelled.phase', providers.gradleProperty('cancelRecoveryPhase').orElse('disabled').get()
+            systemProperty 'sagadyssey.industry.native', (providers.gradleProperty('completionOnly').orElse('false').get() == 'true' ? 'true' : providers.gradleProperty('industryABOnly').orElse('false').get())
+            systemProperty 'sagadyssey.completion.phase', providers.gradleProperty('completionPhase').orElse('disabled').get()
+            systemProperty 'sagadyssey.industry.ab.phase', providers.gradleProperty('industryABPhase').orElse('disabled').get()
+            systemProperty 'sagadyssey.industries.enabled', providers.gradleProperty('industriesOnly').orElse('false').get()
+            systemProperty 'sagadyssey.industries.phase', providers.gradleProperty('industryPhase').orElse('baseline').get()
+            systemProperty 'sagadyssey.industries.forestry', (providers.gradleProperty('completionPhase').orElse('disabled').get().startsWith('wood') || providers.gradleProperty('industryPhase').orElse('baseline').get().startsWith('forest')) ? 'true' : 'false'
+            systemProperty 'sagadyssey.development.phase', providers.gradleProperty('developmentPhase').orElse('init').get()
+            // 阶段4真实游戏验收使用独立目录，不读取或覆盖玩家的客户端世界。
+            // A paired stage9 verification gets a fresh isolated world for its baseline;
+            // its restart reuses exactly that directory. Keep all earlier test worlds intact.
+            def phase9RunId = providers.gradleProperty('phase9GameTestRun').orNull
+            if (phase9RunId != null && !(phase9RunId ==~ /[A-Za-z0-9_-]{1,64}/)) {
+                throw new GradleException('phase9GameTestRun must be a safe directory label, not a path')
+            }
+            gameDirectory = project.file(phase9RunId == null ? 'run/phase4-gametest'
+                    : "run/phase9-gametest/${phase9RunId}")
+            systemProperty 'sagadyssey.phase4.requireRestart', providers.gradleProperty('phase4RequireRestart').orElse('false').get()
+            systemProperty 'sagadyssey.nearCycle.phase', providers.gradleProperty('nearCyclePhase').orElse('baseline').get()
+            systemProperty 'sagadyssey.phase9.soak', providers.gradleProperty('phase9Soak').orElse('false').get()
+            systemProperty 'sagadyssey.safety.phase', providers.gradleProperty('safetyPhase').orElse('baseline').get()
+            systemProperty 'sagadyssey.redesign.guardOnly', providers.gradleProperty('redesignGuardOnly').orElse('false').get()
+            systemProperty 'sagadyssey.phase10.profile', providers.gradleProperty('phase10Profile').orElse('false').get()
+            systemProperty 'sagadyssey.phase10.soak', providers.gradleProperty('phase10Soak').orElse('false').get()
+            systemProperty 'sagadyssey.society.phase', providers.gradleProperty('societyPhase').orElse('r1-init').get()
+            systemProperty 'sagadyssey.handoff.phase', providers.gradleProperty('handoffPhase').orElse('disabled').get()
+            systemProperty 'sagadyssey.tools.phase', providers.gradleProperty('toolsPhase').orElse('disabled').get()
+            systemProperty 'sagadyssey.seeds.phase', providers.gradleProperty('seedsPhase').orElse('disabled').get()
+            systemProperty 'sagadyssey.naturalRegistration.phase', providers.gradleProperty('naturalRegistrationPhase').orElse('baseline').get()
+            // Opt-in isolated regression run; normal runs also discover the new tests.
+            systemProperty 'neoforge.enabledGameTestNamespaces',
+                    providers.gradleProperty('completionOnly').orElse('false').get() == 'true' ? 'sagadyssey_industries_completion' :
+                    providers.gradleProperty('pickaxeBatchOnly').orElse('false').get() == 'true' ? 'sagadyssey_pickaxe_batches' :
+                    providers.gradleProperty('cancelRecoveryOnly').orElse('false').get() == 'true' ? 'sagadyssey_cancelled_recovery' :
+                    providers.gradleProperty('industryABOnly').orElse('false').get() == 'true' ? 'sagadyssey_industries_ab' :
+                    providers.gradleProperty('industriesOnly').orElse('false').get() == 'true' ? 'sagadyssey_industries' :
+                    providers.gradleProperty('developmentOnly').orElse('false').get() == 'true' ? 'sagadyssey_development' :
+                    providers.gradleProperty('resilienceOnly').orElse('false').get() == 'true' ? 'sagadyssey_resilience' :
+                    providers.gradleProperty('safetyOnly').orElse('false').get() == 'true' ? 'sagadyssey_safety' :
+                    providers.gradleProperty('redesignOnly').orElse('false').get() == 'true'
+                            ? 'sagadyssey_redesign' :
+                    providers.gradleProperty('seedsOnly').orElse('false').get() == 'true'
+                            ? 'sagadyssey_seeds' :
+                    providers.gradleProperty('toolsOnly').orElse('false').get() == 'true'
+                            ? 'sagadyssey_tools' :
+                    providers.gradleProperty('handoffOnly').orElse('false').get() == 'true'
+                            ? 'sagadyssey_handoff' : providers.gradleProperty('societyOnly').orElse('false').get() == 'true'
+                            ? (providers.gradleProperty('societyPhase').orElse('r1-init').get().startsWith('p8') ? 'sagadyssey_p8' : providers.gradleProperty('societyPhase').orElse('r1-init').get().startsWith('p7') ? 'sagadyssey_p7' : providers.gradleProperty('societyPhase').orElse('r1-init').get().startsWith('p6') ? 'sagadyssey_p6' : providers.gradleProperty('societyPhase').orElse('r1-init').get().startsWith('p5') ? 'sagadyssey_p5' : providers.gradleProperty('societyPhase').orElse('r1-init').get().startsWith('p4') ? 'sagadyssey_p4' : providers.gradleProperty('societyPhase').orElse('r1-init').get().startsWith('p3') ? 'sagadyssey_p3' : providers.gradleProperty('societyPhase').orElse('r1-init').get().startsWith('p2') ? 'sagadyssey_p2' : providers.gradleProperty('societyPhase').orElse('r1-init').get().startsWith('r3') ? 'sagadyssey_society_r3' : providers.gradleProperty('societyPhase').orElse('r1-init').get().startsWith('r2') ? 'sagadyssey_society_r2' : 'sagadyssey_society_r1') : providers.gradleProperty('naturalRegistrationOnly').orElse('false').get() == 'true'
+                            ? 'sagadyssey_natural' : providers.gradleProperty('nearCycleOnly').orElse('false').get() == 'true'
+                            ? 'sagadyssey_cycle' : providers.gradleProperty('stockReconciliationOnly').orElse('false').get() == 'true'
+                            ? 'sagadyssey_stock' : project.mod_id + ',sagadyssey_stock'
         }
 
         data {
@@ -95,7 +175,7 @@ neoForge {
             // Recommended logging level for the console
             // You can set various levels here.
             // Please read: https://stackoverflow.com/questions/2031163/when-to-use-the-different-log-levels
-            logLevel = org.slf4j.event.Level.DEBUG
+            logLevel = (providers.gradleProperty('industriesOnly').orElse('false').get() == 'true' || providers.gradleProperty('societyOnly').orElse('false').get() == 'true' || providers.gradleProperty('nearCycleOnly').orElse('false').get() == 'true') ? org.slf4j.event.Level.INFO : org.slf4j.event.Level.DEBUG
         }
     }
 
@@ -106,6 +186,14 @@ neoForge {
         "${mod_id}" {
             sourceSet(sourceSets.main)
         }
+    }
+
+    // Put the Minecraft and NeoForge runtime on the JUnit classpath so migration
+    // tests can deserialize frozen legacy SavedData fixtures rather than merely
+    // checking their filenames and hashes.
+    unitTest {
+        enable()
+        testedMod = mods.sagadyssey
     }
 }
 
@@ -118,6 +206,10 @@ configurations {
 }
 
 dependencies {
+    // World simulation v2 uses real executable tests instead of source-text-only guards.
+    testImplementation "org.junit.jupiter:junit-jupiter:5.14.2"
+    testRuntimeOnly "org.junit.platform:junit-platform-launcher"
+
     // Example optional mod dependency with JEI
     // The JEI API is declared for compile time use, while the full JEI artifact is used at runtime
     // compileOnly "mezz.jei:jei-${mc_version}-common-api:${jei_version}"
@@ -139,6 +231,14 @@ dependencies {
     // For more info:
     // http://www.gradle.org/docs/current/userguide/artifact_dependencies_tutorial.html
     // http://www.gradle.org/docs/current/userguide/dependency_management.html
+}
+
+tasks.named('test', Test).configure {
+    useJUnitPlatform()
+    testLogging {
+        events 'failed', 'skipped'
+        exceptionFormat 'full'
+    }
 }
 
 // This block of code expands all declared replace properties in the specified resource targets.
@@ -181,6 +281,432 @@ publishing {
 
 tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8' // Use the UTF-8 charset for Java compilation
+}
+
+// Fast, headless regression guard for the cross-system social simulation.
+// It deliberately does not launch a Minecraft client or dedicated server.
+tasks.register('verifySocialSystem') {
+    group = 'verification'
+    description = 'Checks social-system wiring, bounded C2S codecs, and resource JSON without launching Minecraft.'
+
+    def javaRoot = new File(projectDir, 'src/main/java/com/jgeted/sagadyssey')
+    def requiredSources = [
+            'social/character/CharacterLifecycleEvents.java',
+            'social/character/CharacterRegistryData.java',
+            'social/settlement/SettlementRegistryData.java',
+            'social/politics/PoliticalStateData.java',
+            'social/logistics/LogisticsData.java',
+            'social/economy/SettlementEconomyEvents.java',
+             'social/world/WorldDynamicsEvents.java',
+             'social/scenario/FixedScenarioDefinition.java',
+            'social/scenario/FixedScenarioDeployment.java',
+            'social/scenario/FixedScenarioData.java',
+            'social/scenario/FixedScenarioEvents.java',
+            'social/scenario/ScenarioLabController.java',
+            'social/scenario/FixedScenarioVerifier.java',
+            'social/scenario/FixedScenarioCommand.java',
+            'social/SocialSystemAuditCommand.java',
+            'npc/ai/InteractionApproach.java',
+            'npc/ai/MovementProgress.java',
+            'npc/ai/NpcGroundItemRecoveryGoal.java',
+            'npc/work/NpcWorkstationContainers.java',
+            'social/work/NpcWorkContext.java',
+            'social/life/NpcLifeData.java',
+            'social/life/NpcLifeRecord.java',
+            'social/life/NpcResidenceFixtures.java',
+            'social/life/NpcLifeBehavior.java',
+            'social/life/NpcLongTermGoal.java',
+            'social/life/NpcRelationKind.java',
+            'social/life/NpcRelationRecord.java',
+            'social/life/NpcMemoryRecord.java',
+            'social/life/NpcAgencyDecision.java',
+            'social/life/NpcActionDecisionRecord.java',
+            'social/life/NpcNeedsRecord.java',
+            'social/life/NpcFoodItems.java',
+            'social/life/NpcScheduleActivity.java',
+            'social/life/NpcScheduleRecord.java',
+            'social/life/NpcSchedulePlanner.java',
+            'social/life/NpcContractStatus.java',
+            'social/life/NpcEmploymentContract.java',
+            'social/life/NpcContractEvents.java',
+            'social/life/NpcWorkZoneRecord.java',
+            'social/household/HouseholdRole.java',
+            'social/household/HouseholdMemberRecord.java',
+            'social/household/HouseholdRecord.java',
+            'social/household/HouseholdData.java',
+            'social/household/HouseholdCareRecord.java',
+            'social/household/HouseholdCareEvents.java',
+            'social/household/HouseholdFixtures.java',
+            'social/household/HouseholdCommand.java',
+            'npc/ai/NpcHomeSleepGoal.java',
+            'npc/ai/NpcEatGoal.java',
+            'npc/ai/NpcHouseholdCareGoal.java',
+            'npc/command/NpcLifeCommand.java'
+    ].collect { new File(javaRoot, it) }
+    def mainSourceFile = new File(javaRoot, 'Sagadyssey.java')
+    def networkingFile = new File(javaRoot, 'core/network/SagadysseyNetworking.java')
+    def farmerGoalFile = new File(javaRoot, 'npc/ai/FarmerWorkGoal.java')
+    def npcBaseFile = new File(javaRoot, 'npc/entity/NpcBase.java')
+    def patrolGoalFile = new File(javaRoot, 'npc/ai/PatrolGoal.java')
+    def vehicleHandlerFile = new File(javaRoot, 'vehicle/VehicleEventHandler.java')
+    def boundedPacketFiles = [
+            'core/network/ChatPayload.java',
+            'core/network/ResearchUnlockPacket.java',
+            'npc/network/NpcInteractionPacket.java',
+            'npc/network/NpcProfessionPacket.java',
+            'npc/network/NpcFarmModePacket.java',
+            'npc/command/network/CommandGroupActionPacket.java'
+    ].collect { new File(javaRoot, it) }
+    def resourceJsonFiles = fileTree('src/main/resources') { include '**/*.json' }
+    def aiGoalFiles = fileTree(new File(javaRoot, 'npc/ai')) { include '**/*.java' }
+    inputs.files(requiredSources)
+    inputs.files(mainSourceFile, networkingFile, farmerGoalFile, npcBaseFile,
+            patrolGoalFile, vehicleHandlerFile, boundedPacketFiles)
+    inputs.files(resourceJsonFiles)
+    inputs.files(aiGoalFiles)
+
+    doLast {
+        requiredSources.each { source ->
+            if (!source.isFile()) throw new GradleException("Missing social-system source: ${source}")
+        }
+
+        def mainSource = mainSourceFile.getText('UTF-8')
+        ['CharacterLifecycleEvents', 'SettlementEconomyEvents', 'WorldDynamicsEvents',
+         'FixedScenarioEvents', 'FixedScenarioCommand', 'SocialSystemAuditCommand', 'NpcLifeCommand',
+         'NpcContractEvents', 'HouseholdCommand', 'HouseholdCareEvents'].each { registration ->
+            if (!mainSource.contains(registration))
+                throw new GradleException("Missing event/command registration: ${registration}")
+        }
+
+        def networking = networkingFile.getText('UTF-8')
+        if (!networking.contains('PROTOCOL_VERSION = "13"'))
+            throw new GradleException('Network protocol was not bumped for the current payload schema')
+
+        boundedPacketFiles.each { packetFile ->
+            def text = packetFile.getText('UTF-8')
+            if (!text.contains('NetworkStrings.read'))
+                throw new GradleException("Unbounded C2S string decoder: ${packetFile}")
+        }
+
+        def scenarioDefinition = new File(javaRoot,
+                'social/scenario/FixedScenarioDefinition.java').getText('UTF-8')
+        if (!scenarioDefinition.contains('new FarmSpec("wheat_west", "farmland", 224, 82, 9)')
+                || !scenarioDefinition.contains('new FarmSpec("wheat_east", "farmland", 266, 42, 9)'))
+            throw new GradleException('small_realm must retain its two validated 9x9 farm modules')
+        if (!scenarioDefinition.contains('public int revision()')
+                || !scenarioDefinition.contains('9, 304, createTerrain(farms)'))
+            throw new GradleException('small_realm must expose and increment its persisted definition revision')
+        if (!scenarioDefinition.contains('String factionId, String settlementKey'))
+            throw new GradleException('Scenario NPCs must declare an explicit home settlement')
+
+        def scenarioEvents = new File(javaRoot,
+                'social/scenario/FixedScenarioEvents.java').getText('UTF-8')
+        def structurePiece = new File(javaRoot,
+                'core/structure/SagadysseyStructurePiece.java').getText('UTF-8')
+        [scenarioEvents, structurePiece].each { placementSource ->
+            if (!placementSource.contains('BlockIgnoreProcessor.STRUCTURE_BLOCK')
+                    || !placementSource.contains('setIgnoreEntities(true)'))
+                throw new GradleException('Structure placement must ignore template markers and entities')
+        }
+        if (!scenarioEvents.contains('npc.setWorkZone(min, max)'))
+            throw new GradleException('Scenario farmers must receive an explicit work zone')
+        if (!scenarioEvents.contains('npc.setFarmMode(FarmMode.CROP)'))
+            throw new GradleException('Scenario wheat farmers must remain in crop-only mode')
+        def farmerGoal = farmerGoalFile.getText('UTF-8')
+        if (!farmerGoal.contains('FarmMode.AUTO || npc.getFarmMode() == FarmMode.CROP'))
+            throw new GradleException('Crop farmers must propagate neighboring crops when filling empty farmland')
+        if (!scenarioEvents.contains('removeLegacyTemplateMarkers')
+                || !scenarioEvents.contains('filterBlocks(position, settings, Blocks.STRUCTURE_BLOCK)'))
+            throw new GradleException('Scenario redeployment must remove legacy template markers precisely')
+
+        def scenarioCommand = new File(javaRoot,
+                'social/scenario/FixedScenarioCommand.java').getText('UTF-8')
+        if (!scenarioCommand.contains('Commands.literal("verify")')
+                || !scenarioCommand.contains('Commands.literal("repair")')
+                || !scenarioCommand.contains('Commands.literal("confirm")')
+                || !scenarioCommand.contains('Commands.literal("reclaim-drops")'))
+            throw new GradleException('Scenario verification and confirmed repair commands are required')
+        def scenarioLabs = new File(javaRoot,
+                'social/scenario/ScenarioLabController.java').getText('UTF-8')
+        ['blacksmith_lab', 'farmer_lab', 'worker_lab', 'trader_lab',
+         'guard_lab', 'medic_lab', 'bard_lab', 'household_lab'].each { labId ->
+            if (!scenarioDefinition.contains('"' + labId + '"'))
+                throw new GradleException("Missing isolated scenario lab: ${labId}")
+        }
+        if (!scenarioCommand.contains('Commands.literal("test")')
+                || !scenarioCommand.contains('Commands.literal("profiles")')
+                || !scenarioCommand.contains('Commands.literal("reset")')
+                || !scenarioLabs.contains('defaultProfile')
+                || !scenarioLabs.contains('cancelOpenOrdersCreatedBy'))
+            throw new GradleException('Scenario labs require observable and repeatable test profiles')
+        def scenarioVerifierSource = new File(javaRoot,
+                'social/scenario/FixedScenarioVerifier.java').getText('UTF-8')
+        def labLifeSource = new File(javaRoot,
+                'social/life/NpcLifeData.java').getText('UTF-8')
+        def labHouseholdSource = new File(javaRoot,
+                'social/household/HouseholdData.java').getText('UTF-8')
+        if (!scenarioLabs.contains('playerManagedNpcs')
+                || !scenarioLabs.contains('resetTransientState')
+                || !labLifeSource.contains('actionDecisions.remove(npcId)')
+                || !labHouseholdSource.contains('resetCareState'))
+            throw new GradleException('Scenario reset must preserve player-managed NPCs and clear repeat-test state')
+        if (!scenarioCommand.contains('运输货舱=')
+                || !scenarioCommand.contains('terrainTargetClear')
+                || !scenarioVerifierSource.contains('irrigationTest')
+                || !scenarioVerifierSource.contains('alternateWorkerProfile'))
+            throw new GradleException('Scenario observation, collision checks, or profile-aware verification is missing')
+        if (!scenarioDefinition.contains('new FarmSpec("wheat_plot", "lab", -4, -4, 9)')
+                || !scenarioLabs.contains('case "farmer_lab:irrigate"'))
+            throw new GradleException('Farmer lab must preserve the central-water 9x9 test contract')
+
+        def deploymentSource = new File(javaRoot,
+                'social/scenario/FixedScenarioDeployment.java').getText('UTF-8')
+        if (!deploymentSource.contains('DefinitionRevision') || !deploymentSource.contains('Repair'))
+            throw new GradleException('Scenario deployment must persist revision and repair mode')
+        if (!scenarioEvents.contains('if (deployment.repair()) {')
+                || !scenarioEvents.contains('if (npc.isOwned()) {')
+                || !scenarioEvents.contains('repairNpcWorkAssignment'))
+            throw new GradleException('Scenario repair must preserve recruited and missing NPC state')
+        if (!scenarioEvents.contains('ensureNpcCharacter')
+                || !scenarioEvents.contains('initializeNpcPolitics')
+                || !scenarioEvents.contains('previousDefinitionRevision() < 3'))
+            throw new GradleException('Scenario NPC character and political bootstrapping must remain wired')
+        if (!scenarioDefinition.contains('new SettlementSpec("mine", "赤岩矿场"')
+                || !scenarioDefinition.contains('TerrainKind.BLAST_FURNACE')
+                || !scenarioEvents.contains('tickScenarioEconomy')
+                || !scenarioEvents.contains('applyInstitutionAssignment')
+                || !new File(javaRoot, 'social/scenario/FixedScenarioCommand.java')
+                        .getText('UTF-8').contains('literal("observe")'))
+            throw new GradleException('small_realm worksite, autonomous trade, and institution wiring is missing')
+        if (!scenarioDefinition.contains('new WorkZoneSpec("mine_yard"')
+                || !scenarioDefinition.contains('"赤岩矿工"')
+                || !scenarioEvents.contains('previousDefinitionRevision() < 5'))
+            throw new GradleException('small_realm r5 miner work-zone migration is missing')
+        if (!scenarioEvents.contains('previousDefinitionRevision() < 6')
+                || !scenarioEvents.contains('npc.setLeadMountMode(true)'))
+            throw new GradleException('small_realm r6 producer mount migration is missing')
+        if (!scenarioEvents.contains('registerScenarioLife')
+                || !scenarioEvents.contains('ensurePrivateRoom'))
+            throw new GradleException('small_realm r7 private residence registration is missing')
+        if (!scenarioEvents.contains('initializeNpcAgency')
+                || !scenarioEvents.contains('NpcLongTermGoal.MASTER_CRAFT')
+                || !scenarioEvents.contains('NpcRelationKind.FAMILY'))
+            throw new GradleException('small_realm r8 goals, relationships, and background memories are missing')
+        if (!scenarioEvents.contains('initializeHouseholds')
+                || !scenarioEvents.contains('previousDefinitionRevision() < 9')
+                || !scenarioDefinition.contains('HouseholdRole.KIN')
+                || !scenarioEvents.contains('HouseholdFixtures.ensureSharedPantry'))
+            throw new GradleException('small_realm r9 households and physical shared storage are missing')
+
+        def npcBaseSource = npcBaseFile.getText('UTF-8')
+        def patrolGoalSource = patrolGoalFile.getText('UTF-8')
+        def vehicleHandlerSource = vehicleHandlerFile.getText('UTF-8')
+        if (!npcBaseSource.contains('this.dismountToBind();')
+                || !npcBaseSource.contains('setPatrolMoveTarget')
+                || !npcBaseSource.contains('WORK_OUTPUT_OWNER_TAG')
+                || !npcBaseSource.contains('NpcGroundItemRecoveryGoal(this)')
+                || !patrolGoalSource.contains('npc.setPatrolMoveTarget(destination)')
+                || !vehicleHandlerSource.contains('canSpawnWithMount'))
+            throw new GradleException('NPC work dismount and mounted patrol safeguards are missing')
+
+        def blacksmithSmelt = new File(javaRoot, 'npc/ai/BlacksmithSmeltGoal.java').getText('UTF-8')
+        def workDiagnostics = new File(javaRoot, 'npc/command/NpcWorkCommand.java').getText('UTF-8')
+        def warehouseDeposit = new File(javaRoot, 'npc/ai/NpcWarehouseDepositGoal.java').getText('UTF-8')
+        def traderRoute = new File(javaRoot, 'npc/ai/TraderRouteGoal.java').getText('UTF-8')
+        def logisticsGoal = new File(javaRoot, 'npc/ai/NpcLogisticsGoal.java').getText('UTF-8')
+        def logisticsDataSource = new File(javaRoot, 'social/logistics/LogisticsData.java').getText('UTF-8')
+        def workContextSource = new File(javaRoot, 'social/work/NpcWorkContext.java').getText('UTF-8')
+        if (!blacksmithSmelt.contains('InteractionApproach.find')
+                || !blacksmithSmelt.contains('NpcWorkstationContainers.asFurnace')
+                || !workDiagnostics.contains('NpcWorkstationContainers.asFurnace')
+                || !warehouseDeposit.contains('MovementProgress')
+                || !traderRoute.contains('RoadRoutePlanner.nextWaypoint(npc')
+                || !logisticsGoal.contains('npc.dismountToBind()'))
+            throw new GradleException('Reachable workstation and mounted logistics recovery wiring is missing')
+        if (blacksmithSmelt.contains('WarehouseContainers.asContainer(level.getBlockEntity(furnace))')
+                || workDiagnostics.contains('WarehouseContainers.asContainer(player.serverLevel().getBlockEntity(furnace))'))
+            throw new GradleException('Furnaces must not be filtered through warehouse-only container rules')
+        if (blacksmithSmelt.contains('npc.getOwnerCharacterId() != null')
+                || !blacksmithSmelt.contains('NpcWorkContext.from(npc)')
+                || !logisticsGoal.contains('NpcWorkContext.from(npc)')
+                || !logisticsDataSource.contains('NpcWorkContext workContext')
+                || !workContextSource.contains('canUseWarehouse')
+                || !workContextSource.contains('canClaimOrder'))
+            throw new GradleException('Recruitment-safe NPC work context wiring is missing')
+        def lifeDataSource = new File(javaRoot, 'social/life/NpcLifeData.java').getText('UTF-8')
+        def sleepGoalSource = new File(javaRoot, 'npc/ai/NpcHomeSleepGoal.java').getText('UTF-8')
+        def interactionSource = new File(javaRoot, 'npc/network/NpcInteractionPacket.java').getText('UTF-8')
+        def agencySource = new File(javaRoot, 'social/life/NpcAgencyDecision.java').getText('UTF-8')
+        def ownerCombatSource = new File(javaRoot, 'npc/event/NpcOwnerCombatEvents.java').getText('UTF-8')
+        def characterLifecycle = new File(javaRoot,
+                'social/character/CharacterLifecycleEvents.java').getText('UTF-8')
+        def lifeCommandSource = new File(javaRoot, 'npc/command/NpcLifeCommand.java').getText('UTF-8')
+        def contractSource = new File(javaRoot, 'social/life/NpcEmploymentContract.java').getText('UTF-8')
+        def contractEvents = new File(javaRoot, 'social/life/NpcContractEvents.java').getText('UTF-8')
+        if (!workContextSource.contains('NpcWorkAuthority.SERVICE, npc.getOwnerCharacterId(), null')
+                || !lifeDataSource.contains('record.recruited')
+                || !interactionSource.contains('NpcLifeData.get(player.getServer()).onRecruited')
+                || !agencySource.contains('Math.log1p')
+                || !agencySource.contains('probability'))
+            throw new GradleException('Exclusive work authority or stochastic home-rest decision wiring is missing')
+        if (!lifeDataSource.contains('assignEmployerWorkZone')
+                || !lifeDataSource.contains('beginContract')
+                || !lifeCommandSource.contains('Commands.literal("contract")')
+                || !lifeCommandSource.contains('Commands.literal("storage")'))
+            throw new GradleException('Player life assignment and explicit contract commands are missing')
+        if (!contractSource.contains('BREACH_AFTER_MISSED_PAYMENTS')
+                || !contractEvents.contains('WarehouseContainers.asContainer')
+                || !contractEvents.contains('Items.EMERALD')
+                || !contractEvents.contains('privateStoragePosition')
+                || !lifeCommandSource.contains('Commands.literal("renew")')
+                || !lifeCommandSource.contains('Commands.literal("status")')
+                || !agencySource.contains('NpcContractStatus.IN_ARREARS')
+                || !lifeDataSource.contains('onAuthorityDeath')
+                || !lifeDataSource.contains('adjustRelationship'))
+            throw new GradleException('Physical wages, contract expiry, arrears, and agency feedback are missing')
+        def householdDataSource = new File(javaRoot, 'social/household/HouseholdData.java').getText('UTF-8')
+        def householdCommandSource = new File(javaRoot, 'social/household/HouseholdCommand.java').getText('UTF-8')
+        def householdCareSource = new File(javaRoot, 'social/household/HouseholdCareEvents.java').getText('UTF-8')
+        def householdCareGoal = new File(javaRoot, 'npc/ai/NpcHouseholdCareGoal.java').getText('UTF-8')
+        if (!householdDataSource.contains('householdByMember')
+                || !householdDataSource.contains('handleCharacterDeath')
+                || !householdCommandSource.contains('Commands.literal("storage")')
+                || !householdCommandSource.contains('Commands.literal("inspect")')
+                || !warehouseDeposit.contains('householdStorage')
+                || !warehouseDeposit.contains('outputCount() / 4'))
+            throw new GradleException('Household membership, succession, shared property, or partial contribution is missing')
+        if (!householdDataSource.contains('CareRecords')
+                || !householdCareSource.contains('household_food_shortage')
+                || !householdCareSource.contains('!level.hasChunkAt(household.sharedStorage())')
+                || !householdCareGoal.contains('Stage { LOAD_PRIVATE, DELIVER }')
+                || !householdCareGoal.contains('CONTRIBUTION_COOLDOWN')
+                || !householdCareGoal.contains('recordFoodContribution')
+                || !agencySource.contains('Action.CARE')
+                || !npcBaseSource.contains('NpcHouseholdCareGoal(this)'))
+            throw new GradleException('Household care assessment, physical food contribution, or agency feedback is missing')
+        def needsSource = new File(javaRoot, 'social/life/NpcNeedsRecord.java').getText('UTF-8')
+        def foodSource = new File(javaRoot, 'social/life/NpcFoodItems.java').getText('UTF-8')
+        def scheduleSource = new File(javaRoot, 'social/life/NpcSchedulePlanner.java').getText('UTF-8')
+        def eatGoalSource = new File(javaRoot, 'npc/ai/NpcEatGoal.java').getText('UTF-8')
+        def economyEvents = new File(javaRoot, 'social/economy/SettlementEconomyEvents.java').getText('UTF-8')
+        if (!lifeDataSource.contains('tag.put("Needs"')
+                || !needsSource.contains('MAX_HUNGER = 1000')
+                || !foodSource.contains('小麦可参与聚落的抽象制粮')
+                || !eatGoalSource.contains('Source { BAG, PRIVATE, HOUSEHOLD }')
+                || !eatGoalSource.contains('NpcAgencyDecision.Action.EAT')
+                || !npcBaseSource.contains('NpcEatGoal(this)')
+                || !lifeCommandSource.contains('Commands.literal("needs")')
+                || !lifeCommandSource.contains('Commands.literal("schedule")')
+                || !economyEvents.contains('distributeRations')
+                || !economyEvents.contains('NpcFoodItems.rationValues()'))
+            throw new GradleException('Persistent hunger, physical eating, or settlement ration feedback is missing')
+        if (!lifeDataSource.contains('tag.put("Schedules"')
+                || !scheduleSource.contains('isWorkWindow')
+                || !scheduleSource.contains('URGENT_NEEDS')
+                || !new File(javaRoot, 'npc/ai/FarmerWorkGoal.java').getText('UTF-8').contains('NpcSchedulePlanner.allowsWork')
+                || !new File(javaRoot, 'npc/ai/WorkerWorkGoal.java').getText('UTF-8').contains('NpcSchedulePlanner.allowsWork')
+                || !blacksmithSmelt.contains('NpcSchedulePlanner.allowsWork')
+                || !traderRoute.contains('NpcSchedulePlanner.allowsWork')
+                || !logisticsGoal.contains('NpcSchedulePlanner.allowsWork')
+                || !patrolGoalSource.contains('NpcSchedulePlanner.allowsPatrol')
+                || !sleepGoalSource.contains('NpcSchedulePlanner.allowsRest'))
+            throw new GradleException('Persistent schedules or shared work/rest/duty admission rules are missing')
+
+        def allAiGoals = aiGoalFiles.files.collect { it.getText('UTF-8') }.join('\n')
+        def actionDecisionSource = new File(javaRoot,
+                'social/life/NpcActionDecisionRecord.java').getText('UTF-8')
+        def economyDataSource = new File(javaRoot,
+                'social/economy/SettlementEconomyData.java').getText('UTF-8')
+        def groundRecoverySource = new File(javaRoot,
+                'npc/ai/NpcGroundItemRecoveryGoal.java').getText('UTF-8')
+        def blacksmithWorkSource = new File(javaRoot,
+                'npc/ai/BlacksmithWorkGoal.java').getText('UTF-8')
+        def medicSource = new File(javaRoot, 'npc/ai/MedicWorkGoal.java').getText('UTF-8')
+        def escortSource = new File(javaRoot, 'npc/ai/ConvoyEscortGoal.java').getText('UTF-8')
+        if (allAiGoals.contains('AiMutex.MOVE')
+                || !scheduleSource.contains('allowsStay')
+                || !npcBaseSource.contains('addGoal(2, new com.jgeted.sagadyssey.npc.ai.StayGoal'))
+            throw new GradleException('Vanilla GoalSelector preemption must own movement and urgent needs must preempt STAY')
+        if (!characterLifecycle.contains('onNpcJoin(EntityJoinLevelEvent')
+                || !characterLifecycle.contains('setPersistenceRequired()')
+                || !characterLifecycle.contains('ensureRegistered(npc')
+                || !lifeDataSource.contains('public NpcLifeRecord ensureRegistered'))
+            throw new GradleException('Every NPC spawn/load path must create persistent character and life records')
+        if (!economyDataSource.contains('shouldProcess(UUID settlementId, long day)')
+                || economyEvents.contains('economy.beginDay(day)')
+                || !economyEvents.contains('life.originSettlementId()')
+                || !economyEvents.contains('NaturalHouseholdMigrationData.residentSettlement')
+                || !economyEvents.contains('life != null'))
+            throw new GradleException('Settlement rations must use per-settlement days and registered residents only')
+        if (!ownerCombatSource.contains('defenderLife.relations()')
+                || !ownerCombatSource.contains('relatedVictim.getUUID(),')
+                || ownerCombatSource.contains('victimLife.relations()'))
+            throw new GradleException('Protection decisions must read defender-to-victim relationships')
+        if (!lifeDataSource.contains('tag.put("ActionDecisions"')
+                || !actionDecisionSource.contains('sameSubject')
+                || !agencySource.contains('data.actionDecision')
+                || !agencySource.contains('subjectCharacterId')
+                || !agencySource.contains('道德与信仰')
+                || !new File(javaRoot, 'social/life/NpcLifeRecord.java').getText('UTF-8')
+                        .contains('tag.putInt("Conscience"')
+                || !new File(javaRoot, 'social/life/NpcLifeRecord.java').getText('UTF-8')
+                        .contains('tag.putInt("Faith"'))
+            throw new GradleException('Agency decisions need per-action commitments, target context, and value terms')
+        if (!warehouseDeposit.contains('NpcSchedulePlanner.allowsWork')
+                || !groundRecoverySource.contains('NpcSchedulePlanner.allowsWork')
+                || !blacksmithWorkSource.contains('NpcAgencyDecision.Action.WORK')
+                || !medicSource.contains('NpcAgencyDecision.Action.CARE')
+                || !escortSource.contains('NpcAgencyDecision.Action.PROTECT'))
+            throw new GradleException('Support and continuation goals must respect schedules and agency')
+        if (!npcBaseSource.contains('hasBagSpaceForAll(ItemStack... incoming)')
+                || !blacksmithSmelt.contains('hasBagSpaceForAll(ironStack, coalStack)'))
+            throw new GradleException('Blacksmith supply pickup must reserve capacity for the whole batch atomically')
+
+        def characterRegistry = new File(javaRoot,
+                'social/character/CharacterRegistryData.java').getText('UTF-8')
+        if (!characterRegistry.contains('ensureNpcCharacter')
+                || !characterRegistry.contains('markCharacterDead')
+                || !characterLifecycle.contains('handleRegisteredNpcDeath'))
+            throw new GradleException('Registered NPCs must participate in persistent character death')
+
+        def json = new groovy.json.JsonSlurper()
+        resourceJsonFiles.files.each { resource ->
+            try { json.parse(resource, 'UTF-8') }
+            catch (Exception exception) {
+                throw new GradleException("Invalid JSON resource: ${resource}", exception)
+            }
+        }
+    }
+}
+
+// GameTests remain available to development runs but are never shipped to players.
+tasks.named('jar', Jar) {
+    exclude('**/*GameTests*.class')
+}
+
+tasks.register('verifyProductionJar') {
+    dependsOn tasks.named('jar')
+    def artifact = tasks.named('jar', Jar).flatMap { it.archiveFile }
+    inputs.file(artifact)
+    doLast {
+        def leakedTests = []
+        def archive = new java.util.zip.ZipFile(artifact.get().asFile)
+        try {
+            archive.entries().each { entry ->
+                if ((entry.name.contains('GameTests') && entry.name.endsWith('.class'))
+                        || entry.name.endsWith('.py'))
+                    leakedTests.add(entry.name)
+            }
+        } finally {
+            archive.close()
+        }
+        if (!leakedTests.isEmpty())
+            throw new GradleException("Development-only files in production JAR: ${leakedTests}")
+    }
+}
+
+tasks.named('check') {
+    dependsOn tasks.named('verifySocialSystem'), tasks.named('verifyProductionJar')
 }
 
 // IDEA no longer automatically downloads sources/javadoc jars for dependencies, so we need to explicitly enable the behavior.

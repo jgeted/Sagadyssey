@@ -1,0 +1,11 @@
+Use case: historical-scene
+Asset type: concept board for a Minecraft Java Edition medieval NPC social-status system
+Primary request: create one clean lineup showing seven distinct social identities from lowest to highest: commoner, freeman, burgher, knight, lord, duke, king. Exactly seven full-body blocky Minecraft-proportioned human characters, evenly spaced from left to right, each facing mostly forward with a slight three-quarter turn. No written labels or text; the HTML gallery will supply labels.
+Scene/backdrop: neutral warm parchment studio background with a subtle floor shadow, no scenery
+Subject: historically grounded Western/Central European clothing circa 1250-1350. Commoner in coarse undyed short tunic; freeman in better fitted wool with a plain belt; burgher in clean dyed town clothing and hood; knight represented by a restrained cloth surcoat and formal bearing but NO armor; lord in a longer lined mantle; duke in rich but plausible wool/silk mantle with narrow heraldic trim; king in the finest long mantle with restrained fur edging. Express status mostly through cloth quality, dye saturation, garment length, trim, posture and gesture.
+Style/medium: polished Minecraft-compatible voxel character concept render, crisp pixel-texture logic, realistic muted medieval palette, readable silhouettes, not photorealistic humans
+Composition/framing: wide horizontal seven-character lineup, full figures entirely visible, consistent scale and camera
+Lighting/mood: soft museum-catalog lighting, dignified and grounded
+Color palette: undyed beige and brown rising through muted madder red, woad blue, deep green and restrained purple; no neon colors
+Materials/textures: linen, wool, leather belt, limited silk and fur only at the upper ranks
+Constraints: clothing-only identity design; no weapons, no tools, no armor, no shields; no crown, coronet, scepter or jewelry baked into the king because those will be separate Minecraft equipment items; no fantasy races; no plague-doctor mask; no late medieval full plate; no Renaissance fashion; no watermark; exactly seven characters

@@ -1,0 +1,171 @@
+{
+  "status": "FROZEN_BEFORE_RUN",
+  "startedUtc": "2026-10-31T04:24:40Z",
+  "deadlineUtc": "2026-10-31T05:24:40Z",
+  "globalLimitSeconds": 3600,
+  "productionAllowed": [
+    "src/main/java/com/jgeted/sagadyssey/social/growth/SettlementGrowthData.java"
+  ],
+  "schemaAndRightsChangesForbidden": true,
+  "600Event": "original normal FOOD successful pickup with actual source debit and personal bag receipt, not detection/plan/navigation",
+  "deliveryDeadlineElapsedTicks": 2400,
+  "deliveryClockStart": "actual successful pickup tick",
+  "resumeQualifiedTicks": 600,
+  "qualification": "live original person/body, loaded, WORK at frozen day6000, actual authority/food floor/source/permissions/demand ready and actual bag fit; internal TransferRetryAt/RetryAt/polling/stale STAY cache count, unknown never silently excluded; actual life/safety/rest reason recorded; no reset",
+  "observation": "all elapsed ticks retained, measure frozen predicate each tick; snapshot first601 failure then stop rather than change criteria",
+  "initializationMaxTicks": 1600,
+  "failurePreparationMaxTicks": 2400,
+  "nativeTotalTicks": 8000,
+  "allPrepIncluded": true,
+  "fixedWorld": "full original READY checkpoint2,9 original adults3HH, full linked ledger/body checks, original finite goods+29 explicitly external initial carrots in private RAW empty slot26; fixed day6000, spawningfalse(all natural mobs),randomTick3; declared24 testglass removed; no resource resupply after initialization except explicitly lawful original stock movement interventions",
+  "initialCapacityObstacle": "36 of original public46 stones formally gifted to original courier then split1/slot during setup, public10/other original28/bag36 total74; no invented stone; same36 returned by original person at frozen event",
+  "N07InitialDifference": "24 extra RAW instead29 ->RAW25; declared original farmer bag has14 carrots; original1 formally gifted from own bag toRAW after first failure, no new goods, bag13 retains12 seed",
+  "quantityReevaluation": "only after authoritative CAPACITY_EXCEEDED with no final revisions/physical commit, stable actor/source/dest/item/authority same; current q must match real deficit and legally available amount; new failed/successful attempt IDs and identities retain both quantities; success cache strict matching unchanged",
+  "cases": [
+    {
+      "id": "N01",
+      "meaning": "capacity released failure+1, pickup<=600 qualified then real drop<=2400 elapsed from pickup",
+      "maxWallSeconds": 180,
+      "runLabel": "food-cap-n01-20261031-01",
+      "phase": "counter-foodcap-n01",
+      "mode": "normal_FOOD_with_declared_intervention"
+    },
+    {
+      "id": "N02",
+      "meaning": "bag remains full1600 ticks including beyond1200, no repeated submission; release then same pickup/drop criteria",
+      "maxWallSeconds": 180,
+      "runLabel": "food-cap-n02-20261031-01",
+      "phase": "counter-foodcap-n02",
+      "mode": "normal_FOOD_with_declared_intervention"
+    },
+    {
+      "id": "N03",
+      "meaning": "release capacity but original courier STAY400 ticks; WORK restored then pickup<=600 inclusive old STAY cache delays, normal drop<=2400",
+      "maxWallSeconds": 180,
+      "runLabel": "food-cap-n03-20261031-01",
+      "phase": "counter-foodcap-n03",
+      "mode": "normal_FOOD_with_declared_intervention"
+    },
+    {
+      "id": "N04",
+      "meaning": "confirmed capacity failure, remove its receipt only in new isolated negative evidence fixture; release; Review without new actualId; observe400 ticks",
+      "maxWallSeconds": 150,
+      "runLabel": "food-cap-n04-20261031-01",
+      "phase": "counter-foodcap-n04",
+      "mode": "normal_FOOD_with_declared_intervention"
+    },
+    {
+      "id": "N05",
+      "meaning": "nonFOOD capacity failure retains1200 even space released+1; exactly one lawful retry at boundary",
+      "maxWallSeconds": 120,
+      "runLabel": "food-cap-n05-20261031-01",
+      "phase": "counter-foodcap-n05",
+      "mode": "component"
+    },
+    {
+      "id": "N06",
+      "meaning": "FOOD direct component RIGHTS_DENIED retains1200 after lawful grant restoration+1; no expedited attempt",
+      "maxWallSeconds": 120,
+      "runLabel": "food-cap-n06-20261031-01",
+      "phase": "counter-foodcap-n06",
+      "mode": "component"
+    },
+    {
+      "id": "N07",
+      "meaning": "initial RAW25, confirmed no-effect failureq8; failure+1 legal original1 carrot from farmer bag toRAW and free bag; re-evaluate q9, actual pickup/drop and old failed receipt retained",
+      "maxWallSeconds": 180,
+      "runLabel": "food-cap-n07-20261031-01",
+      "phase": "counter-foodcap-n07",
+      "mode": "normal_FOOD_with_declared_intervention"
+    }
+  ],
+  "regressions": [
+    {
+      "id": "T01",
+      "phase": "counter-cache-t01",
+      "runLabel": "food-cap-reg-t01-20261031-01",
+      "maxWallSeconds": 120,
+      "mode": "cached_identity_regression"
+    },
+    {
+      "id": "T02",
+      "phase": "counter-cache-t02",
+      "runLabel": "food-cap-reg-t02-20261031-01",
+      "maxWallSeconds": 120,
+      "mode": "cached_identity_regression"
+    },
+    {
+      "id": "T03",
+      "phase": "counter-cache-t03",
+      "runLabel": "food-cap-reg-t03-20261031-01",
+      "maxWallSeconds": 120,
+      "mode": "cached_identity_regression"
+    },
+    {
+      "id": "T04",
+      "phase": "counter-cache-t04",
+      "runLabel": "food-cap-reg-t04-20261031-01",
+      "maxWallSeconds": 120,
+      "mode": "cached_identity_regression"
+    },
+    {
+      "id": "E01",
+      "phase": "counter-cache-e01",
+      "runLabel": "food-cap-reg-e01-20261031-01",
+      "maxWallSeconds": 120,
+      "mode": "cached_identity_regression"
+    },
+    {
+      "id": "E02",
+      "phase": "counter-cache-e02",
+      "runLabel": "food-cap-reg-e02-20261031-01",
+      "maxWallSeconds": 120,
+      "mode": "cached_identity_regression"
+    },
+    {
+      "id": "E03",
+      "phase": "counter-cache-e03",
+      "runLabel": "food-cap-reg-e03-20261031-01",
+      "maxWallSeconds": 120,
+      "mode": "cached_identity_regression"
+    },
+    {
+      "id": "E04",
+      "phase": "counter-cache-e04",
+      "runLabel": "food-cap-reg-e04-20261031-01",
+      "maxWallSeconds": 120,
+      "mode": "cached_identity_regression"
+    },
+    {
+      "id": "F03",
+      "phase": "counter-cache-f03",
+      "runLabel": "food-cap-reg-f03-20261031-01",
+      "maxWallSeconds": 120,
+      "mode": "controlled_initial29_actual_FOOD"
+    },
+    {
+      "id": "F04",
+      "phase": "counter-cache-f04",
+      "runLabel": "food-cap-reg-f04-20261031-01",
+      "maxWallSeconds": 120,
+      "mode": "controlled_initial29_actual_FOOD"
+    }
+  ],
+  "logic": "existing final46 plus new evidence matching and GIFT capacity parity tests; no broad long tests",
+  "noOldUnsupportedItemsPromoted": [
+    "oldF01",
+    "oldF02",
+    "T05",
+    "T06",
+    "T08",
+    "T09",
+    "strict model-native pairing"
+  ],
+  "stop": "hard failure preserve first state and stop this case; no blind retry, production expansion requires approval; same issue3 no progress stop affected path",
+  "allowedTests": [
+    "new SettlementFoodCapacityRecoveryGameTests.java",
+    "new SettlementFoodCapacityPolicyTest.java",
+    "existing cache-binding regressions unchanged"
+  ],
+  "bounds": "per-case budgets include setup/build/run and retry, overall60 includes preservation/design/implementation/reports"
+}

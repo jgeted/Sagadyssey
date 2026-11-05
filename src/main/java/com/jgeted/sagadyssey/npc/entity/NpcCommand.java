@@ -11,5 +11,7 @@ public enum NpcCommand {
     /** 原地待命，不移动 */
     STAY,
     /** 就地工作（务农/伐木挖矿，按职业） */
-    WORK
+    WORK,
+    /** 沿驻地周围的巡逻节点循环，遇敌时由战斗 AI 接管 */
+    PATROL
 }

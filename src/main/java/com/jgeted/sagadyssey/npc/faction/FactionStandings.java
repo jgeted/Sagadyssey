@@ -6,6 +6,7 @@ import net.minecraft.util.ExtraCodecs;
 
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -31,6 +32,7 @@ public class FactionStandings {
 
     // === 持久化字段 ===
     private final Map<String, Integer> standings = new HashMap<>();
+    private final Set<String> knownFactionIds = new HashSet<>();
 
     /** 玩家自定义阵营名称（null = 使用默认 "玩家阵营"） */
     private String playerFactionName = null;
@@ -42,7 +44,9 @@ public class FactionStandings {
     /** 已触发劫掠者忠诚惩罚的文明阵营ID集合（不持久化） */
     private final Set<String> loyaltyPenaltyApplied = new HashSet<>();
 
-    public FactionStandings() {}
+    public FactionStandings() {
+        knownFactionIds.add("sagadyssey:player");
+    }
 
     // === 查询方法 ===
 
@@ -100,6 +104,22 @@ public class FactionStandings {
         return playerFactionName;
     }
 
+    /** 记录玩家已经通过接触或直接事件获知的阵营。 */
+    public boolean discoverFaction(String factionId) {
+        if (factionId == null || factionId.isBlank()) return false;
+        return knownFactionIds.add(factionId);
+    }
+
+    public boolean isFactionKnown(String factionId) {
+        return "sagadyssey:player".equals(factionId) || knownFactionIds.contains(factionId);
+    }
+
+    public Set<String> getKnownFactionIds() {
+        Set<String> result = new HashSet<>(knownFactionIds);
+        result.add("sagadyssey:player");
+        return Set.copyOf(result);
+    }
+
     /**
      * 设置玩家自定义阵营名称。
      * 自动过滤 § 格式码、截断至最大长度、trim。
@@ -117,6 +137,17 @@ public class FactionStandings {
             cleaned = cleaned.substring(0, 16);
         }
         this.playerFactionName = cleaned.isEmpty() ? null : cleaned;
+    }
+
+    /** 永久角色死亡后清除上一世的社会关系；普通的游戏性死亡不会调用。 */
+    public void resetForNewCharacter() {
+        standings.clear();
+        knownFactionIds.clear();
+        knownFactionIds.add("sagadyssey:player");
+        playerFactionName = null;
+        lastInteractionTick.clear();
+        dailyRippleReceived.clear();
+        loyaltyPenaltyApplied.clear();
     }
 
     /** 获取所有敌对阵营（HATED） */
@@ -248,17 +279,20 @@ public class FactionStandings {
 
     // === Codec 序列化 ===
 
-    /** Codec：序列化 standings Map 和 playerFactionName */
+    /** Codec：序列化声望、已发现阵营和玩家阵营名称。 */
     public static final Codec<FactionStandings> CODEC = RecordCodecBuilder.create(instance ->
             instance.group(
                     Codec.unboundedMap(Codec.STRING, Codec.INT)
                             .optionalFieldOf("standings", new HashMap<>())
                             .forGetter(fs -> fs.standings),
+                    Codec.STRING.listOf().optionalFieldOf("knownFactions", List.of())
+                            .forGetter(fs -> List.copyOf(fs.knownFactionIds)),
                     Codec.STRING.optionalFieldOf("playerFactionName", "")
                             .forGetter(fs -> fs.playerFactionName == null ? "" : fs.playerFactionName)
-            ).apply(instance, (standings, playerFactionName) -> {
+            ).apply(instance, (standings, knownFactions, playerFactionName) -> {
                 FactionStandings fs = new FactionStandings();
                 fs.standings.putAll(standings);
+                knownFactions.forEach(fs::discoverFaction);
                 if (!playerFactionName.isEmpty()) {
                     fs.playerFactionName = playerFactionName;
                 }

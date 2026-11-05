@@ -1,0 +1,9 @@
+package com.jgeted.sagadyssey.social.needs;
+import com.jgeted.sagadyssey.social.production.*;import com.jgeted.sagadyssey.social.industry.workshop.WorkshopTask;import com.jgeted.sagadyssey.worldsim.rights.*;import net.minecraft.core.BlockPos;import org.junit.jupiter.api.Test;import java.util.*;import static org.junit.jupiter.api.Assertions.*;
+class WorkshopMaterialClosureTest {
+ @Test void onlyExactRealCompletedWoodBatchClosesUncommittedObsoleteInput(){
+  var owner=SubjectRef.character(UUID.randomUUID());var input=new ProductionMaterial(new ItemFingerprint("minecraft:oak_log",0),3);var output=new ProductionMaterial(new ItemFingerprint("minecraft:oak_planks",0),12);var o=ProductionOrder.open(UUID.randomUUID(),owner,owner,WorkshopTask.PLANKS,List.of(input),output,200,UUID.randomUUID(),"minecraft:overworld",BlockPos.ZERO,UUID.randomUUID(),"minecraft:overworld",BlockPos.ZERO,1,"wood").claim(UUID.randomUUID(),2,"actual worker").transition(ProductionOrderStatus.RESERVED,3,"reserved").transition(ProductionOrderStatus.IN_PROGRESS,4,"work").transition(ProductionOrderStatus.SETTLING,204,"settled").transition(ProductionOrderStatus.COMPLETED,205,"done");
+  var b=new ProductionBatch(o.batchId(),o.recipeId(),o.assignedWorkerId(),owner,o.targetContainerId(),o.inputs(),o.output(),200,4,205,ProductionBatchStatus.COMPLETED,"actual batch");var r=NeedRequest.open(new NeedRequest.Key(owner.id(),"CHARACTER:production:"+o.id(),input.fingerprint(),o.targetContainerId(),0,10000),3,32,1);
+  assertTrue(SupplyFlowService.uncommittedUnitMaterialIsRedundant(r,o,b));assertFalse(SupplyFlowService.uncommittedUnitMaterialIsRedundant(r,o,null));assertFalse(SupplyFlowService.uncommittedUnitMaterialIsRedundant(r.reserve(1,206),o,b));
+ }
+}

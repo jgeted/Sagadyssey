@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>Sagadyssey · 活世界系统演示</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-rune" aria-hidden="true">S</span>
+        <div>
+          <p class="overline">SAGADYSSEY · WORLD SIMULATION</p>
+          <h1>河桥纪事</h1>
+        </div>
+      </div>
+      <div class="world-clock" aria-label="世界时间与地点">
+        <span class="sun-mark" aria-hidden="true"></span>
+        <div><strong>第 12 日 · 黄昏前</strong><small>河桥聚落 · 收获季</small></div>
+        <i></i>
+        <div><strong id="worldStatus">粮食紧张</strong><small id="worldStatusNote">东区只能维持约一天</small></div>
+      </div>
+      <div class="top-actions">
+        <button class="quiet-button" id="truthToggle" type="button" aria-pressed="false">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v14H4zM8 9h8M8 13h5"/></svg>后台真相
+        </button>
+        <button class="square-button" id="resetButton" type="button" aria-label="重置演示" title="重置演示">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11a8 8 0 1 1 2 6M4 5v6h6"/></svg>
+        </button>
+      </div>
+    </header>
+
+    <aside class="system-rail" aria-label="世界系统">
+      <nav>
+        <button class="system-tab active" data-view="person" type="button" aria-current="page">
+          <span class="rail-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3"/><path d="M6 20v-2a6 6 0 0 1 12 0v2"/></svg></span>
+          <span>人物</span><small>认识与约定</small>
+        </button>
+        <button class="system-tab" data-view="social" type="button">
+          <span class="rail-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="7" cy="8" r="2.5"/><circle cx="17" cy="8" r="2.5"/><circle cx="12" cy="17" r="2.5"/><path d="m9 10 2 4m4-4-2 4M9.5 8h5"/></svg></span>
+          <span>社会</span><small>身份与义务</small>
+        </button>
+        <button class="system-tab" data-view="economy" type="button">
+          <span class="rail-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 18h16M6 18v-7h4v7m4 0V6h4v12M5 7l5-3 4 2 5-3"/></svg></span>
+          <span>生计</span><small>库存与流动</small><i class="rail-alert" id="economyAlert"></i>
+        </button>
+        <button class="system-tab" data-view="combat" type="button">
+          <span class="rail-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 19 5-5m2-2 5-5m-8-3 3 3-6 6-3-3m10 10-3-3 6-6 3 3"/></svg></span>
+          <span>行动</span><small>护送与战斗</small><i class="rail-alert danger" id="combatAlert" hidden></i>
+        </button>
+      </nav>
+      <div class="rail-foot"><span>L0</span><small>实体模拟</small></div>
+    </aside>
+
+    <section class="story-thread" aria-label="当前世界事件链">
+      <div class="thread-intro"><p class="overline">同一件事 · 四个系统</p><strong>粮荒前的三天</strong></div>
+      <div class="thread-path" id="threadPath">
+        <button class="thread-step active" data-jump="person" data-stage="known" type="button"><span>1</span><div><strong>玛拉求助</strong><small>家庭与工坊</small></div></button>
+        <i></i>
+        <button class="thread-step" data-jump="economy" data-stage="contract" type="button"><span>2</span><div><strong>接受运输</strong><small>真实仓储</small></div></button>
+        <i></i>
+        <button class="thread-step" data-jump="combat" data-stage="convoy" type="button"><span>3</span><div><strong>穿过林道</strong><small>有限指挥</small></div></button>
+        <i></i>
+        <button class="thread-step" data-jump="social" data-stage="resolved" type="button"><span>4</span><div><strong>世界记住</strong><small>关系与后果</small></div></button>
+      </div>
+      <div class="thread-impact"><span>影响对象</span><strong>3 户家庭 · 1 个工坊 · 东区市集</strong></div>
+    </section>
+
+    <main class="main-stage">
+      <section class="system-view active" id="view-person" data-view-panel="person" aria-label="人物交互">
+        <div class="person-scene">
+          <div class="scene-art" aria-hidden="true">
+            <div class="sky-glow"></div><div class="ridge ridge-far"></div><div class="ridge ridge-near"></div>
+            <div class="forge"><div class="forge-chimney"><i></i></div><div class="forge-roof"></div><div class="forge-wall"><span class="forge-window"></span><span class="forge-door"></span></div><div class="forge-sign">⚒</div></div>
+            <div class="market-stall"><i></i><i></i><i></i><span></span></div><div class="scene-ground"></div><div class="road"></div><div class="crate c1"></div><div class="crate c2"></div>
+          </div>
+          <div class="scene-heading"><p class="overline">近身互动 · 玩家所见</p><h2>铁匠铺外的玛拉</h2><span>精确信息留在服务端；这里呈现你的观察、她的陈述与共同经历。</span></div>
+          <div class="npc-composition">
+            <div class="speech-bubble" id="npcSpeech"><span>观察</span><p>她停下手里的活，反复望向通往东区的路。</p></div>
+            <div class="npc-shadow"></div>
+            <div class="pixel-person mara" aria-label="玛拉的场景化形象"><i class="hair"></i><i class="head"><b></b><b></b></i><i class="torso"><b>⚒</b></i><i class="arm arm-l"></i><i class="arm arm-r"></i><i class="leg leg-l"></i><i class="leg leg-r"></i></div>
+            <div class="world-label"><strong>玛拉</strong><span>铁匠学徒 · 看起来疲惫</span></div>
+          </div>
+          <div class="held-strip"><span class="item-swatch bread-swatch">▰</span><div><small>你的手中</small><strong>面包 × <b id="breadCount">5</b></strong></div><i></i><div><small>可直接执行</small><strong>递交一份，无需打开背包</strong></div></div>
+          <div class="context-actions" aria-label="人物情境动作">
+            <button class="context-action primary" id="talkAction" type="button"><kbd>E</kbd><span><strong>交谈</strong><small>问她为何望向东区</small></span></button>
+            <button class="context-action" id="giftAction" type="button"><kbd>G</kbd><span><strong>递出面包</strong><small>赠礼 · 一份</small></span></button>
+            <button class="context-action" id="tradeAction" type="button" disabled><kbd>T</kbd><span><strong>提出交换</strong><small id="tradeActionNote">先了解她的需求</small></span></button>
+            <button class="context-action" id="contractAction" type="button" disabled><kbd>C</kbd><span><strong>签订护送约定</strong><small id="contractActionNote">需要先形成可信往来</small></span></button>
+          </div>
+        </div>
+        <aside class="knowledge-panel">
+          <header class="panel-header"><div class="portrait-mark">玛<span>⚒</span></div><div><p class="overline">人物志 · 不是属性检查器</p><h2>玛拉</h2><span class="source-pill observed">部分了解</span></div></header>
+          <div class="relationship-read"><span>你们的关系</span><strong id="relationshipLabel">只是见过几面</strong><div class="soft-meter"><i id="relationMeter"></i></div></div>
+          <div class="knowledge-block system-glimpse-block"><div class="block-title"><span>你所理解的处境</span><small>社会 · 经济 · 战斗</small></div><div class="system-glimpses" id="systemGlimpses"></div></div>
+          <div class="knowledge-list" id="knowledgeList"></div>
+          <div class="knowledge-block"><div class="block-title"><span>她愿意展示的财物</span><small>不是完整物品栏</small></div><div class="visible-goods" id="visibleGoods"><em>交谈后才会出现</em></div></div>
+          <div class="knowledge-block contract-preview"><div class="block-title"><span>约定与权限</span><small id="contractState">尚无</small></div><p id="contractSummary">你现在不能命令她跟随、作战或处分她的财物。</p></div>
+          <div class="source-legend"><span><i class="dot observed"></i>观察</span><span><i class="dot stated"></i>本人所述</span><span><i class="dot record"></i>共同记录</span></div>
+        </aside>
+      </section>
+
+      <section class="system-view" id="view-social" data-view-panel="social" aria-label="社会结构">
+        <div class="social-map panel-surface">
+          <header class="view-heading"><div><p class="overline">社会不是一条阶级进度条</p><h2>玛拉所处的关系网</h2></div><div class="view-filters" role="group" aria-label="关系图信息来源"><button class="filter-button active" data-social-filter="known" type="button">你已知的</button><button class="filter-button" data-social-filter="public" type="button">公开制度</button></div></header>
+          <div class="network-canvas" id="networkCanvas">
+            <svg class="network-lines" viewBox="0 0 1000 620" preserveAspectRatio="none" aria-hidden="true">
+              <path class="edge kin" d="M500 300 C360 255 300 205 205 160"/><path class="edge kin" d="M500 300 C370 355 310 425 205 465"/><path class="edge guild" d="M500 300 C610 210 650 140 760 125"/><path class="edge civic" d="M500 300 C650 315 740 300 850 330"/><path class="edge contract" id="playerMaraEdge" d="M500 300 C475 420 490 500 510 555"/><path class="edge supply" d="M760 125 C855 170 875 225 850 330"/><path class="edge civic faint" d="M205 465 C420 510 650 465 850 330"/>
+            </svg>
+            <button class="network-node person-node mara-node selected" data-node="mara" type="button"><span>玛</span><strong>玛拉</strong><small>铁匠学徒</small></button>
+            <button class="network-node person-node" style="--x:20.5%;--y:16%" data-node="daina" type="button"><span>黛</span><strong>黛娜</strong><small>母亲 · 户主</small></button>
+            <button class="network-node person-node" style="--x:20.5%;--y:74%" data-node="rusk" type="button"><span>鲁</span><strong>鲁斯克</strong><small>弟弟 · 受抚养</small></button>
+            <button class="network-node institution-node" style="--x:76%;--y:13%" data-node="guild" type="button"><span>⚒</span><strong>铁匠行会</strong><small>资格与工具</small></button>
+            <button class="network-node institution-node" style="--x:85%;--y:53%" data-node="council" type="button"><span>⌂</span><strong>河桥议事会</strong><small>仓储与公共秩序</small></button>
+            <button class="network-node player-node" style="--x:51%;--y:89%" data-node="player" type="button"><span>你</span><strong>旅人</strong><small id="playerSocialRole">没有正式关系</small></button>
+            <div class="edge-label" style="--x:34%;--y:27%">照料与代表</div><div class="edge-label" style="--x:33%;--y:60%">供养义务</div><div class="edge-label" style="--x:64%;--y:26%">学徒契约</div><div class="edge-label" style="--x:69%;--y:49%">居民义务</div><div class="edge-label contract-label" id="contractEdgeLabel" style="--x:51%;--y:68%">尚无约定</div>
+          </div>
+          <footer class="map-legend"><span><i class="line kin"></i>亲属与照料</span><span><i class="line guild"></i>职业制度</span><span><i class="line civic"></i>公共身份</span><span><i class="line contract"></i>你参与的约定</span></footer>
+        </div>
+        <aside class="social-detail panel-surface"><div id="socialDetail"></div><div class="consequence-card" id="socialConsequence"><p class="overline">世界会记住行为</p><strong>结果尚未发生</strong><span>履约、逃跑、伤亡和货损会分别改变家庭、行会与议事会对你的判断。</span></div></aside>
+      </section>
+
+      <section class="system-view" id="view-economy" data-view-panel="economy" aria-label="经济与物流">
+        <div class="economy-board panel-surface">
+          <header class="view-heading"><div><p class="overline">实体经济 · 没有凭空刷新的商品</p><h2>东区的面包从哪里来</h2></div><div class="ledger-stamp"><span>仓册</span><strong>今日 15:10</strong><small>你有委托查阅权</small></div></header>
+          <div class="economy-metrics">
+            <article><span>北仓可调拨</span><strong id="northStockMetric">86</strong><small>个面包 · 公共储备</small></article><article class="warn"><span>东区现货</span><strong id="eastStockMetric">7</strong><small>个面包 · 不足一日</small></article><article><span>三户每日所需</span><strong>18</strong><small>估算 · 会随人口变化</small></article><article><span>本地成交</span><strong>以物易物</strong><small>绿宝石仅是可接受物之一</small></article>
+          </div>
+          <div class="supply-canvas">
+            <svg class="flow-lines" viewBox="0 0 1000 430" preserveAspectRatio="none" aria-hidden="true"><defs><linearGradient id="breadFlow" x1="0" x2="1"><stop offset="0" stop-color="#d9a44d"/><stop offset="1" stop-color="#e6c982"/></linearGradient></defs><path class="route-base" d="M170 205 C340 125 430 160 525 215 S735 310 850 200"/><path class="route-flow" id="activeFlow" d="M170 205 C340 125 430 160 525 215 S735 310 850 200"/></svg>
+            <div class="terrain forest-a"></div><div class="terrain forest-b"></div><div class="terrain river"></div>
+            <button class="supply-node granary-node" type="button"><span class="building-icon">▦</span><strong>北仓</strong><small id="northStockNode">86 面包</small><em>议事会管理</em></button>
+            <button class="supply-node convoy-node" id="convoyNode" type="button"><span class="building-icon">♞</span><strong>运输队</strong><small id="convoyStockNode">尚未装货</small><em id="convoyStateLabel">等待承运人</em></button>
+            <button class="supply-node market-node" type="button"><span class="building-icon">⌂</span><strong>东区市集</strong><small id="marketStockNode">7 面包</small><em>三户家庭取用</em></button>
+            <span class="route-label origin">出库要有凭据</span><span class="route-label destination">到货后才成为供给</span>
+          </div>
+        </div>
+        <aside class="economy-side panel-surface">
+          <div class="side-section"><p class="overline">公开运输委托 #RH-17</p><h3>把 24 个面包送到东区</h3><div class="order-route"><span>北仓</span><i>12 分钟林道</i><span>东区市集</span></div><dl class="order-facts"><div><dt>货主</dt><dd>河桥议事会</dd></div><div><dt>承运人</dt><dd id="carrierFact">尚未确定</dd></div><div><dt>护送者</dt><dd id="escortFact">尚未确定</dd></div><div><dt>报酬</dt><dd>4 绿宝石 + 口粮</dd></div><div><dt>处分权</dt><dd>无 · 只能保管与交付</dd></div></dl><button class="wide-action" id="acceptOrderAction" type="button" disabled><span>接受并装载真实货物</span><small id="acceptOrderNote">先与玛拉签订护送约定</small></button></div>
+          <div class="side-section market-evidence"><div class="block-title"><span>市场不是全局价格表</span><small>近三笔可验证成交</small></div><ul><li><strong>木炭 ×12 + 绿宝石 ×2</strong><span>换铁锄 ×1 · 今日</span></li><li><strong>小麦 ×8</strong><span>换木炭 ×5 · 昨日</span></li><li><strong>绿宝石 ×1</strong><span>换面包 ×3 · 三日前</span></li></ul></div>
+          <div class="integrity-note"><span>◇</span><p><strong>守恒检查</strong><small id="integrityText">面包总量：北仓 86 + 东区 7；没有在 UI 打开时生成商品。</small></p></div>
+        </aside>
+      </section>
+
+      <section class="system-view" id="view-combat" data-view-panel="combat" aria-label="战斗与指挥">
+        <div class="battle-board panel-surface">
+          <header class="view-heading battle-heading"><div><p class="overline">战斗是物流与关系的后果</p><h2 id="battleTitle">林道护送计划</h2></div><div class="mission-state" id="missionState"><i></i><span>尚未出发</span></div></header>
+          <div class="battlefield" id="battlefield">
+            <div class="grid-overlay"></div><div class="battle-river"></div><div class="battle-road"></div><div class="tree-cluster t1">♠♠♠</div><div class="tree-cluster t2">♠♠</div><div class="tree-cluster t3">♠♠♠</div><div class="rock-cluster">◆ ◆</div>
+            <svg class="battle-overlay" viewBox="0 0 1000 570" preserveAspectRatio="none" aria-hidden="true"><path class="patrol-boundary" d="M165 300 C245 190 475 155 650 245 S780 430 620 500 250 470 165 300Z"/><path class="sight-line" id="sightLine" d="M450 330 L720 210"/><path class="intent-arrow" id="intentArrow" d="M360 365 C500 350 650 330 800 300" marker-end="url(#arrow)"/><defs><marker id="arrow" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0 0 6 3 0 6Z"/></marker></defs></svg>
+            <div class="map-caption north-caption">北仓方向</div><div class="map-caption east-caption">东区市集</div>
+            <button class="unit convoy-unit" id="battleConvoy" type="button"><span>♞</span><strong>货驴</strong><small id="battleCargo">24 面包</small></button><button class="unit ally-unit mara-unit" id="maraUnit" type="button"><span>弓</span><strong>玛拉</strong><small id="maraBattleState">弓已上弦</small></button><button class="unit ally-unit player-unit" type="button"><span>你</span><strong>旅人</strong><small>委托承运人</small></button><button class="unit hostile-unit raider-one" id="raiderOne" type="button"><span>?</span><strong>可疑身影</strong><small>最后所见</small></button><button class="unit hostile-unit raider-two" id="raiderTwo" type="button"><span>?</span><strong>未知</strong><small>林中声响</small></button>
+            <div class="fog-patch fog-one"></div><div class="fog-patch fog-two"></div><div class="battle-callout" id="battleCallout"><span>计划</span><p>虚线表示约定允许的活动范围。尚无命令权时，你只能提出请求。</p></div>
+          </div>
+          <div class="command-ribbon" aria-label="战斗命令"><div class="command-scope"><span>当前授权</span><strong id="commandScope">无护送约定</strong><small id="commandScopeDetail">无法向玛拉下达战斗指令</small></div><button class="command-button active" data-order="escort" type="button" disabled><span>护</span><div><strong>贴身护送</strong><small>守住货物，不追击</small></div></button><button class="command-button" data-order="hold" type="button" disabled><span>守</span><div><strong>占据路口</strong><small>掩护运输队通过</small></div></button><button class="command-button" data-order="retreat" type="button" disabled><span>退</span><div><strong>带货撤退</strong><small>优先保存人员与货物</small></div></button></div>
+        </div>
+        <aside class="combat-side panel-surface">
+          <div class="side-section"><p class="overline">共同态势 · 不是上帝视角</p><h3>你能据此作决定</h3><div class="combat-readouts"><article><span class="readout-icon">◎</span><div><small>任务</small><strong>护送面包抵达东区</strong></div></article><article><span class="readout-icon">♢</span><div><small>队伍</small><strong id="cohesionReadout">尚未组成</strong></div></article><article><span class="readout-icon">➶</span><div><small>弹药</small><strong id="ammoReadout">玛拉自带；数量不详</strong></div></article><article><span class="readout-icon">◒</span><div><small>威胁</small><strong id="threatReadout">路线传闻有劫匪</strong></div></article></div></div>
+          <div class="side-section combat-log-section"><div class="block-title"><span>战场事件</span><small>只记录可观察结果</small></div><ol class="combat-log" id="combatLog"><li><time>计划</time><p>接受运输委托后，队伍才能出发。</p></li></ol></div>
+          <div class="after-action" id="afterAction"><span>行动结果</span><strong>尚未发生交战</strong><p>货损、伤势、履约与逃跑都会继续进入经济和社会系统。</p></div>
+        </aside>
+      </section>
+    </main>
+
+    <footer class="event-ticker"><span class="ticker-label">世界事件</span><time id="eventTime">16:40</time><p id="eventText">你在铁匠铺外遇见玛拉。东区市集的面包即将售罄。</p><button id="eventJump" type="button">查看人物 <span>→</span></button></footer>
+  </div>
+
+  <div class="modal-layer" id="tradeModal" role="dialog" aria-modal="true" aria-labelledby="tradeTitle" hidden>
+    <section class="trade-dialog"><button class="modal-close" data-close="tradeModal" type="button" aria-label="关闭">×</button><header><p class="overline">当面交换 · 双方的真实财物</p><h2 id="tradeTitle">木炭换取修好的铁锄</h2><span>玛拉只展示愿意谈的物品；其余背包不会发送到你的客户端。</span></header><div class="trade-proposal"><div class="trade-party"><p>你交出</p><div class="trade-item-row"><span class="item-swatch charcoal-swatch">◆</span><div><strong>木炭</strong><small>你的私人财产</small></div><div class="stepper"><button data-trade-step="-1" type="button">−</button><b id="charcoalOffer">12</b><button data-trade-step="1" type="button">＋</button></div></div><div class="trade-item-row"><span class="item-swatch emerald-swatch">◆</span><div><strong>绿宝石</strong><small>Minecraft 现有物品</small></div><div class="stepper"><button data-emerald-step="-1" type="button">−</button><b id="emeraldOffer">2</b><button data-emerald-step="1" type="button">＋</button></div></div></div><div class="trade-seal"><span>双方同意</span>⇄<small>提交时原子核对</small></div><div class="trade-party npc-party"><p>玛拉交出</p><div class="trade-item-row"><span class="item-swatch hoe-swatch">⌁</span><div><strong>修好的铁锄</strong><small>她的私人财产 · 愿意出售</small></div><b>×1</b></div><blockquote id="tradeReply">“这些正好够我把炉火续上。可以。”</blockquote></div></div><footer><p><span>◇</span> 交换不会生成商品：四种物品在同一提交中改变持有人。</p><div><button class="secondary-action" data-close="tradeModal" type="button">暂不交换</button><button class="primary-action" id="commitTrade" type="button">双方同意 · 提交交换</button></div></footer></section>
+  </div>
+
+  <aside class="truth-drawer" id="truthDrawer" aria-label="后台真相审查" hidden><header><div><p class="overline">SERVER TRUTH · DEBUG ONLY</p><h2>后台真相</h2></div><button class="modal-close" id="closeTruth" type="button" aria-label="关闭">×</button></header><div class="debug-warning"><span>!</span><p>这些精确字段只供设计审查。正式服务器不会把它们发给普通玩家。</p></div><div id="truthContent"></div></aside>
+  <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+  <script src="app.js" defer></script>
+</body>
+</html>

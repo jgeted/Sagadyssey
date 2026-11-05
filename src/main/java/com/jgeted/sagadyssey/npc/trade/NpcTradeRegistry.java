@@ -1,6 +1,7 @@
 package com.jgeted.sagadyssey.npc.trade;
 
 import com.jgeted.sagadyssey.npc.profession.NpcProfession;
+import com.jgeted.sagadyssey.npc.profession.NpcMerchantRegion;
 import net.minecraft.core.RegistryAccess;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.registries.Registries;
@@ -30,6 +31,7 @@ public class NpcTradeRegistry {
             Map.entry(NpcProfession.MEDIC,     new int[]{2, 2, 2, 2}),
             Map.entry(NpcProfession.BARD,      new int[]{1, 2, 1, 1}),
             Map.entry(NpcProfession.TRADER,    new int[]{3, 3, 3, 2}),
+            Map.entry(NpcProfession.COURIER,   new int[]{0, 0, 0, 0}),
             Map.entry(NpcProfession.NONE,      new int[]{0, 0, 0, 0})
     );
 
@@ -380,6 +382,17 @@ public class NpcTradeRegistry {
         int newResultMax = Math.max(1, (int) Math.round(original.resultMax() * (1.0 - markupRate)));
         return new NpcTradeOffer(original.costItem(), newCostMin, newCostMax,
                 original.resultItem(), newResultMin, newResultMax, original.minNpcLevel());
+    }
+
+    /** 在商人基础加价后叠加地区供需；只改变数量，不改变物品或解锁等级。 */
+    public static NpcTradeOffer applyRegionalPricing(NpcTradeOffer original, NpcMerchantRegion region,
+                                                     boolean ignorePricing) {
+        if (ignorePricing || region == null) return original;
+        double multiplier = region.resultPriceMultiplier(original.resultItem());
+        int newCostMin = Math.max(1, (int) Math.round(original.costMin() * multiplier));
+        int newCostMax = Math.max(newCostMin, (int) Math.round(original.costMax() * multiplier));
+        return new NpcTradeOffer(original.costItem(), newCostMin, newCostMax,
+                original.resultItem(), original.resultMin(), original.resultMax(), original.minNpcLevel());
     }
 
     /** 商人货币兑换（固定，不计入 activeTrades） */

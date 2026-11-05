@@ -1,0 +1,284 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Sagadyssey NPC 中世纪职业概念图集</title>
+    <style>
+        :root {
+            color-scheme: dark;
+            --ink: #e9dfc7;
+            --muted: #b8ad96;
+            --panel: #171510;
+            --line: #514832;
+            --accent: #c8994d;
+            --bg: #0d0c09;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            margin: 0;
+            background:
+                radial-gradient(circle at 50% 0%, #272116 0, transparent 42rem),
+                var(--bg);
+            color: var(--ink);
+            font: 16px/1.7 system-ui, "Microsoft YaHei", sans-serif;
+        }
+
+        main {
+            width: min(1440px, calc(100% - 32px));
+            margin: 0 auto;
+            padding: 56px 0 80px;
+        }
+
+        header {
+            max-width: 920px;
+            margin-bottom: 36px;
+        }
+
+        .eyebrow {
+            color: var(--accent);
+            font-size: 13px;
+            font-weight: 700;
+            letter-spacing: .14em;
+            text-transform: uppercase;
+        }
+
+        h1 {
+            margin: 8px 0 12px;
+            font-family: Georgia, "Noto Serif SC", serif;
+            font-size: clamp(34px, 5vw, 62px);
+            line-height: 1.05;
+            font-weight: 500;
+        }
+
+        p { margin: 0; }
+
+        .intro { color: var(--muted); }
+
+        .notice {
+            margin-top: 20px;
+            padding: 14px 18px;
+            border-left: 3px solid var(--accent);
+            background: #1a1710;
+            color: #d3c7ad;
+        }
+
+        .gallery {
+            display: grid;
+            gap: 28px;
+        }
+
+        article {
+            overflow: hidden;
+            border: 1px solid var(--line);
+            border-radius: 12px;
+            background: var(--panel);
+            box-shadow: 0 18px 55px #0008;
+        }
+
+        figure { margin: 0; }
+
+        img {
+            display: block;
+            width: 100%;
+            height: auto;
+            background: #d7bf91;
+            cursor: zoom-in;
+        }
+
+        figcaption {
+            display: grid;
+            grid-template-columns: minmax(190px, .7fr) 2fr;
+            gap: 24px;
+            padding: 22px 24px 26px;
+        }
+
+        h2 {
+            margin: 0;
+            font: 500 24px/1.25 Georgia, "Noto Serif SC", serif;
+        }
+
+        .roles {
+            color: var(--muted);
+        }
+
+        .roles b { color: var(--ink); }
+
+        .sources {
+            margin-top: 38px;
+            padding: 24px;
+            border: 1px solid var(--line);
+            background: #13110d;
+        }
+
+        .sources h2 { margin-bottom: 10px; }
+        a { color: #e6b96e; }
+
+        dialog {
+            width: min(96vw, 1800px);
+            max-width: none;
+            padding: 0;
+            border: 1px solid #776846;
+            background: #090806;
+        }
+
+        dialog::backdrop { background: #000d; }
+        dialog img { cursor: zoom-out; }
+
+        @media (max-width: 720px) {
+            main { width: min(100% - 20px, 1440px); padding-top: 30px; }
+            figcaption { grid-template-columns: 1fr; gap: 8px; padding: 18px; }
+        }
+    </style>
+</head>
+<body>
+<main>
+    <header>
+        <div class="eyebrow">Sagadyssey · NPC Visual Direction v2</div>
+        <h1>西方中世纪职业概念图集</h1>
+        <p class="intro">统一历史锚点：约公元 1250–1350 年的西欧与中欧。重点参考当时的羊毛、亚麻、锁子甲、绗缝甲、罩袍、职业工具和天然染料色彩。</p>
+        <p class="notice">运行时现已拆成三层资源：128×64 基础身体/职业配件、男女统一 256×128 独立脸型、男女统一 128×128 身份服装；两种性别共享像素密度与材质语言，原版护甲、武器与权力象征仍是独立物品。</p>
+        <p class="notice">游戏内快速预览：输入 <code>/saga npc showcase WARRIOR kingdom</code>，会以男女两排生成 COMMONER 至 KING 共 14 名 NPC，并播放各自礼仪动作。</p>
+    </header>
+
+    <section class="gallery" aria-label="职业概念图">
+        <article>
+            <figure>
+                <img src="01-military-professions.png" alt="战士、弓箭手和重甲兵职业概念" loading="eager">
+                <figcaption>
+                    <h2>军职</h2>
+                    <p class="roles"><b>从左到右：</b>战士、弓箭手、重甲兵。重甲兵采用锁子甲、覆面盔、板片衣与有限的四肢板件，避免后世完整板甲。小图展示近战挥砍、拉弓和重击动作。</p>
+                </figcaption>
+            </figure>
+        </article>
+
+        <article>
+            <figure>
+                <img src="06-face-and-gender-reference.png" alt="男性女性脸型与社会身份完整服装参考" loading="lazy">
+                <figcaption>
+                    <h2>男女脸型与完整服装层</h2>
+                    <p class="roles">上两排用于确定青年、宽脸、长脸、清秀、风霜与年长面容，以及胡须、辫发、亚麻头巾和面纱方向；下排强调男女服装均随身份改变完整的布料、剪裁、衣长、染色和饰边，而不是只更换领口。</p>
+                </figcaption>
+            </figure>
+        </article>
+
+        <article>
+            <figure>
+                <img src="08-female-redesign-direction.png" alt="优化后的西方中世纪女性NPC美术方向" loading="lazy">
+                <figcaption>
+                    <h2>女性 NPC 重设计方向</h2>
+                    <p class="roles"><b>这是美术目标图，不是实机效果图。</b>它用于约束好看、亲和的人类脸，以及发辫、亚麻头巾、羊毛长裙和天然染色方向；实际效果应以紧邻的像素验收图与游戏截图为准。盔甲、武器和职业工具继续由独立装备层负责。</p>
+                </figcaption>
+            </figure>
+        </article>
+
+        <article>
+            <figure>
+                <img src="09-female-face-orthographic-reference.png" alt="从展示图提炼的六种女性NPC正交脸部母版" loading="lazy">
+                <figcaption>
+                    <h2>展示图脸部转绘母版</h2>
+                    <p class="roles"><b>这是转绘标准，不是实机截图。</b>它把展示图中的女性脸统一为严格正面视角，并明确六类脸共用的审美语言：宽额头、分离细眉、带眼白和虹膜的杏仁眼、低对比小鼻与短嘴。下一张才是受游戏 UV 限制后的实际资源。</p>
+                </figcaption>
+            </figure>
+        </article>
+
+        <article>
+            <figure>
+                <img src="07-female-face-pixel-preview.png" alt="六套女性NPC实际三十二乘三十二像素正脸预览" loading="lazy">
+                <figcaption>
+                    <h2>实际游戏像素脸验收</h2>
+                    <p class="roles">六套脸使用 32×32 正脸采样密度，按上方母版转绘为柔和细眉、窄杏仁眼、双色虹膜、单点高光和短嘴；女性正脸不绘制鼻点、雀斑、麻点、皱纹或零散皮肤噪声，年龄只通过发色与发型表达。此图直接由游戏使用的 256×128 资源生成，而非概念效果图。</p>
+                </figcaption>
+            </figure>
+        </article>
+
+        <article>
+            <figure>
+                <img src="10-male-female-face-style-match.png" alt="男性与女性NPC六类脸型统一画风对照" loading="lazy">
+                <figcaption>
+                    <h2>男女脸部统一画风验收</h2>
+                    <p class="roles">上下两排直接取自游戏使用的 256×128 贴图。男女共享 32×32 有效正脸、眼白/虹膜/高光结构和同级色阶；女性采用更柔和的独立肤色、窄眼和短嘴，并彻底取消脸部斑点，差异仍来自眉形、发际线、头巾与胡须，而不是两套分辨率。</p>
+                </figcaption>
+            </figure>
+        </article>
+
+        <article>
+            <figure>
+                <img src="11-male-female-identity-style-match.png" alt="男性与女性NPC七级身份服装统一画风对照" loading="lazy">
+                <figcaption>
+                    <h2>男女身份服装统一画风验收</h2>
+                    <p class="roles">平民至国王的十四套身份服装统一为 128×128，使用相同的织物颗粒、阴影宽度、腰带和身份饰边规则。男女仍保留符合中世纪服装的领口和剪裁差异，但材质不再像来自不同资源包。</p>
+                </figcaption>
+            </figure>
+        </article>
+
+        <article>
+            <figure>
+                <img src="02-labor-professions.png" alt="工人、铁匠和农民职业概念" loading="lazy">
+                <figcaption>
+                    <h2>生产职业</h2>
+                    <p class="roles"><b>从左到右：</b>工人、铁匠、农民。以粗纺羊毛、亚麻衬衣、头巾、分体裤袜、皮带与翻口鞋为基础；小图展示砍伐、锻打、锄地和收割。</p>
+                </figcaption>
+            </figure>
+        </article>
+
+        <article>
+            <figure>
+                <img src="03-civilian-service-professions.png" alt="普通居民、吟游诗人、医师和商人职业概念" loading="lazy">
+                <figcaption>
+                    <h2>居民与服务职业</h2>
+                    <p class="roles"><b>从左到右：</b>无职业居民、吟游诗人、医师、商人。乐师使用 citole 类拨弦乐器；医师采用长袍、兜帽、药草袋和诊断用 matula，不使用近代鸟嘴面具；商人靠优质染色布料体现财富。</p>
+                </figcaption>
+            </figure>
+        </article>
+
+        <article>
+            <figure>
+                <img src="04-functional-skin-preview.png" alt="十种NPC职业功能皮肤正面预览" loading="lazy">
+                <figcaption>
+                    <h2>游戏内基础皮肤</h2>
+                    <p class="roles">这是第一轮可运行皮肤的正面预览。这里只表现脸、头发、布衣、内衬与围裙；头盔、胸甲、武器、盾牌和工具不画进皮肤，将由 Minecraft 的装备层独立渲染。</p>
+                </figcaption>
+            </figure>
+        </article>
+
+        <article>
+            <figure>
+                <img src="05-social-status-lineup.png" alt="平民到国王的七级社会身份服装概念" loading="lazy">
+                <figcaption>
+                    <h2>社会身份阶序</h2>
+                    <p class="roles"><b>从左到右：</b>平民、自由民、市民、骑士、领主、公爵、国王。地位通过布料质量、染色成本、衣长、饰边和姿态逐级体现；王冠、佩剑、权杖与盔甲故意不画进身份皮肤，它们属于后续独立装备。</p>
+                </figcaption>
+            </figure>
+        </article>
+    </section>
+
+    <section class="sources">
+        <h2>历史依据与使用边界</h2>
+        <p>设计避免跨入约 1420 年后成熟的全身板甲，也不采用维京、奇幻或文艺复兴轮廓。主要参考：</p>
+        <p><a href="https://www.metmuseum.org/es/essays/arms-and-armor-in-medieval-europe">The Met：Arms and Armor in Medieval Europe</a> · <a href="https://www.metmuseum.org/fr/essays/fashion-in-european-armor-1300-1400">The Met：Fashion in European Armor, 1300–1400</a> · <a href="https://searcharchives.bl.uk/catalog/032-001984234">British Library：Egerton MS 1147 劳作图像目录</a></p>
+    </section>
+</main>
+
+<dialog id="preview" aria-label="放大预览">
+    <img alt="放大后的职业概念图">
+</dialog>
+
+<script>
+    const dialog = document.querySelector('#preview');
+    const previewImage = dialog.querySelector('img');
+
+    document.querySelectorAll('.gallery img').forEach((image) => {
+        image.addEventListener('click', () => {
+            previewImage.src = image.src;
+            previewImage.alt = image.alt;
+            dialog.showModal();
+        });
+    });
+
+    dialog.addEventListener('click', () => dialog.close());
+</script>
+</body>
+</html>

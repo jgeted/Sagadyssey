@@ -21,7 +21,10 @@ public enum NpcProfession {
     /** 支援系 */
     BARD("吟游诗人", 4, 20, 1.0, 0.33, 0),
     MEDIC("医师", 5, 22, 1.0, 0.30, 1),
-    TRADER("商人", 5, 24, 1.0, 0.33, 0);
+    TRADER("商人", 5, 24, 1.0, 0.33, 0),
+
+    /** 专职运输者；追加在末尾以保持旧版本网络 ordinal 不变。 */
+    COURIER("运输员", 4, 26, 1.0, 0.35, 1);
 
     private final String displayName;
     private final int recruitmentCost;

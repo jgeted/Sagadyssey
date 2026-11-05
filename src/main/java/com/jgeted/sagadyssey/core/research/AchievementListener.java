@@ -1,6 +1,7 @@
 package com.jgeted.sagadyssey.core.research;
 
 import com.jgeted.sagadyssey.Sagadyssey;
+import com.jgeted.sagadyssey.core.LegacyFeatureFlags;
 import com.jgeted.sagadyssey.core.config.SagadysseyConfig;
 import net.minecraft.advancements.AdvancementType;
 import net.minecraft.network.chat.Component;
@@ -22,6 +23,8 @@ public class AchievementListener {
 
     @SubscribeEvent
     public static void onAdvancementEarned(AdvancementEvent.AdvancementEarnEvent event) {
+        if (!LegacyFeatureFlags.LEGACY_RESEARCH_ENABLED) return;
+
         var advancement = event.getAdvancement();
         var id = advancement.id();
 
@@ -47,6 +50,8 @@ public class AchievementListener {
     /** 玩家登录时同步研究数据到客户端 */
     @SubscribeEvent
     public static void onPlayerLogin(PlayerEvent.PlayerLoggedInEvent event) {
+        if (!LegacyFeatureFlags.LEGACY_RESEARCH_ENABLED) return;
+
         if (event.getEntity() instanceof ServerPlayer player) {
             ResearchAttachments.syncToClient(player);
         }

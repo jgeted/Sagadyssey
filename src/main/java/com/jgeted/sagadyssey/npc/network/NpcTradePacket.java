@@ -1,9 +1,13 @@
 package com.jgeted.sagadyssey.npc.network;
 
 import com.jgeted.sagadyssey.Sagadyssey;
+import com.jgeted.sagadyssey.core.network.NetworkRateLimiter;
+import com.jgeted.sagadyssey.npc.entity.NpcAction;
 import com.jgeted.sagadyssey.npc.entity.NpcBase;
 import com.jgeted.sagadyssey.npc.faction.Faction;
 import com.jgeted.sagadyssey.npc.faction.StandingModifier;
+import com.jgeted.sagadyssey.npc.identity.NpcDialogue;
+import com.jgeted.sagadyssey.npc.identity.NpcDialogueContext;
 import com.jgeted.sagadyssey.npc.profession.NpcProfession;
 import com.jgeted.sagadyssey.npc.trade.NpcTradeOffer;
 import com.jgeted.sagadyssey.npc.trade.NpcTradeRegistry;
@@ -41,6 +45,7 @@ public record NpcTradePacket(int npcId, int tradeIndex) implements CustomPacketP
     public static void handle(final NpcTradePacket data, final IPayloadContext context) {
         context.enqueueWork(() -> {
             ServerPlayer player = (ServerPlayer) context.player();
+            if (!NetworkRateLimiter.allow(player, "npc_trade", 2)) return;
             Entity entity = player.serverLevel().getEntity(data.npcId);
 
             if (!(entity instanceof NpcBase npc)) {
@@ -106,6 +111,8 @@ public record NpcTradePacket(int npcId, int tradeIndex) implements CustomPacketP
                 xpGain = (int) (xpGain * 1.25);
             }
             npc.addExperience(xpGain);
+            npc.playAction(NpcAction.TRADE_PRESENT, 40);
+            player.sendSystemMessage(NpcDialogue.line(npc, NpcDialogueContext.TRADE, player));
 
             // 交易增加阵营声望（+1）
             Faction npcFaction = npc.getFaction();

@@ -8,7 +8,11 @@
         "StructureCollisionMixin",
         "StructureMixin",
         "AbstractHorsePassengerMixin",
-        "CocoaBlockMixin"
+        "CocoaBlockMixin",
+        "StructureStartPlacementMixin",
+        "PoolElementPlacementMixin",
+        "RemoteCropTickMixin",
+        "RegionChunkCaptureMixin"
     ],
     "client": [],
     "server": []

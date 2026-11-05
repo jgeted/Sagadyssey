@@ -1,0 +1,12 @@
+Use case: historical-scene
+Asset type: concept reference board for a Minecraft-style medieval NPC system
+Primary request: create a historically grounded character design sheet showing genuine male and female NPC diversity and visibly different social-class clothing, intended as reference for later hand-authored pixel skins
+Scene/backdrop: neutral warm parchment-gray studio background, no scenery
+Subject: top two rows contain twelve bust portraits, six men and six women, spanning young adult to elderly, with varied square, oval, long, broad and weathered faces; plausible West and Central European complexions, brown/blond/red/gray hair, short and long hair appropriate to the period, braids, linen coifs, simple veils, beards and clean-shaven faces. Bottom row contains paired male and female full-body silhouettes progressing through commoner, freeman, burgher, sworn retainer/knight, local lord, high lord, sovereign.
+Style/medium: polished blocky voxel-game character concept art, clearly compatible with Minecraft proportions but with readable fabric construction and facial variety; orthographic front views
+Composition/framing: wide organized design sheet, equal scale, generous spacing, no overlaps
+Lighting/mood: soft neutral studio lighting, documentary rather than fantasy
+Color palette: undyed linen and earth tones at low status, increasingly stable madder red, woad blue, green, deep blue-purple and restrained fur trim at high status
+Materials/textures: coarse linen, wool, leather belts, quilted cloth, fine wool, limited silk and fur only at high rank
+Constraints: women are not sexualized and wear practical historically plausible 1250-1350 Western/Central European garments; class difference must come from fabric quality, cut, length, dye, trim and grooming; armor, helmets, crowns, weapons, staffs and jewelry remain separate equipment and must not be baked into clothing; faces must remain distinct from rank; no modern hairstyles; no plate armor; no racial caricatures
+Avoid: text, labels, logos, watermark, anime, high fantasy, corsets, cleavage, modern makeup, identical faces, palette-swapped clones

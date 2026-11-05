@@ -10,16 +10,15 @@ import net.minecraft.world.inventory.Slot;
 
 /**
  * NPC 装备界面。
- * 176×222 面板，显示 NPC 装备槽、背包和玩家背包。
+ * 显示 NPC 装备、36 格随身物品栏和玩家物品栏。
  */
 public class NpcEquipScreen extends AbstractContainerScreen<NpcEquipMenu> {
 
     public NpcEquipScreen(NpcEquipMenu menu, Inventory playerInv, Component title) {
         super(menu, playerInv, title);
         this.imageWidth = 176;
-        this.imageHeight = 260;
-        this.inventoryLabelY = 175;
-        this.inventoryLabelY = 145;
+        this.imageHeight = 254;
+        this.inventoryLabelY = 164;
     }
 
     @Override
@@ -63,8 +62,8 @@ public class NpcEquipScreen extends AbstractContainerScreen<NpcEquipMenu> {
         // 区域标签
         graphics.drawString(font, Component.literal("护甲"), px + 8, py + 28, 0xFF_888888);
         graphics.drawString(font, Component.literal("武器"), px + 80, py + 28, 0xFF_888888);
-        graphics.drawString(font, Component.literal("背包"), px + 8, py + 100, 0xFF_888888);
-        graphics.drawString(font, Component.literal("物品栏"), px + 8, py + 175, 0xFF_888888);
+        graphics.drawString(font, Component.literal("随身物品栏 · 36 格"), px + 8, py + 72, 0xFF_888888);
+        graphics.drawString(font, Component.literal("玩家物品栏"), px + 8, py + 164, 0xFF_888888);
 
         // 槽位边框
         for (Slot slot : this.menu.slots) {
@@ -85,8 +84,6 @@ public class NpcEquipScreen extends AbstractContainerScreen<NpcEquipMenu> {
         drawSlotLabel(graphics, px + 26, py + 56, "脚", labelColor);
         drawSlotLabel(graphics, px + 80, py + 38, "主", labelColor);
         drawSlotLabel(graphics, px + 98, py + 38, "副", labelColor);
-        drawSlotLabel(graphics, px + 80, py + 56, "弓", labelColor);
-        drawSlotLabel(graphics, px + 98, py + 56, "箭", labelColor);
     }
 
     private void drawSlotLabel(GuiGraphics graphics, int slotX, int slotY, String label, int color) {

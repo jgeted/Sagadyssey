@@ -1,0 +1,8 @@
+{
+  "kind": "TALK",
+  "facility": "sagadyssey:meeting",
+  "duration_ticks": 200,
+  "capacity": 2,
+  "window_start": 1000,
+  "window_end": 12500
+}

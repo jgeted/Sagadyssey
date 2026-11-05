@@ -2,6 +2,9 @@ package com.jgeted.sagadyssey.npc.ai;
 
 import com.jgeted.sagadyssey.npc.entity.NpcBase;
 import com.jgeted.sagadyssey.npc.entity.NpcCommand;
+import com.jgeted.sagadyssey.npc.profession.NpcProfession;
+import com.jgeted.sagadyssey.social.life.NpcSchedulePlanner;
+import net.minecraft.core.BlockPos;
 import net.minecraft.world.entity.ai.goal.Goal;
 
 import java.util.EnumSet;
@@ -20,22 +23,25 @@ public class StayGoal extends Goal {
 
     @Override
     public boolean canUse() {
-        if (!npc.isAlive() || npc.getCommand() != NpcCommand.STAY) return false;
-        // 近身有敌时放行，让 MeleeAttackGoal 接管反击（6 格内）
+        if (com.jgeted.sagadyssey.npc.brain.execution.NpcBrainRuntime.isPlanned(npc)) return false;
+        if (!npc.isAlive() || npc.getCommand() != NpcCommand.STAY
+                || !NpcSchedulePlanner.allowsStay(npc)) return false;
+        // 普通职业仅近身反击；重甲兵会在十格驻守圈内主动迎击。
+        double combatRadiusSq = npc.getProfession() == NpcProfession.HEAVY ? 100.0D : 36.0D;
         if (npc.getTarget() != null && npc.getTarget().isAlive()
-                && npc.distanceToSqr(npc.getTarget()) < 36.0D) {
+                && npc.distanceToSqr(npc.getTarget()) < combatRadiusSq) {
             return false;
         }
-        if (!npc.requestMutex(AiMutex.MOVE)) return false;
         return true;
     }
 
     @Override
     public boolean canContinueToUse() {
-        if (!npc.isAlive() || npc.getCommand() != NpcCommand.STAY) return false;
-        // 战斗 goal 激活时释放 MOVE 控制权
+        if (com.jgeted.sagadyssey.npc.brain.execution.NpcBrainRuntime.isPlanned(npc)) return false;
+        if (!npc.isAlive() || npc.getCommand() != NpcCommand.STAY
+                || !NpcSchedulePlanner.allowsStay(npc)) return false;
+        // 原生 GoalSelector 根据 Flag.MOVE 与优先级把控制权交给战斗行为。
         if (npc.getTarget() != null && npc.getTarget().isAlive()) {
-            npc.releaseMutex(AiMutex.MOVE);
             return false;
         }
         return true;
@@ -43,18 +49,28 @@ public class StayGoal extends Goal {
 
     @Override
     public void start() {
-        npc.getNavigation().stop();
+        BlockPos anchor = npc.getGuardAnchor();
+        if (npc.getProfession() == NpcProfession.HEAVY && anchor != null
+                && npc.distanceToSqr(anchor.getX() + 0.5D, anchor.getY(), anchor.getZ() + 0.5D) > 2.25D) {
+            npc.getNavigation().moveTo(anchor.getX() + 0.5D, anchor.getY(), anchor.getZ() + 0.5D, 0.8D);
+        } else {
+            npc.getNavigation().stop();
+        }
     }
 
     @Override
     public void tick() {
+        BlockPos anchor = npc.getGuardAnchor();
+        if (npc.getProfession() == NpcProfession.HEAVY && anchor != null
+                && npc.distanceToSqr(anchor.getX() + 0.5D, anchor.getY(), anchor.getZ() + 0.5D) > 2.25D) {
+            if (npc.tickCount % 20 == 0) {
+                npc.getNavigation().moveTo(anchor.getX() + 0.5D, anchor.getY(), anchor.getZ() + 0.5D, 0.8D);
+            }
+            return;
+        }
         npc.setDeltaMovement(0.0D, npc.getDeltaMovement().y, 0.0D);
         npc.xxa = 0.0F;
         npc.zza = 0.0F;
     }
 
-    @Override
-    public void stop() {
-        npc.releaseMutex(AiMutex.MOVE);
-    }
 }

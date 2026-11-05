@@ -76,6 +76,20 @@ public enum StandingLevel {
         return this != HATED;
     }
 
+    /**
+     * NPC 对外报价的声望门槛，10000 = 100%。这不是凭空生成的货币折扣，
+     * 而是 NPC 在比较整篮实物价值时愿意接受的最低比例。
+     */
+    public int tradePriceBasisPoints() {
+        return switch (this) {
+            case REVERED -> 8_000;
+            case HONORED -> 9_000;
+            case NEUTRAL -> 10_000;
+            case COLD -> 12_000;
+            case HATED -> 20_000;
+        };
+    }
+
     /** 该等级的 NPC 是否会主动攻击玩家 */
     public boolean isHostile() {
         return this == HATED;

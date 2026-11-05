@@ -19,7 +19,7 @@ public class NpcProfessionScreen extends Screen {
     private final String currentProfessionDisplay;
 
     private static final int PANEL_WIDTH = 176;
-    private static final int PANEL_HEIGHT = 170;
+    private static final int PANEL_HEIGHT = 194;
 
     private int panelLeft;
     private int panelTop;

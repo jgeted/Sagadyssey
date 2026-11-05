@@ -104,6 +104,10 @@ public final class FactionRegistry {
             return cachedRegistry;
         }
         // 客户端：从当前 level 获取
+        if (net.neoforged.fml.loading.FMLEnvironment.dist != net.neoforged.api.distmarker.Dist.CLIENT) {
+            var server = net.neoforged.neoforge.server.ServerLifecycleHooks.getCurrentServer();
+            return server == null ? cachedRegistry : fromRegistryAccess(server.registryAccess());
+        }
         try {
             var mc = net.minecraft.client.Minecraft.getInstance();
             if (mc != null && mc.level != null) {

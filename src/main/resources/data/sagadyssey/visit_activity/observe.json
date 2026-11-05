@@ -1,0 +1,8 @@
+{
+  "kind": "OBSERVE",
+  "facility": "sagadyssey:observation",
+  "duration_ticks": 100,
+  "capacity": 4,
+  "window_start": 0,
+  "window_end": 0
+}

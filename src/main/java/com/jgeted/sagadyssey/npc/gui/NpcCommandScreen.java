@@ -2,8 +2,16 @@ package com.jgeted.sagadyssey.npc.gui;
 
 import com.jgeted.sagadyssey.npc.network.NpcInteractionPacket;
 import com.jgeted.sagadyssey.npc.network.NpcStatsPayload;
+import com.jgeted.sagadyssey.npc.appearance.NpcFaceVariant;
+import com.jgeted.sagadyssey.npc.appearance.NpcGender;
+import com.jgeted.sagadyssey.npc.identity.NpcIdentity;
+import com.jgeted.sagadyssey.npc.identity.NpcOffice;
+import com.jgeted.sagadyssey.npc.identity.NpcSocialClass;
+import com.jgeted.sagadyssey.npc.entity.NpcMoraleState;
 import com.jgeted.sagadyssey.npc.profession.NpcProfession;
+import com.jgeted.sagadyssey.npc.profession.NpcMerchantRegion;
 import com.jgeted.sagadyssey.npc.trade.NpcTradeOffer;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
@@ -21,6 +29,13 @@ public class NpcCommandScreen extends Screen {
     private final int npcId;
     private final String npcName;
     private final String professionName;
+    private final NpcSocialClass socialClass;
+    private final NpcOffice office;
+    private final NpcGender gender;
+    private final NpcFaceVariant faceVariant;
+    private final NpcMerchantRegion merchantRegion;
+    private final boolean isTrader;
+    private final String factionName;
 
     // 属性数据
     private final float currentHp;
@@ -34,6 +49,11 @@ public class NpcCommandScreen extends Screen {
     private final int moral;
     private final String commandName;
     private final String farmModeName;
+    private final int logisticsStage;
+    private final String logisticsItem;
+    private final int logisticsDelivered;
+    private final int logisticsRequested;
+    private final int logisticsCargo;
 
     private final List<NpcTradeOffer> trades;
 
@@ -58,6 +78,13 @@ public class NpcCommandScreen extends Screen {
         this.npcId = data.npcId();
         this.npcName = data.npcName();
         this.professionName = data.professionName();
+        this.socialClass = NpcSocialClass.byName(data.socialClassName());
+        this.office = NpcOffice.byName(data.officeName());
+        this.gender = NpcGender.byName(data.genderName());
+        this.faceVariant = NpcFaceVariant.byName(data.faceVariantName());
+        this.isTrader = !data.merchantRegionName().isBlank();
+        this.merchantRegion = NpcMerchantRegion.byName(data.merchantRegionName());
+        this.factionName = data.factionName();
         this.currentHp = data.currentHp();
         this.maxHp = data.maxHp();
         this.attackDamage = data.attackDamage();
@@ -69,7 +96,12 @@ public class NpcCommandScreen extends Screen {
         this.moral = data.moral();
         this.commandName = data.commandName();
         this.farmModeName = data.farmModeName();
-        this.trades = data.buildTrades();
+        this.logisticsStage = data.logisticsStage();
+        this.logisticsItem = data.logisticsItem();
+        this.logisticsDelivered = data.logisticsDelivered();
+        this.logisticsRequested = data.logisticsRequested();
+        this.logisticsCargo = data.logisticsCargo();
+        this.trades = data.buildTrades(Minecraft.getInstance().level.registryAccess());
         this.hasMount = data.hasMount();
         this.mountType = data.mountType();
         this.mountHp = data.mountHp();
@@ -106,11 +138,22 @@ public class NpcCommandScreen extends Screen {
                 .bounds(leftX, btnY1, workBtnW, 20)
                 .build());
 
-        // 工作按钮：农民→务农（打开务农模式面板），工人→干活，其余职业置灰
+        // 生产与支援职业都能进入 WORK；农民额外先选择务农模式。
         NpcProfession prof = NpcProfession.fromDisplayName(professionName);
-        boolean canWork = prof == NpcProfession.FARMER || prof == NpcProfession.WORKER;
-        String workLabel = prof == NpcProfession.FARMER ? "务农"
-                : prof == NpcProfession.WORKER ? "干活" : "工作";
+        boolean canWork = switch (prof) {
+            case WORKER, BLACKSMITH, FARMER, BARD, MEDIC, TRADER, COURIER -> true;
+            default -> false;
+        };
+        String workLabel = switch (prof) {
+            case FARMER -> "务农";
+            case WORKER -> "干活";
+            case BLACKSMITH -> "锻造";
+            case BARD -> "演奏";
+            case MEDIC -> "救治";
+            case TRADER -> "跑商";
+            case COURIER -> "运输";
+            default -> "工作";
+        };
         Button workBtn = Button.builder(
                 Component.literal(workLabel + (commandName.equals("WORK") ? " ✓" : "")),
                 btn -> {
@@ -124,7 +167,7 @@ public class NpcCommandScreen extends Screen {
                 })
                 .bounds(btn2X, btnY1, workBtnW, 20)
                 .build();
-        workBtn.active = canWork; // 非工作职业置灰
+        workBtn.active = canWork;
         addRenderableWidget(workBtn);
 
         addRenderableWidget(Button.builder(
@@ -236,17 +279,25 @@ public class NpcCommandScreen extends Screen {
         graphics.drawString(font, title, titleX, panelTop + 8, 0xFF_D4A017);
 
         // 职业
-        Component prof = Component.literal("职业：" + professionName);
+        Component prof = Component.literal("身份：" + NpcIdentity.title(socialClass, office, factionName, gender).getString()
+                + " · 职业：" + professionName);
         int profX = panelLeft + (PANEL_WIDTH - font.width(prof)) / 2;
         graphics.drawString(font, prof, profX, panelTop + 22, 0xCC_CCCCCC);
 
+        String appearanceText = gender.displayName().getString()
+                + " · " + faceVariant.displayName().getString();
+        if (isTrader) appearanceText += " · " + merchantRegion.displayName().getString();
+        Component appearance = Component.literal(appearanceText);
+        int appearanceX = panelLeft + (PANEL_WIDTH - font.width(appearance)) / 2;
+        graphics.drawString(font, appearance, appearanceX, panelTop + 32, 0xAA_C7B89A);
+
         // 分割线
-        graphics.fill(panelLeft + 8, panelTop + 36, panelLeft + PANEL_WIDTH - 8, panelTop + 37, 0x55_AA5500);
+        graphics.fill(panelLeft + 8, panelTop + 44, panelLeft + PANEL_WIDTH - 8, panelTop + 45, 0x55_AA5500);
 
         // 属性面板（双列布局，同 NpcRecruitScreen）
         int colX1 = panelLeft + 12;
         int colX2 = panelLeft + 92;
-        int rowY = panelTop + 42;
+        int rowY = panelTop + 50;
         int rowH = 14;
 
         drawStat(graphics, colX1, rowY, "生命", String.format("%.0f / %.0f", currentHp, maxHp), 0xFF_55FF55);
@@ -262,7 +313,23 @@ public class NpcCommandScreen extends Screen {
         rowY += rowH;
 
         drawStat(graphics, colX1, rowY, "护甲", String.format("%.1f", armor), 0xFF_AAAAFF);
-        drawStat(graphics, colX2, rowY, "士气", moral + " / 100", 0xFF_FF88FF);
+        drawStat(graphics, colX2, rowY, "士气",
+                moral + " (" + NpcMoraleState.fromValue(moral).displayName() + ")", 0xFF_FF88FF);
+
+        if (logisticsStage > 0) {
+            net.minecraft.resources.ResourceLocation id =
+                    net.minecraft.resources.ResourceLocation.tryParse(logisticsItem);
+            String item = id == null ? logisticsItem : id.getPath();
+            String logistics = logisticsStage == 3 ? "护送 " + item
+                    : (logisticsStage == 1 ? "取货 " : "送货 ") + item
+                        + "  " + logisticsDelivered + "/" + logisticsRequested
+                        + (logisticsCargo > 0 ? "  载:" + logisticsCargo : "");
+            if (font.width(logistics) > PANEL_WIDTH - 20) {
+                logistics = font.plainSubstrByWidth(logistics, PANEL_WIDTH - 28) + "…";
+            }
+            graphics.drawString(font, logistics, panelLeft + 10, panelTop + 98,
+                    logisticsStage == 1 ? 0xFF_FFC642 : logisticsStage == 2 ? 0xFF_55DDFF : 0xFF_66DD88);
+        }
 
         // 坐骑信息区域
         int mountY = panelTop + 190;

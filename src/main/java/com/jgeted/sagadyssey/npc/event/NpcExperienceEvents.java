@@ -1,5 +1,6 @@
 package com.jgeted.sagadyssey.npc.event;
 
+import com.jgeted.sagadyssey.npc.entity.NpcAction;
 import com.jgeted.sagadyssey.npc.entity.NpcBase;
 import com.jgeted.sagadyssey.npc.entity.NpcCommand;
 import com.jgeted.sagadyssey.npc.profession.NpcProfession;
@@ -8,11 +9,21 @@ import net.minecraft.world.level.block.CropBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.neoforge.event.entity.living.LivingDamageEvent;
+import net.neoforged.neoforge.event.entity.living.LivingDeathEvent;
 import net.neoforged.neoforge.event.level.BlockEvent;
 
 import java.util.Set;
 
 public class NpcExperienceEvents {
+
+    /** 击杀同时记录战绩并鼓舞士气。 */
+    @SubscribeEvent
+    public static void onNpcKill(LivingDeathEvent event) {
+        if (event.getSource().getEntity() instanceof NpcBase npc
+                && event.getEntity() != npc) {
+            npc.addKill();
+        }
+    }
 
     /** 战斗经验：NPC 造成伤害 → 1 点伤害 = 1 经验 */
     @SubscribeEvent
@@ -57,6 +68,9 @@ public class NpcExperienceEvents {
                         && npc.getProfession() == NpcProfession.MEDIC
                         && npc.getCommand() == NpcCommand.FOLLOW
                         && npc.getNpcLevel() < 4)
-                .forEach(npc -> npc.addExperience((int) event.getNewDamage()));
+                .forEach(npc -> {
+                    npc.addExperience((int) event.getNewDamage());
+                    npc.playAction(NpcAction.MEDIC_TEND, 40);
+                });
     }
 }

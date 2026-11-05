@@ -1,7 +1,9 @@
 package com.jgeted.sagadyssey.npc.faction.network;
 
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * 客户端阵营声望缓存。
@@ -16,6 +18,7 @@ public final class ClientFactionCache {
 
     /** 关系摘要（"kingdom→church" → "ALLY"） */
     private static final Map<String, String> relationSummary = new HashMap<>();
+    private static final Set<String> knownFactionIds = new HashSet<>(Set.of("sagadyssey:player"));
 
     /** 玩家自定义阵营名称（null = 使用默认值 "玩家阵营"） */
     private static String playerFactionName = null;
@@ -23,14 +26,18 @@ public final class ClientFactionCache {
     private ClientFactionCache() {}
 
     /** 从全量同步更新 */
-    public static void updateFromSync(Map<String, Integer> data) {
+    public static void updateFromSync(Map<String, Integer> data, Set<String> knownFactions) {
         standings.clear();
         standings.putAll(data);
+        knownFactionIds.clear();
+        knownFactionIds.add("sagadyssey:player");
+        knownFactionIds.addAll(knownFactions);
     }
 
     /** 从增量更新单个阵营的声望 */
     public static void updateFromUpdate(String factionId, int newValue) {
         standings.put(factionId, newValue);
+        knownFactionIds.add(factionId);
     }
 
     /** 更新关系摘要 */
@@ -69,5 +76,13 @@ public final class ClientFactionCache {
     /** 获取关系摘要 */
     public static Map<String, String> getRelationSummary() {
         return Map.copyOf(relationSummary);
+    }
+
+    public static boolean isKnown(String factionId) {
+        return knownFactionIds.contains(factionId);
+    }
+
+    public static Set<String> getKnownFactionIds() {
+        return Set.copyOf(knownFactionIds);
     }
 }

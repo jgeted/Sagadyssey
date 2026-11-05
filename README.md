@@ -2,7 +2,7 @@
 
 A medieval-themed Minecraft 1.21.1 expansion mod built with NeoForge.
 
-> **Current Phase:** Micro-mod validation (one block + one GUI)
+> **Current Phase:** Playable social-simulation alpha
 > **GitHub:** https://github.com/jgeted/Sagadyssey
 
 ---
@@ -46,16 +46,27 @@ cd Sagadyssey
 # Build
 ./gradlew build
 
-# Output at build/libs/sagadyssey-1.0.0.jar
+# Output at build/libs/sagadyssey-<version>.jar
 ```
 
 ### Run the Client
+
+On Windows, double-click **Start-Sagadyssey.cmd** in the project folder. It starts
+Minecraft with the current Sagadyssey code and automatically selects an installed
+Temurin Java 21 when available. Keep the launcher window open while playing.
+Worlds are stored in `run/saves`; create a Creative, cheats-enabled superflat world
+from the single-player menu for phase 3 testing.
 
 ```bash
 ./gradlew runClient
 ```
 
 Minecraft will launch automatically after building, with the mod loaded.
+
+For world-simulation phase 8, double-click `verify-phase8.bat` to run a complete
+build and two independent game-test processes. This uses an isolated test world,
+not player saves. The concentrated in-game acceptance and save/re-enter checklist
+is in [the phase 8 acceptance guide](docs/world-simulation-v3/08-phase8-acceptance.md).
 
 ---
 
@@ -67,9 +78,9 @@ Minecraft will launch automatically after building, with the mod loaded.
 # 1. Build
 ./gradlew build
 
-# 2. Tag and push
-git tag v1.0.0
-git push origin v1.0.0
+# 2. Tag and push (replace with the version from gradle.properties)
+git tag v1.9.0
+git push origin v1.9.0
 
 # 3. Create the release on GitHub:
 #    - Go to https://github.com/jgeted/Sagadyssey/releases
@@ -88,9 +99,14 @@ You can also download build artifacts from the Actions page for each commit (aut
 | Module | Description | Status |
 |--------|-------------|--------|
 | **Core** | Networking, config, research/skill tree | In progress |
-| **NPC** | Medieval NPCs, recruitment, jobs, factions | Planned |
-| **Structure** | World-generated camps/settlements, blueprint building | Planned |
-| **Vehicle** | Enhanced horse/donkey/dog/boat AI | Planned |
+| **NPC** | Recruitment, professions, group command, combat, logistics | Playable alpha |
+| **Society** | Characters, settlements, politics, economy, history, world events | Playable alpha |
+| **Scenarios** | Command-deployed fixed small worlds for superflat maps | Playable alpha |
+| **Structure** | World-generated medieval buildings and settlement registration | In progress |
+| **Vehicle** | NPC mounts and convoy movement | In progress |
+
+Fixed superflat scenario commands, revision migration and acceptance checks are documented in
+[docs/fixed-world-scenario.md](docs/fixed-world-scenario.md).
 
 ---
 

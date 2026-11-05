@@ -2,6 +2,7 @@ package com.jgeted.sagadyssey.npc.faction.network;
 
 import com.jgeted.sagadyssey.Sagadyssey;
 import com.jgeted.sagadyssey.npc.faction.FactionAttachments;
+import com.jgeted.sagadyssey.core.network.NetworkRateLimiter;
 import io.netty.buffer.ByteBuf;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
@@ -35,6 +36,7 @@ public record RequestStandingsRefreshPacket() implements CustomPacketPayload {
                                final IPayloadContext context) {
         context.enqueueWork(() -> {
             if (context.player() instanceof ServerPlayer player) {
+                if (!NetworkRateLimiter.allow(player, "standing_refresh", 10)) return;
                 FactionAttachments.syncToClient(player);
             }
         });

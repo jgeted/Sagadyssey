@@ -1,9 +1,7 @@
 package com.jgeted.sagadyssey.npc.network;
 
 import com.jgeted.sagadyssey.Sagadyssey;
-import com.jgeted.sagadyssey.npc.gui.NpcTradeScreen;
 import io.netty.buffer.ByteBuf;
-import net.minecraft.client.Minecraft;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
@@ -27,10 +25,6 @@ public record NpcTradeResponsePacket(int npcId, int newExperience, int newLevel)
     public Type<? extends CustomPacketPayload> type() { return TYPE; }
 
     public static void handle(final NpcTradeResponsePacket data, final IPayloadContext context) {
-        context.enqueueWork(() -> {
-            if (Minecraft.getInstance().screen instanceof NpcTradeScreen screen) {
-                screen.onExperienceUpdated(data.newExperience, data.newLevel);
-            }
-        });
+        ClientNpcTradeResponseHandler.handle(data, context);
     }
 }

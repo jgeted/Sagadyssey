@@ -5,6 +5,12 @@ import com.jgeted.sagadyssey.npc.entity.NpcCommand;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.ai.goal.Goal;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
+import com.jgeted.sagadyssey.social.character.CharacterRegistry;
+import com.jgeted.sagadyssey.social.combat.CombatEncounterData;
+import com.jgeted.sagadyssey.social.combat.CombatEncounterService;
+import com.jgeted.sagadyssey.social.combat.EngagementAction;
 
 import java.util.EnumSet;
 
@@ -44,6 +50,7 @@ public class NpcCombatGoal extends Goal {
         // 始终注册主人目标源；源内部自行检查 owner。这样从存档加载 owner 后无需重新构建。
         selector.register(TargetSelector.ownerAttacked());
         selector.register(TargetSelector.ownerAttacking());
+        selector.register(TargetSelector.nearbyOwnerThreat());
         selector.register(TargetSelector.selfDefense());
         selector.register(TargetSelector.revenge());
         selector.register(TargetSelector.nearbyHostile());
@@ -52,20 +59,21 @@ public class NpcCombatGoal extends Goal {
 
     @Override
     public boolean canUse() {
+        if(com.jgeted.sagadyssey.npc.brain.command.NpcDutyTask.withdrawing(npc))return false;
         // STAY 模式下不主动寻敌（除非自卫/保护主人——即前 4 级源）
         if (npc.getCommand() == NpcCommand.STAY) {
             return evaluateStayMode();
         }
 
         if (--scanCooldown > 0) return false;
-        scanCooldown = (npc.getOwnerUUID() != null && npc.getCommand() == NpcCommand.FOLLOW)
+        scanCooldown = (npc.getActiveOwner() != null && npc.getCommand() == NpcCommand.FOLLOW)
                 ? SCAN_INTERVAL_PROTECT : SCAN_INTERVAL_HOSTILE;
 
         // 只申请 ATTACK——MOVE 在 start() 中通过停止移动 goal 来处理
         if (!npc.requestMutex(AiMutex.ATTACK)) return false;
 
         TargetResult result = targetSelector.selectTarget();
-        if (result != null) {
+        if (result != null && permittedByEncounter(result.target(), result.reason())) {
             npc.setTarget(result.target());
             currentReason = result.reason();
             unseenTicks = 0;
@@ -94,6 +102,15 @@ public class NpcCombatGoal extends Goal {
         r = TargetSelector.revenge().evaluate(npc);
         if (r != null) { applyResult(r); return true; }
 
+        // 重甲兵的 STAY 是据点坚守：主动拦截十格内敌人，但不会追出阵地。
+        if (npc.getProfession() == com.jgeted.sagadyssey.npc.profession.NpcProfession.HEAVY) {
+            r = TargetSelector.nearbyGuardHostile().evaluate(npc);
+            if (r != null && isInsideHeavyGuardRadius(r.target())) {
+                applyResult(r);
+                return true;
+            }
+        }
+
         return false;
     }
 
@@ -106,6 +123,7 @@ public class NpcCombatGoal extends Goal {
     }
 
     private void applyResult(TargetResult r) {
+        if (!permittedByEncounter(r.target(), r.reason())) return;
         if (npc.requestMutex(AiMutex.ATTACK)) {
             npc.setTarget(r.target());
             currentReason = r.reason();
@@ -117,18 +135,25 @@ public class NpcCombatGoal extends Goal {
 
     @Override
     public boolean canContinueToUse() {
+        if(com.jgeted.sagadyssey.npc.brain.command.NpcDutyTask.withdrawing(npc))return false;
         LivingEntity target = npc.getTarget();
         if (target == null || !target.isAlive()) return false;
         if (target instanceof Player p && (p.isSpectator() || p.isCreative())) return false;
         if (npc.isCombatAlly(target)) return false;
 
         // FOLLOWER/保护模式下检查主人距离
-        if (npc.getOwnerUUID() != null && npc.getCommand() == NpcCommand.FOLLOW) {
-            Player owner = npc.level().getPlayerByUUID(npc.getOwnerUUID());
+        if (npc.getActiveOwner() != null && npc.getCommand() == NpcCommand.FOLLOW) {
+            Player owner = npc.getActiveOwner();
             if (owner != null && npc.distanceToSqr(owner) > MAX_COMBAT_RANGE_SQ) return false;
         }
 
         if (npc.distanceToSqr(target) > MAX_COMBAT_RANGE_SQ) return false;
+
+        if (npc.getCommand() == NpcCommand.PATROL && !isInsidePatrolPursuitRange(target)) return false;
+
+        if (npc.getProfession() == com.jgeted.sagadyssey.npc.profession.NpcProfession.HEAVY
+                && npc.getCommand() == NpcCommand.STAY && !isInsideHeavyGuardRadius(target)) return false;
+        if (!permittedByEncounter(target, currentReason)) return false;
 
         if (npc.getSensing().hasLineOfSight(target)) {
             unseenTicks = 0;
@@ -154,7 +179,7 @@ public class NpcCombatGoal extends Goal {
         priorityRecheckCooldown = TARGET_RECHECK_INTERVAL;
 
         TargetResult result = targetSelector.selectTarget();
-        if (result == null) return;
+        if (result == null || !permittedByEncounter(result.target(), result.reason())) return;
         LivingEntity current = npc.getTarget();
         boolean currentInvalid = current == null || !current.isAlive() || npc.isCombatAlly(current);
         boolean higherPriority = currentReason == null
@@ -186,8 +211,46 @@ public class NpcCombatGoal extends Goal {
         targetSelector.clear();
         targetSelector.register(TargetSelector.ownerAttacked());
         targetSelector.register(TargetSelector.ownerAttacking());
+        targetSelector.register(TargetSelector.nearbyOwnerThreat());
         targetSelector.register(TargetSelector.selfDefense());
         targetSelector.register(TargetSelector.revenge());
         targetSelector.register(TargetSelector.nearbyHostile());
+    }
+
+    private boolean isInsideHeavyGuardRadius(LivingEntity target) {
+        var anchor = npc.getGuardAnchor();
+        if (anchor == null) return npc.distanceToSqr(target) <= 100.0D;
+        double dx = target.getX() - (anchor.getX() + 0.5D);
+        double dz = target.getZ() - (anchor.getZ() + 0.5D);
+        return dx * dx + dz * dz <= 100.0D;
+    }
+
+    private boolean isInsidePatrolPursuitRange(LivingEntity target) {
+        var center = npc.getPatrolCenter();
+        if (center == null) return true;
+        double dx = target.getX() - (center.getX() + 0.5D);
+        double dz = target.getZ() - (center.getZ() + 0.5D);
+        double radius = npc.getPatrolRadius() + 10.0D;
+        return dx * dx + dz * dz <= radius * radius;
+    }
+
+    private boolean permittedByEncounter(LivingEntity target, TargetReason reason) {
+        if (!com.jgeted.sagadyssey.social.growth.SettlementSafetyRuntime.allowedTarget(npc, target)) return false;
+        if (!(npc.level() instanceof ServerLevel level)) return true;
+        var encounter = CombatEncounterData.get(level.getServer())
+                .activeFor(npc.getCharacterId(), level.getGameTime());
+        if (encounter == null) return true;
+        java.util.UUID targetCharacter = target instanceof NpcBase other
+                ? other.getCharacterId()
+                : target instanceof ServerPlayer player
+                ? CharacterRegistry.currentId(player) : target.getUUID();
+        if (targetCharacter == null) return false;
+        boolean immediateThreat = reason == TargetReason.OWNER_ATTACKED
+                || reason == TargetReason.SELF_DEFENSE || reason == TargetReason.REVENGE;
+        var decision = CombatEncounterService.engagement(encounter,
+                npc.getCharacterId(), targetCharacter, immediateThreat);
+        return decision.action() == EngagementAction.ATTACK
+                || decision.action() == EngagementAction.DEFEND
+                || decision.action() == EngagementAction.ARREST && immediateThreat;
     }
 }

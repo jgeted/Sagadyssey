@@ -1,8 +1,14 @@
 package com.jgeted.sagadyssey.npc.network;
 
 import com.jgeted.sagadyssey.Sagadyssey;
+import com.jgeted.sagadyssey.core.network.NetworkStrings;
+import com.jgeted.sagadyssey.core.network.NetworkRateLimiter;
 import com.jgeted.sagadyssey.npc.entity.NpcBase;
 import com.jgeted.sagadyssey.npc.profession.NpcProfession;
+import com.jgeted.sagadyssey.social.logistics.LogisticsData;
+import com.jgeted.sagadyssey.social.character.CharacterRegistry;
+import com.jgeted.sagadyssey.social.service.AuthorityScope;
+import com.jgeted.sagadyssey.social.service.ServiceRelationshipData;
 import io.netty.buffer.ByteBuf;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.codec.StreamCodec;
@@ -27,17 +33,9 @@ public record NpcProfessionPacket(int npcId, String professionName) implements C
     public static final StreamCodec<ByteBuf, NpcProfessionPacket> STREAM_CODEC = StreamCodec.of(
             (buf, packet) -> {
                 buf.writeInt(packet.npcId);
-                byte[] bytes = packet.professionName.getBytes();
-                buf.writeInt(bytes.length);
-                buf.writeBytes(bytes);
+                NetworkStrings.write(buf, packet.professionName, 32);
             },
-            buf -> {
-                int npcId = buf.readInt();
-                int len = buf.readInt();
-                byte[] bytes = new byte[len];
-                buf.readBytes(bytes);
-                return new NpcProfessionPacket(npcId, new String(bytes));
-            }
+            buf -> new NpcProfessionPacket(buf.readInt(), NetworkStrings.read(buf, 32))
     );
 
     @Override
@@ -53,6 +51,7 @@ public record NpcProfessionPacket(int npcId, String professionName) implements C
     public static void handle(final NpcProfessionPacket data, final IPayloadContext context) {
         context.enqueueWork(() -> {
             ServerPlayer player = (ServerPlayer) context.player();
+            if (!NetworkRateLimiter.allow(player, "npc_profession", 4)) return;
             Entity entity = player.serverLevel().getEntity(data.npcId);
 
             if (!(entity instanceof NpcBase npc)) {
@@ -61,9 +60,17 @@ public record NpcProfessionPacket(int npcId, String professionName) implements C
                 return;
             }
 
-            if (!npc.isOwnedBy(player.getUUID())) {
+            var principal = CharacterRegistry.currentId(player);
+            if (!player.isAlive() || principal == null) {
+                player.displayClientMessage(Component.literal("当前没有可用的在生人物，不能行使工作授权。"), true);
+                return;
+            }
+            var verdict = ServiceRelationshipData.get(player.server).authorize(
+                    principal, npc.getCharacterId(),
+                    AuthorityScope.ASSIGN_ROLE, false, player.serverLevel().getGameTime());
+            if (!verdict.allowed()) {
                 player.displayClientMessage(
-                        Component.literal("§c这个 NPC 不属于你"), true);
+                        Component.literal("§c没有岗位协商授权：" + verdict.reason()), true);
                 return;
             }
 
@@ -88,6 +95,14 @@ public record NpcProfessionPacket(int npcId, String professionName) implements C
                 return;
             }
 
+            for (int slot = 0; slot < npc.getTransportInventory().getContainerSize(); slot++) {
+                if (!npc.getTransportInventory().getItem(slot).isEmpty()) {
+                    player.displayClientMessage(
+                            Component.literal("§c请先完成当前运输订单并卸空货舱，再切换职业"), true);
+                    return;
+                }
+            }
+
             if (!hasEnoughEmeralds(player, SWITCH_COST)) {
                 player.displayClientMessage(
                         Component.literal("§c绿宝石不足！需要 " + SWITCH_COST + " 个绿宝石"), true);
@@ -109,16 +124,18 @@ public record NpcProfessionPacket(int npcId, String professionName) implements C
                 default -> 0;
             };
 
-            // 清除装备栏（保留背包）
-            npc.setItemSlot(EquipmentSlot.HEAD, ItemStack.EMPTY);
-            npc.setItemSlot(EquipmentSlot.CHEST, ItemStack.EMPTY);
-            npc.setItemSlot(EquipmentSlot.LEGS, ItemStack.EMPTY);
-            npc.setItemSlot(EquipmentSlot.FEET, ItemStack.EMPTY);
-            npc.setItemSlot(EquipmentSlot.MAINHAND, ItemStack.EMPTY);
-            npc.setItemSlot(EquipmentSlot.OFFHAND, ItemStack.EMPTY);
-            npc.setBowSlot(ItemStack.EMPTY);
-            npc.setArrowSlot(ItemStack.EMPTY);
+            // 转职不销毁财物：先卸入 36 格随身物品栏，极端满包时生成带归属标记的掉落物。
+            for (EquipmentSlot slot : new EquipmentSlot[]{EquipmentSlot.HEAD, EquipmentSlot.CHEST,
+                    EquipmentSlot.LEGS, EquipmentSlot.FEET, EquipmentSlot.MAINHAND,
+                    EquipmentSlot.OFFHAND}) {
+                ItemStack equipped = npc.getItemBySlot(slot).copy();
+                if (equipped.isEmpty()) continue;
+                npc.setItemSlot(slot, ItemStack.EMPTY);
+                if (!npc.addToBag(equipped)) npc.spawnWorkOutput(equipped);
+            }
 
+            LogisticsData.get(player.server).releaseOrdersForNpc(
+                    npc.getCharacterId(), player.serverLevel().getGameTime());
             npc.setProfession(newProfession);
             npc.applyInitialEquipment(newProfession);
             npc.setExperience(penaltyExp);  // 应用降级经验

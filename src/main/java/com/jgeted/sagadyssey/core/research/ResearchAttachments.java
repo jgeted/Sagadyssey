@@ -1,5 +1,6 @@
 package com.jgeted.sagadyssey.core.research;
 
+import com.jgeted.sagadyssey.core.LegacyFeatureFlags;
 import com.jgeted.sagadyssey.core.network.ResearchSyncPayload;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
@@ -43,6 +44,7 @@ public class ResearchAttachments {
 
     /** 便捷方法：给玩家增加研究点数，自动同步到客户端 */
     public static void addPoints(Entity entity, int amount) {
+        if (!LegacyFeatureFlags.LEGACY_RESEARCH_ENABLED) return;
         getPointsData(entity).addPoints(amount);
         if (entity instanceof ServerPlayer player) {
             syncToClient(player);
@@ -56,6 +58,7 @@ public class ResearchAttachments {
 
     /** 尝试解锁科技。检查前置、点数，成功则扣除点数并解锁，自动同步到客户端。 */
     public static boolean tryUnlock(Entity entity, String nodeId) {
+        if (!LegacyFeatureFlags.LEGACY_RESEARCH_ENABLED) return false;
         ResearchNode node = ResearchRegistry.getNode(nodeId);
         if (node == null) return false;
         PlayerResearchData data = getUnlockedData(entity);
@@ -72,6 +75,7 @@ public class ResearchAttachments {
 
     /** 将研究数据同步到客户端 */
     public static void syncToClient(ServerPlayer player) {
+        if (!LegacyFeatureFlags.LEGACY_RESEARCH_ENABLED) return;
         int pts = getPointsData(player).getPoints();
         var unlocked = new HashSet<>(getUnlockedData(player).getUnlocked());
         PacketDistributor.sendToPlayer(player, new ResearchSyncPayload(pts, unlocked));

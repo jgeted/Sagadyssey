@@ -1,5 +1,6 @@
 package com.jgeted.sagadyssey.core.config;
 
+import com.jgeted.sagadyssey.core.LegacyFeatureFlags;
 import net.neoforged.neoforge.common.ModConfigSpec;
 
 /**
@@ -22,18 +23,24 @@ public class SagadysseyConfig {
     /** 坐骑自动上下马间隔（tick） */
     public static final ModConfigSpec.IntValue MOUNT_CHECK_INTERVAL;
 
+    public static final ModConfigSpec.IntValue SOCIETY_SURPLUS_TICKS, SOCIETY_DECLINE_TICKS, SOCIETY_RECOVERY_TICKS, SOCIETY_FOOD_SURPLUS;
     static {
         ModConfigSpec.Builder builder = new ModConfigSpec.Builder();
 
-        // ===== 研究系统 =====
-        builder.comment("研究系统设置").push("research");
-        NORMAL_ADVANCEMENT_POINTS = builder
-                .comment("完成绿框进度（普通/目标）获得的研究点数")
-                .defineInRange("normalAdvancementPoints", 2, 1, 20);
-        CHALLENGE_ADVANCEMENT_POINTS = builder
-                .comment("完成紫框进度（挑战）获得的研究点数")
-                .defineInRange("challengeAdvancementPoints", 5, 1, 50);
-        builder.pop();
+        // 旧研究配置也不再出现在玩家配置界面；重新启用总开关时可一并恢复原键名。
+        if (LegacyFeatureFlags.LEGACY_RESEARCH_ENABLED) {
+            builder.comment("研究系统设置").push("research");
+            NORMAL_ADVANCEMENT_POINTS = builder
+                    .comment("完成绿框进度（普通/目标）获得的研究点数")
+                    .defineInRange("normalAdvancementPoints", 2, 1, 20);
+            CHALLENGE_ADVANCEMENT_POINTS = builder
+                    .comment("完成紫框进度（挑战）获得的研究点数")
+                    .defineInRange("challengeAdvancementPoints", 5, 1, 50);
+            builder.pop();
+        } else {
+            NORMAL_ADVANCEMENT_POINTS = null;
+            CHALLENGE_ADVANCEMENT_POINTS = null;
+        }
 
         // ===== 调试 =====
         builder.comment("调试选项").push("debug");
@@ -62,6 +69,12 @@ public class SagadysseyConfig {
                 .defineInRange("mountCheckInterval", 40, 10, 200);
         builder.pop();
 
+        builder.comment("版本化自然聚落的兴衰观察阈值；已建成设施不会因改配置重复领取材料").push("society");
+        SOCIETY_SURPLUS_TICKS=builder.defineInRange("surplusObservationTicks",48000,24000,960000);
+        SOCIETY_DECLINE_TICKS=builder.defineInRange("shortageObservationTicks",48000,24000,960000);
+        SOCIETY_RECOVERY_TICKS=builder.defineInRange("recoveryObservationTicks",24000,12000,960000);
+        SOCIETY_FOOD_SURPLUS=builder.defineInRange("foodSurplusBeforeDonation",20,20,256);
+        builder.pop();
         SPEC = builder.build();
     }
 }

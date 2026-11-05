@@ -1,0 +1,41 @@
+package com.jgeted.sagadyssey.social.religion.life;
+
+import net.minecraft.core.BlockPos;
+import net.minecraft.nbt.*;
+import org.junit.jupiter.api.Test;
+import java.util.*;
+import static org.junit.jupiter.api.Assertions.*;
+
+class ChurchLifeDataTest {
+    final UUID temple=UUID.randomUUID(),person=UUID.randomUUID(),host=UUID.randomUUID();
+    ChurchActivity activity(){return new ChurchActivity(UUID.randomUUID(),temple,ChurchActivity.Kind.RITE,new BlockPos(0,1,0),null,null,List.of(person),Set.of(),1,10,500,20,null,ChurchActivity.Stage.PLANNED,0,0,10,0,"invitation");}
+    ChurchRecord doc(ChurchActivity a){return new ChurchRecord(a.id(),temple,a.id(),null,host,UUID.randomUUID(),20,"Rite","Observed rite",ChurchRecord.Access.PUBLIC_TEXT,Set.of(person),.8,null,"church.rite");}
+    @Test void invitationDoesNotImplyConsent(){assertTrue(activity().consent().isEmpty());}
+    @Test void onlyInvitedMayConsent(){assertThrows(IllegalStateException.class,()->activity().accept(UUID.randomUUID()));}
+    @Test void consentIsIdempotent(){var a=activity().accept(person);assertEquals(a,a.accept(person));}
+    @Test void laborIsDiscreteNotElapsed(){var a=activity().claim(host,10).progress(10000);assertEquals(1,a.work());}
+    @Test void hostCannotChangeAfterClaim(){var a=activity().claim(host,10);assertThrows(IllegalStateException.class,()->a.claim(UUID.randomUUID(),20));}
+    @Test void malformedDuplicatePeopleRejected(){var a=activity().save();a.getList("Invited",Tag.TAG_COMPOUND).add(a.getList("Invited",Tag.TAG_COMPOUND).getCompound(0).copy());assertThrows(IllegalArgumentException.class,()->ChurchActivity.load(a));}
+    @Test void absentWorkCannotBecomeSettled(){assertThrows(IllegalArgumentException.class,()->activity().claim(host,10).state(ChurchActivity.Stage.COMPLETED,20,"fake completion"));}
+    @Test void missingProgressRejectedNotZeroed(){var t=activity().save();t.remove("Work");assertThrows(IllegalArgumentException.class,()->ChurchActivity.load(t));}
+    @Test void unknownStageRejected(){var t=activity().save();t.putString("Stage","INVALID");assertThrows(IllegalArgumentException.class,()->ChurchActivity.load(t));}
+    @Test void exactSaveRetainsInvitationConsentHostAndProgress(){var d=new ChurchLifeData();var a=activity().accept(person).claim(host,12).progress(13).defer(15,"missing venue");d.put(a);assertEquals(a,ChurchLifeData.load(d.save(new CompoundTag(),null),null).activity(a.id()));}
+    @Test void terminalCannotBeReopened(){var d=new ChurchLifeData();var a=activity().state(ChurchActivity.Stage.CANCELLED,30,"missing people");d.put(a);assertThrows(IllegalStateException.class,()->d.put(a.claim(host,40)));}
+    @Test void fixedIntentCannotBeReplaced(){var d=new ChurchLifeData();var a=activity();d.put(a);var t=a.save();t.putLong("Venue",new BlockPos(10,1,0).asLong());assertThrows(IllegalStateException.class,()->d.put(ChurchActivity.load(t)));}
+    @Test void nearbyBookedVenuesAreExclusive(){var d=new ChurchLifeData();var a=activity().claim(host,10);d.put(a);var b=activity();assertFalse(d.venueFree(b));d.put(a.state(ChurchActivity.Stage.CANCELLED,20,"cancelled"));assertTrue(d.venueFree(b));}
+    @Test void completedNeedsSourceBearingRecord(){var d=new ChurchLifeData();var a=activity().claim(host,10);for(int i=0;i<20;i++)a=a.progress(11+i);d.put(a.state(ChurchActivity.Stage.COMPLETED,40,"done"));assertThrows(IllegalArgumentException.class,()->ChurchLifeData.load(d.save(new CompoundTag(),null),null));d.put(doc(a));assertEquals(1,ChurchLifeData.load(d.save(new CompoundTag(),null),null).records().size());}
+    @Test void recordContentAuthorAndCustodianAreImmutable(){var d=new ChurchLifeData();var a=activity();d.put(a);var r=doc(a);d.put(r);var t=r.save();t.putString("Text","different story");assertThrows(IllegalStateException.class,()->d.put(ChurchRecord.load(t)));}
+    @Test void reliabilityIsNotAnUnboundedTruthScore(){var a=activity();var t=doc(a).save();t.putDouble("Confidence",Double.NaN);assertThrows(IllegalArgumentException.class,()->ChurchRecord.load(t));}
+    @Test void privateRecordCannotLoseAccessOnLoad(){var a=activity();var t=doc(a).save();t.remove("Access");assertThrows(IllegalArgumentException.class,()->ChurchRecord.load(t));}
+    @Test void orphanSourceRejected(){var d=new ChurchLifeData();var a=activity();d.put(a);var r=doc(a).save();r.putUUID("Source",UUID.randomUUID());d.put(ChurchRecord.load(r));assertThrows(IllegalArgumentException.class,()->ChurchLifeData.load(d.save(new CompoundTag(),null),null));}
+    @Test void duplicateActivityAndMissingListsRejected(){var d=new ChurchLifeData();d.put(activity());var t=d.save(new CompoundTag(),null);t.getList("Activities",Tag.TAG_COMPOUND).add(t.getList("Activities",Tag.TAG_COMPOUND).getCompound(0).copy());assertThrows(IllegalArgumentException.class,()->ChurchLifeData.load(t,null));var broken=d.save(new CompoundTag(),null);broken.remove("Records");assertThrows(IllegalArgumentException.class,()->ChurchLifeData.load(broken,null));}
+    @Test void unknownSchemaRejected(){var t=new ChurchLifeData().save(new CompoundTag(),null);t.putInt("Schema",99);assertThrows(IllegalArgumentException.class,()->ChurchLifeData.load(t,null));}
+    @Test void calendarHasFiniteOccurrencesAndExactCadence(){var c=new ChurchLifeData.Calendar(UUID.randomUUID(),temple,new BlockPos(0,1,0),List.of(person),1,24000,10,2,3);assertEquals(48010,c.next());assertThrows(IllegalArgumentException.class,()->new ChurchLifeData.Calendar(c.id(),temple,c.venue(),c.invited(),1,24000,10,4,3));}
+    @Test void consentCanBeWithdrawnBeforeSettlement(){var a=activity().accept(person).decline(person);assertTrue(a.consent().isEmpty());}
+    @Test void futureAssignedHostDoesNotBookVenueBeforeSelection(){var d=new ChurchLifeData();d.put(activity().assign(host));assertTrue(d.venueFree(activity()));}
+    @Test void attendanceExposureSurvivesRoundTripWithoutOfflineCredit(){var d=new ChurchLifeData();var a=activity().accept(person).claim(host,10).progress(11);d.put(a);d.expose(a,List.of(person));var copy=ChurchLifeData.load(d.save(new CompoundTag(),null),null);assertEquals(1,copy.exposure(a.id(),person));}
+    @Test void missingCurrentSchemaAttendanceAndCompactsFailClosed(){var t=new ChurchLifeData().save(new CompoundTag(),null);t.remove("Attendance");assertThrows(IllegalArgumentException.class,()->ChurchLifeData.load(t,null));var second=new ChurchLifeData().save(new CompoundTag(),null);second.remove("Compacts");assertThrows(IllegalArgumentException.class,()->ChurchLifeData.load(second,null));}
+    @Test void localCompactRequiresTwoIdentifiedSignatories(){var c=new ChurchCompact(UUID.randomUUID(),temple,com.jgeted.sagadyssey.worldsim.rights.SubjectRef.household(UUID.randomUUID()),"specific shared maintenance",10,100,person,null,null);assertFalse(c.sign(true,host).active(20));var both=c.sign(true,host).sign(false,person);assertTrue(both.active(20));assertFalse(both.active(100));assertEquals(both,ChurchCompact.load(both.save()));}
+    @Test void compactCannotReplaceSignatoryOrAlterTerms(){var d=new ChurchLifeData();var c=new ChurchCompact(UUID.randomUUID(),temple,com.jgeted.sagadyssey.worldsim.rights.SubjectRef.household(UUID.randomUUID()),"specific obligation",10,100,person,null,null).sign(true,host);d.put(c);assertThrows(IllegalStateException.class,()->c.sign(true,UUID.randomUUID()));var t=c.save();t.putString("Terms","changed terms");assertThrows(IllegalStateException.class,()->d.put(ChurchCompact.load(t)));var replaced=c.save();replaced.putUUID("TempleSigner",UUID.randomUUID());assertThrows(IllegalStateException.class,()->d.put(ChurchCompact.load(replaced)));var both=c.sign(false,person);d.put(both);var replacedPartner=both.save();replacedPartner.putUUID("PartnerSigner",UUID.randomUUID());assertThrows(IllegalStateException.class,()->d.put(ChurchCompact.load(replacedPartner)));}
+    @Test void signedCompactCannotLoadWithoutSignerIdentity(){var c=new ChurchCompact(UUID.randomUUID(),temple,com.jgeted.sagadyssey.worldsim.rights.SubjectRef.institution(UUID.randomUUID()),"specific obligation",10,100,person,null,null).sign(true,host);var t=c.save();t.remove("TempleSigner");assertThrows(IllegalArgumentException.class,()->ChurchCompact.load(t));}
+}

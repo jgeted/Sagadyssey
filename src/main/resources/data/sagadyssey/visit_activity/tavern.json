@@ -1,0 +1,8 @@
+{
+  "kind": "TAVERN",
+  "facility": "sagadyssey:tavern",
+  "duration_ticks": 600,
+  "capacity": 8,
+  "window_start": 9000,
+  "window_end": 18000
+}

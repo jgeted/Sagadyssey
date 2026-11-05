@@ -2,6 +2,8 @@ package com.jgeted.sagadyssey.npc.faction;
 
 import com.jgeted.sagadyssey.npc.entity.NpcBase;
 import com.jgeted.sagadyssey.npc.faction.network.FactionStandingsUpdatePayload;
+import com.jgeted.sagadyssey.social.politics.PoliticalRelation;
+import com.jgeted.sagadyssey.social.politics.PoliticalStateData;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.LivingEntity;
 import net.neoforged.neoforge.common.NeoForge;
@@ -45,6 +47,8 @@ public final class StandingModifier {
     public static void applyModification(ServerPlayer player, Faction faction,
                                           int rawDelta, String reasonKey) {
         if (player == null || faction == null || rawDelta == 0) return;
+        FactionStandings standings = FactionAttachments.getStandings(player);
+        boolean newlyDiscovered = standings.discoverFaction(faction.id());
 
         // 步骤 1-2：应用 faction 的 reputationMultiplier
         float multiplier = faction.reputationMultiplier();
@@ -53,11 +57,15 @@ public final class StandingModifier {
         // 步骤 3：触发 StandingModifyEvent（可取消）
         StandingModifyEvent modifyEvent = new StandingModifyEvent(player, faction, delta, reasonKey);
         NeoForge.EVENT_BUS.post(modifyEvent);
-        if (modifyEvent.isCanceled()) return;
+        if (modifyEvent.isCanceled()) {
+            if (newlyDiscovered) FactionAttachments.syncToClient(player);
+            return;
+        }
         delta = modifyEvent.getDelta();
 
         // 步骤 4-6 委托给内部方法
         applyInternal(player, faction, delta, reasonKey, false);
+        if (newlyDiscovered) FactionAttachments.syncToClient(player);
     }
 
     /**
@@ -86,7 +94,9 @@ public final class StandingModifier {
         NeoForge.EVENT_BUS.post(new StandingChangedEvent(player, faction, oldValue, newValue, reasonKey));
 
         // 增量同步到客户端（含涟漪变化列表）
-        List<FactionStandingsUpdatePayload.AffectedFaction> rippleList = isRipple ? List.of() : applyRipple(player, faction, delta);
+        if (isRipple) return;
+        List<FactionStandingsUpdatePayload.AffectedFaction> rippleList = applyRipple(player, faction, delta)
+                .stream().filter(value -> standings.isFactionKnown(value.factionId())).toList();
         PacketDistributor.sendToPlayer(player,
                 new FactionStandingsUpdatePayload(factionId, newValue, newLevel, reasonKey, rippleList));
     }
@@ -226,6 +236,19 @@ public final class StandingModifier {
 
         // 情况4：双方都是普通阵营 → 查关系矩阵
         if (sourceFaction != null && targetFaction != null) {
+            var server = net.neoforged.neoforge.server.ServerLifecycleHooks.getCurrentServer();
+            if (server != null) {
+                PoliticalStateData politics = PoliticalStateData.get(server);
+                if (politics.hasRelation(sourceFaction.id(), targetFaction.id())) {
+                    PoliticalRelation dynamic = politics.relation(sourceFaction.id(), targetFaction.id());
+                    if (dynamic == PoliticalRelation.WAR) return true;
+                    if (dynamic == PoliticalRelation.ALLIED || dynamic == PoliticalRelation.FRIENDLY
+                            || dynamic == PoliticalRelation.VASSAL || dynamic == PoliticalRelation.OVERLORD) {
+                        return false;
+                    }
+                    // NEUTRAL/TENSE 保留数据包关系矩阵的既有行为。
+                }
+            }
             FactionRelationMatrix matrix = FactionRelationMatrix.getInstance();
             InterFactionRelation relation = matrix.getRelation(sourceFaction, targetFaction);
             return relation == InterFactionRelation.ENEMY;

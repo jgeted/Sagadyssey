@@ -1,5 +1,6 @@
 package com.jgeted.sagadyssey.core.command;
 
+import com.jgeted.sagadyssey.core.LegacyFeatureFlags;
 import com.jgeted.sagadyssey.core.network.ResearchUnlockPacket;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.StringArgumentType;
@@ -15,6 +16,7 @@ import net.neoforged.neoforge.network.PacketDistributor;
 public class TestNetworkCommand {
 
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
+        if (!LegacyFeatureFlags.LEGACY_RESEARCH_ENABLED) return;
         dispatcher.register(
                 Commands.literal("saga")
                         .then(Commands.literal("test")
