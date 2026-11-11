@@ -1,5 +1,7 @@
 package com.jgeted.sagadyssey.social.life;
 
+import net.minecraft.core.UUIDUtil;
+
 import net.minecraft.nbt.CompoundTag;
 
 import java.util.UUID;
@@ -36,7 +38,7 @@ public record NpcNeedsRecord(
 
     public CompoundTag save() {
         CompoundTag tag = new CompoundTag();
-        tag.putUUID("Npc", npcId);
+        tag.store("Npc", UUIDUtil.CODEC, npcId);
         tag.putInt("Hunger", hunger);
         tag.putLong("LastAte", lastAteAt);
         tag.putString("LastFoodSource", lastFoodSource);
@@ -45,9 +47,9 @@ public record NpcNeedsRecord(
     }
 
     public static NpcNeedsRecord load(CompoundTag tag) {
-        UUID npcId = tag.getUUID("Npc");
-        return new NpcNeedsRecord(npcId, tag.getInt("Hunger"), tag.getLong("LastAte"),
-                tag.getString("LastFoodSource"), tag.getLong("LastUpdated"));
+        UUID npcId = tag.read("Npc", UUIDUtil.CODEC).orElseThrow();
+        return new NpcNeedsRecord(npcId, tag.getIntOr("Hunger", 0), tag.getLongOr("LastAte", 0L),
+                tag.getStringOr("LastFoodSource", ""), tag.getLongOr("LastUpdated", 0L));
     }
 
     private static int clamp(int value) {

@@ -22,7 +22,7 @@ import com.jgeted.sagadyssey.social.settlement.BuildingRecord;
 import com.jgeted.sagadyssey.social.settlement.SettlementRecord;
 import com.jgeted.sagadyssey.social.settlement.SettlementRegistryData;
 import net.minecraft.core.BlockPos;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.tags.BlockTags;
@@ -170,7 +170,7 @@ public final class FixedScenarioVerifier {
 
             StructureConfig config = SagadysseyStructures.getConfig(placement.templateId());
             String templatePath = config == null ? placement.templateId() : config.getNbtFileName();
-            ResourceLocation location = ResourceLocation.fromNamespaceAndPath(Sagadyssey.MOD_ID, templatePath);
+            Identifier location = Identifier.fromNamespaceAndPath(Sagadyssey.MOD_ID, templatePath);
             Optional<StructureTemplate> template = level.getStructureManager().get(location);
             check(state, template.isPresent(), "建筑模板缺失: " + location);
             if (template.isEmpty()) continue;

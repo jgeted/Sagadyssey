@@ -1,5 +1,7 @@
 package com.jgeted.sagadyssey.social.politics;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+
 import com.jgeted.sagadyssey.npc.identity.NpcOffice;
 import com.jgeted.sagadyssey.npc.identity.NpcSocialClass;
 import com.jgeted.sagadyssey.npc.identity.PlayerIdentityAttachments;
@@ -35,7 +37,7 @@ public final class PoliticalCommand {
                                                         StringArgumentType.getString(ctx, "source"),
                                                         StringArgumentType.getString(ctx, "target"))))))
                         .then(Commands.literal("set_relation")
-                                .requires(source -> source.hasPermission(2))
+                                .requires(source -> MinecraftApi.hasPermission(source, 2))
                                 .then(Commands.argument("source", StringArgumentType.word())
                                         .then(Commands.argument("target", StringArgumentType.word())
                                                 .then(Commands.argument("relation", StringArgumentType.word())
@@ -50,7 +52,7 @@ public final class PoliticalCommand {
                                                                 StringArgumentType.getString(ctx, "target"),
                                                                 StringArgumentType.getString(ctx, "relation")))))))
                         .then(Commands.literal("appoint")
-                                .requires(source -> source.hasPermission(2))
+                                .requires(source -> MinecraftApi.hasPermission(source, 2))
                                 .then(Commands.argument("faction", StringArgumentType.word())
                                         .then(Commands.argument("player", EntityArgument.player())
                                                 .executes(ctx -> appoint(ctx.getSource(),
@@ -103,11 +105,11 @@ public final class PoliticalCommand {
         var server=source.getServer();UUID actor=CharterTradeGovernance.actor(source.getEntity());var d=NaturalPolityData.get(server);
         CharterTradeGovernance.Outcome result;
         if(peer!=null){
-            if(action.equals("status")){var t=CharterTradeGovernance.pact(server,self,peer);result=new CharterTradeGovernance.Outcome(true,t==null?"NONE":t.getString("State"),t==null?"尚无本双方约定":t.getString("Reason"));}
+            if(action.equals("status")){var t=CharterTradeGovernance.pact(server,self,peer);result=new CharterTradeGovernance.Outcome(true,t==null?"NONE":t.getStringOr("State", ""),t==null?"尚无本双方约定":t.getStringOr("Reason", ""));}
             else result=CharterTradeGovernance.agreement(server,self,peer,actor,action);
         } else if(action.equals("enable"))result=CharterTradeGovernance.enable(server,self,actor);
         else if(action.equals("donate"))result=CharterTradeGovernance.donate(server,self,source.getEntity());
-        else if(action.equals("status")){var row=d.site(self);result=new CharterTradeGovernance.Outcome(row!=null,row==null?"NONE":row.getCompound("ReserveRule").getString("State"),row==null?"未知聚落":row.getCompound("ReserveRule").getString("Reason"));}
+        else if(action.equals("status")){var row=d.site(self);result=new CharterTradeGovernance.Outcome(row!=null,row==null?"NONE":row.getCompoundOrEmpty("ReserveRule").getStringOr("State", ""),row==null?"未知聚落":row.getCompoundOrEmpty("ReserveRule").getStringOr("Reason", ""));}
         else {
             var row=d.site(self);var home=actor==null?null:com.jgeted.sagadyssey.social.household.HouseholdData.get(server).forMember(actor);
             boolean hungry=source.getEntity() instanceof ServerPlayer player?player.getFoodData().getFoodLevel()<=10:actor!=null&&com.jgeted.sagadyssey.social.life.NpcLifeData.get(server).needs(actor)!=null&&com.jgeted.sagadyssey.social.life.NpcLifeData.get(server).needs(actor).hunger()>=350;
@@ -192,7 +194,7 @@ public final class PoliticalCommand {
             return 0;
         }
         PoliticalStateData politics = PoliticalStateData.get(source.getServer());
-        if (!source.hasPermission(2)) {
+        if (!MinecraftApi.hasPermission(source, 2)) {
             if (!(source.getEntity() instanceof ServerPlayer granter)) {
                 source.sendFailure(Component.literal("只有王权持有者或当前领主可以授予领地。"));
                 return 0;

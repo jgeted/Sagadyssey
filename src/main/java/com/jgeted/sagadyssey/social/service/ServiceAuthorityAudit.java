@@ -1,5 +1,7 @@
 package com.jgeted.sagadyssey.social.service;
 
+import net.minecraft.core.UUIDUtil;
+
 import net.minecraft.nbt.CompoundTag;
 
 import java.util.UUID;
@@ -9,8 +11,8 @@ public record ServiceAuthorityAudit(UUID principalId, UUID agentId, AuthoritySco
                                     long gameTime) {
     public CompoundTag save() {
         CompoundTag tag = new CompoundTag();
-        tag.putUUID("Principal", principalId);
-        tag.putUUID("Agent", agentId);
+        tag.store("Principal", UUIDUtil.CODEC, principalId);
+        tag.store("Agent", UUIDUtil.CODEC, agentId);
         tag.putString("Scope", scope.name());
         tag.putString("Result", result.name());
         tag.putString("Reason", reason);
@@ -19,9 +21,9 @@ public record ServiceAuthorityAudit(UUID principalId, UUID agentId, AuthoritySco
     }
 
     public static ServiceAuthorityAudit load(CompoundTag tag) {
-        return new ServiceAuthorityAudit(tag.getUUID("Principal"), tag.getUUID("Agent"),
-                AuthorityScope.valueOf(tag.getString("Scope")),
-                ServiceAuthorityVerdict.Status.valueOf(tag.getString("Result")),
-                tag.getString("Reason"), tag.getLong("GameTime"));
+        return new ServiceAuthorityAudit(tag.read("Principal", UUIDUtil.CODEC).orElseThrow(), tag.read("Agent", UUIDUtil.CODEC).orElseThrow(),
+                AuthorityScope.valueOf(tag.getStringOr("Scope", "")),
+                ServiceAuthorityVerdict.Status.valueOf(tag.getStringOr("Result", "")),
+                tag.getStringOr("Reason", ""), tag.getLongOr("GameTime", 0L));
     }
 }

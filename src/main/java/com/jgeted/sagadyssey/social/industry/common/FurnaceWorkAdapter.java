@@ -1,4 +1,6 @@
 package com.jgeted.sagadyssey.social.industry.common;
+
+import com.jgeted.sagadyssey.core.MinecraftApi;
 import com.jgeted.sagadyssey.npc.entity.*;
 import com.jgeted.sagadyssey.npc.profession.NpcProfession;
 import com.jgeted.sagadyssey.npc.brain.execution.*;
@@ -10,20 +12,33 @@ import com.jgeted.sagadyssey.social.production.*;
 import com.jgeted.sagadyssey.worldsim.rights.*;
 import com.jgeted.sagadyssey.worldsim.transfer.*;
 import net.minecraft.core.BlockPos;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.Container;
 import net.minecraft.world.item.*;
 import net.minecraft.world.level.block.entity.AbstractFurnaceBlockEntity;
+import net.minecraft.world.level.block.entity.BlastFurnaceBlockEntity;
+import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.block.entity.FurnaceBlockEntity;
+import net.minecraft.world.level.block.entity.SmokerBlockEntity;
 import java.util.*;
 /** Existing order/material endpoints bind same-owner inputs and output. Native machine is the only converter. */
 public final class FurnaceWorkAdapter implements NpcTaskExecutor {
- public static final ResourceLocation ID=ResourceLocation.parse("sagadyssey:industry_furnace");
+ public static final Identifier ID=Identifier.parse("sagadyssey:industry_furnace");
  public static final String RECIPE="sagadyssey:industry_native_iron",BOUND_IRON="sagadyssey:industry_native_iron_bound",BOUND_POTATO="sagadyssey:industry_native_potato_bound";
  private record Spec(String raw,String output){}
  private static ItemFingerprint fp(String item){return new ItemFingerprint("minecraft:"+item,0);}
  private static Spec spec(String recipe){return switch(recipe){case RECIPE,BOUND_IRON->new Spec("raw_iron","iron_ingot");case BOUND_POTATO->new Spec("potato","baked_potato");default->null;};}
  public static boolean supports(ItemFingerprint item){return item.equals(fp("iron_ingot"))||item.equals(fp("baked_potato"));}
+ public static boolean supportsStation(BlockEntity station, ItemFingerprint output) {
+  if (!supports(output)) return false;
+  if (station instanceof FurnaceBlockEntity) return true;
+  return output.equals(fp("iron_ingot")) ? station instanceof BlastFurnaceBlockEntity
+          : station instanceof SmokerBlockEntity;
+ }
+ public static boolean ownsStation(MinecraftServer server, String dimension, BlockPos position, SubjectRef actor) {
+  return owned(RightsStateData.get(server), ProductionContainerIds.resolve(server, dimension, position), actor);
+ }
  public static boolean recognized(ProductionOrder o){
   if(o==null)return false;var r=spec(o.recipeId());if(r==null||!o.output().fingerprint().equals(fp(r.output()))||o.output().quantity()<1||o.output().quantity()>8||o.requiredWorkTicks()!=40||!o.batchId().equals(IndustryTransfers.id(o.id()+":native-machine"))||o.outputOwner().type()!=SubjectRef.SubjectType.CHARACTER||!o.issuer().equals(o.outputOwner()))return false;
   var raw=new ProductionMaterial(fp(r.raw()),o.output().quantity());var fuel=new ProductionMaterial(fp("coal"),1);
@@ -42,14 +57,18 @@ public final class FurnaceWorkAdapter implements NpcTaskExecutor {
  }
  private static ProductionOrder request(NpcBase owner,UUID id,String recipe,BlockPos furnace,FieldworkStorage input,FieldworkStorage output,int quantity,long now){
   if(quantity<1||quantity>8)throw new IllegalArgumentException("bounded native quantity required");
-  var actor=SubjectRef.character(owner.getCharacterId());var r=spec(recipe);String dim=owner.level().dimension().location().toString();var s=owner.getServer();var orders=ProductionOrderData.get(s);var old=orders.byId(id).orElse(null);
+  var actor=SubjectRef.character(owner.getCharacterId());var r=spec(recipe);String dim=owner.level().dimension().identifier().toString();var s=MinecraftApi.server(owner);var orders=ProductionOrderData.get(s);var old=orders.byId(id).orElse(null);
   if(old!=null){
    if(!old.issuer().equals(actor)||!old.outputOwner().equals(actor)||!old.recipeId().equals(recipe)||!old.output().equals(new ProductionMaterial(fp(r.output()),quantity))||!Objects.equals(old.workstationDimension(),dim)||!Objects.equals(old.workstationPosition(),furnace)||!old.targetContainerId().equals(output.containerId())||!old.targetContainerDimension().equals(output.dimension())||!old.targetContainerPosition().equals(output.position()))throw new IllegalStateException("native request identity conflict");
    if(bound(old)&&!inputPoint(s,old).containerId().equals(input.containerId()))throw new IllegalStateException("native input identity conflict");return old;
   }
-  if(!dim.equals(input.dimension())||!dim.equals(output.dimension())||!input.owner().equals(actor)||!output.owner().equals(actor)||!owner.level().hasChunkAt(furnace)||!(owner.level().getBlockEntity(furnace) instanceof AbstractFurnaceBlockEntity f))throw new IllegalArgumentException("known same-owner native facility required");
+  if(!dim.equals(input.dimension())||!dim.equals(output.dimension())||!input.owner().equals(actor)||!output.owner().equals(actor)
+          ||!owner.level().hasChunkAt(furnace)||!(owner.level().getBlockEntity(furnace) instanceof AbstractFurnaceBlockEntity f)
+          ||!supportsStation(f, fp(r.output())))throw new IllegalArgumentException("known same-owner compatible native facility required");
   var rights=RightsStateData.get(s);UUID machine=ProductionContainerIds.resolve(s,dim,furnace);
-  if(!owned(rights,input.containerId(),actor)||!owned(rights,output.containerId(),actor)||!owned(rights,machine,actor))throw new IllegalArgumentException("single uncontested owner required");
+  var materials=Set.of(fp(r.raw()),fp("coal"),fp(r.output()));
+  if(!ownsMaterials(rights,input.containerId(),actor,materials)||!ownsMaterials(rights,output.containerId(),actor,materials)
+          ||!owned(rights,machine,actor))throw new IllegalArgumentException("single uncontested owner required");
   if(orders.ordersForWorker(owner.getCharacterId()).stream().anyMatch(o->!o.terminal()&&recognized(o)&&furnace.equals(o.workstationPosition())))throw new IllegalStateException("native furnace already committed");
   var inputs=new ArrayList<ProductionMaterial>();inputs.add(new ProductionMaterial(fp(r.raw()),quantity));
   // Fixed existing coal may be reused. Current BurnTime alone is never a future fuel promise.
@@ -60,7 +79,7 @@ public final class FurnaceWorkAdapter implements NpcTaskExecutor {
  }
  public static FieldworkStorage inputPoint(MinecraftServer s,ProductionOrder o){
   if(!bound(o))return outputPoint(s,o);
-  var data=s.overworld().getDataStorage().get(ProductionMaterialRequestData.FACTORY,ProductionMaterialRequestData.DATA_NAME);
+  var data=s.overworld().getDataStorage().get(ProductionMaterialRequestData.FACTORY.type(ProductionMaterialRequestData.DATA_NAME));
   if(data==null)throw new IllegalStateException("native input binding missing");var refs=data.forOrder(o.id());
   if(refs.size()!=o.inputs().size()||refs.stream().map(ProductionMaterialRequest::containerId).distinct().count()!=1||o.inputs().stream().anyMatch(m->refs.stream().noneMatch(x->x.material().equals(m))))throw new IllegalStateException("native input binding incomplete/conflicting");
   var point=SupplyFlowData.get(s).point(refs.getFirst().containerId());if(!point.owner().equals(o.outputOwner())||!point.dimension().equals(o.targetContainerDimension()))throw new IllegalStateException("native input title changed");return point;
@@ -79,31 +98,40 @@ public final class FurnaceWorkAdapter implements NpcTaskExecutor {
  }
  private static boolean ready(MinecraftServer s,ProductionOrder o,FieldworkStorage stock,long now){var rights=RightsStateData.get(s);return o.inputs().stream().allMatch(m->SupplyFlowService.available(s,stock,o.outputOwner(),m.fingerprint(),now)+rights.reservationsForToken(o.token(),now).stream().filter(x->x.containerId().equals(stock.containerId())&&x.fingerprint().equals(m.fingerprint())).mapToInt(AssetReservation::quantity).sum()>=m.quantity());}
  public static Optional<NpcPlan> choose(NpcBase n,long now){
-  if(!EntityResourceTask.enabled(n)||n.getProfession()!=NpcProfession.WORKER||n.getCommand()!=NpcCommand.WORK||!NpcSchedulePlanner.allowsWork(n))return Optional.empty();var orders=ProductionOrderData.get(n.getServer());
+  if(!EntityResourceTask.enabled(n)||n.getProfession()!=NpcProfession.WORKER||n.getCommand()!=NpcCommand.WORK||!NpcSchedulePlanner.allowsWork(n))return Optional.empty();var orders=ProductionOrderData.get(MinecraftApi.server(n));
   for(var o:orders.assignedTo(n.getCharacterId())){
-   if(!recognized(o)||o.status()==ProductionOrderStatus.BLOCKED)continue;if(!n.level().hasChunkAt(o.workstationPosition())||!(n.level().getBlockEntity(o.workstationPosition()) instanceof AbstractFurnaceBlockEntity f))continue;
-   try{var in=inputPoint(n.getServer(),o);if(SupplyFlowService.container(n.getServer(),in)==null)continue;String action;
-    if(o.status()==ProductionOrderStatus.CLAIMED){reserve(n.getServer(),o,now);if(!ready(n.getServer(),o,in,now)||!f.getItem(0).isEmpty()||!f.getItem(2).isEmpty()||(!f.getItem(1).isEmpty()&&!f.getItem(1).is(Items.COAL)))continue;action="LOAD";}
+   if(!recognized(o)||o.status()==ProductionOrderStatus.BLOCKED
+           ||!n.level().dimension().identifier().toString().equals(o.workstationDimension()))continue;
+   if(!n.level().hasChunkAt(o.workstationPosition())||!(n.level().getBlockEntity(o.workstationPosition()) instanceof AbstractFurnaceBlockEntity f)||!supportsStation(f,o.output().fingerprint()))continue;
+   try{var in=inputPoint(MinecraftApi.server(n),o);if(SupplyFlowService.container(MinecraftApi.server(n),in)==null)continue;String action;
+    if(o.status()==ProductionOrderStatus.CLAIMED){reserve(MinecraftApi.server(n),o,now);if(!ready(MinecraftApi.server(n),o,in,now)||!f.getItem(0).isEmpty()||!f.getItem(2).isEmpty()||(!f.getItem(1).isEmpty()&&!f.getItem(1).is(Items.COAL)))continue;action="LOAD";}
     else if(o.status()==ProductionOrderStatus.RESERVED)action="LOAD";
     else if(o.status()==ProductionOrderStatus.IN_PROGRESS||o.status()==ProductionOrderStatus.SETTLING){if(o.status()==ProductionOrderStatus.IN_PROGRESS&&(!fp(spec(o.recipeId()).output()).matches(f.getItem(2))||f.getItem(2).getCount()<o.output().quantity()))continue;action="UNLOAD";}else continue;
     return Optional.of(new NpcPlan(UUID.randomUUID(),n.getUUID(),"native-furnace:"+o.id()+":"+action,ID,NpcPlanKind.COMMITMENT,NpcPlanPriority.NORMAL,NpcPlanStatus.SELECTED,List.of(new NpcPlanStep(0,NpcPlanPhase.ACTING,ID,Map.of("order",o.id().toString(),"action",action),NpcPlanStepStatus.PENDING,now,"native furnace handoff")),0,now,now,now+40,now+12000,null,"actual machine processing; actual NPC load/unload"));
    }catch(IllegalStateException|NoSuchElementException bad){review(orders,o,now,bad.getMessage());}
   }return Optional.empty();
  }
- public ResourceLocation id(){return ID;}
+ public Identifier id(){return ID;}
  public TaskTickResult start(NpcExecutionContext c,NpcPlan p,NpcPlanStep st){return tick(c,p,st);}
  public TaskTickResult recover(NpcExecutionContext c,NpcPlan p,NpcPlanStep st){return tick(c,p,st);}
  public void cancel(NpcExecutionContext c,NpcPlan p,NpcPlanStep st,PlanCancellationReason why){if(c instanceof NpcEntityExecutionContext e)e.npc().getNavigation().stop();}
  public TaskTickResult tick(NpcExecutionContext raw,NpcPlan plan,NpcPlanStep step){
-  if(!(raw instanceof NpcEntityExecutionContext c))return TaskTickResult.failed("original operator required");var n=c.npc();var s=n.getServer();var orders=ProductionOrderData.get(s);var o=orders.byId(UUID.fromString(step.params().get("order"))).orElse(null);
+  if(!(raw instanceof NpcEntityExecutionContext c))return TaskTickResult.failed("original operator required");var n=c.npc();var s=MinecraftApi.server(n);var orders=ProductionOrderData.get(s);var o=orders.byId(UUID.fromString(step.params().get("order"))).orElse(null);
   if(o==null)return TaskTickResult.failed("original native order missing");if(o.status()==ProductionOrderStatus.COMPLETED)return TaskTickResult.stepSucceeded("native order already complete");
-  if(!o.assignedWorkerId().equals(n.getCharacterId())||!o.outputOwner().equals(SubjectRef.character(n.getCharacterId())))return review(orders,o,c.gameTime(),"operator/title mismatch");
+  if(!recognized(o)||!Objects.equals(o.assignedWorkerId(),n.getCharacterId())
+          ||!o.outputOwner().equals(SubjectRef.character(n.getCharacterId())))return review(orders,o,c.gameTime(),"recipe/operator/title mismatch");
   if(n.getCommand()!=NpcCommand.WORK||!NpcSchedulePlanner.allowsWork(n))return waiting("original work conditions unavailable",c.gameTime());
-  if(!c.level().hasChunkAt(o.workstationPosition())||!(c.level().getBlockEntity(o.workstationPosition()) instanceof AbstractFurnaceBlockEntity furnace))return waiting("original machine unavailable",c.gameTime());
+  if(!c.level().dimension().identifier().toString().equals(o.workstationDimension())
+          ||!c.level().hasChunkAt(o.workstationPosition())||!(c.level().getBlockEntity(o.workstationPosition()) instanceof AbstractFurnaceBlockEntity furnace)
+          ||!supportsStation(furnace,o.output().fingerprint()))return waiting("original compatible machine unavailable",c.gameTime());
   FieldworkStorage input;try{input=inputPoint(s,o);}catch(IllegalStateException|NoSuchElementException bad){return review(orders,o,c.gameTime(),bad.getMessage());}
   var output=outputPoint(s,o);var in=SupplyFlowService.container(s,input);var out=SupplyFlowService.container(s,output);if(in==null||out==null)return waiting("original store unloaded",c.gameTime());
   var actor=o.outputOwner();var rights=RightsStateData.get(s);var bag=ContainerIds.npcPersonal(n.getCharacterId());var machine=ProductionContainerIds.resolve(s,output.dimension(),o.workstationPosition());
-  if(!owned(rights,machine,actor)||!owned(rights,input.containerId(),actor)||!owned(rights,output.containerId(),actor)||!owned(rights,bag,actor))return review(orders,o,c.gameTime(),"mixed/unknown native title");
+  var spec=spec(o.recipeId());
+  var materials=Set.of(fp(spec.raw()),fp("coal"),fp(spec.output()));
+  if(!owned(rights,machine,actor)||!ownsMaterials(rights,input.containerId(),actor,materials)
+          ||!ownsMaterials(rights,output.containerId(),actor,materials)||!ownsMaterials(rights,bag,actor,materials))
+      return review(orders,o,c.gameTime(),"mixed/unknown native title");
   var take=legs(o,input.containerId(),bag,true);var load=legs(o,bag,machine,true);var collect=legs(o,machine,bag,false);var deliver=legs(o,bag,output.containerId(),false);
   var ends=new HashMap<UUID,TransferEndpoint>();ends.put(input.containerId(),new TransferEndpoint(input.containerId(),in));ends.put(output.containerId(),new TransferEndpoint(output.containerId(),out));ends.put(bag,new TransferEndpoint(bag,n.getPersonalInventory()));ends.put(machine,new TransferEndpoint(machine,furnace));
   if(step.params().get("action").equals("LOAD")){
@@ -143,6 +171,13 @@ public final class FurnaceWorkAdapter implements NpcTaskExecutor {
   }catch(IllegalStateException|NoSuchElementException missing){return false;}
  }
  private static boolean owned(RightsStateData r,UUID id,SubjectRef owner){return r.context(id)!=null&&r.context(id).defaultBeneficialOwner().equals(owner)&&r.claims().stream().noneMatch(c->c.containerId().equals(id));}
+ private static boolean ownsMaterials(RightsStateData rights, UUID container, SubjectRef owner,
+                                      Set<ItemFingerprint> materials) {
+  var context=rights.context(container);
+  return context!=null&&context.defaultBeneficialOwner().equals(owner)
+          &&rights.claims().stream().filter(c->c.containerId().equals(container)&&materials.contains(c.fingerprint()))
+          .allMatch(c->c.beneficialOwner().equals(owner)&&c.custodian().equals(owner)&&c.encumbrances().isEmpty());
+ }
  private static boolean near(NpcBase n,BlockPos p){return FieldworkRoutes.closeEnough(n,p);}
  private static void move(NpcBase n,BlockPos p){var route=FieldworkRoutes.plan(n,p,false);if(route!=null)n.getNavigation().moveTo(route.stand().getX()+.5,route.stand().getY(),route.stand().getZ()+.5,1.1);}
  private static void finishLoad(ProductionOrderData orders,ProductionOrder o,long now){if(o.status()==ProductionOrderStatus.CLAIMED){o=o.transition(ProductionOrderStatus.RESERVED,now,"existing load receipt");orders.put(o);}if(o.status()==ProductionOrderStatus.RESERVED)orders.put(o.transition(ProductionOrderStatus.IN_PROGRESS,now,"actual native inputs loaded"));}

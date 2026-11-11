@@ -16,7 +16,7 @@ import com.jgeted.sagadyssey.social.production.ProductionOrderStatus;
 import com.jgeted.sagadyssey.social.production.ProductionMaterialRequest;
 import com.jgeted.sagadyssey.social.production.ProductionMaterialRequestData;
 import com.jgeted.sagadyssey.social.production.ProductionService;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.world.Container;
 
 import java.util.Set;
@@ -24,7 +24,7 @@ import java.util.Set;
 /** 原子地认领订单，并在任何动作开始前锁定原料、工作站与输出目的地。 */
 public final class BlacksmithReserveOrderTaskExecutor implements NpcTaskExecutor {
     @Override
-    public ResourceLocation id() {
+    public Identifier id() {
         return BlacksmithTaskIds.RESERVE_ORDER;
     }
 

@@ -1,5 +1,7 @@
 package com.jgeted.sagadyssey.social.service;
 
+import net.minecraft.core.UUIDUtil;
+
 import net.minecraft.nbt.CompoundTag;
 
 import javax.annotation.Nullable;
@@ -19,7 +21,7 @@ public record ServiceLimits(@Nullable UUID workplaceSettlementId, String dimensi
 
     public CompoundTag save() {
         CompoundTag tag = new CompoundTag();
-        if (workplaceSettlementId != null) tag.putUUID("Settlement", workplaceSettlementId);
+        if (workplaceSettlementId != null) tag.store("Settlement", UUIDUtil.CODEC, workplaceSettlementId);
         tag.putString("Dimension", dimension);
         tag.putBoolean("Dangerous", dangerousOrdersAllowed);
         tag.putBoolean("PrivateInventory", false);
@@ -27,7 +29,7 @@ public record ServiceLimits(@Nullable UUID workplaceSettlementId, String dimensi
     }
 
     public static ServiceLimits load(CompoundTag tag) {
-        return new ServiceLimits(tag.hasUUID("Settlement") ? tag.getUUID("Settlement") : null,
-                tag.getString("Dimension"), tag.getBoolean("Dangerous"), false);
+        return new ServiceLimits(tag.read("Settlement", UUIDUtil.CODEC).isPresent() ? tag.read("Settlement", UUIDUtil.CODEC).orElseThrow() : null,
+                tag.getStringOr("Dimension", ""), tag.getBooleanOr("Dangerous", false), false);
     }
 }

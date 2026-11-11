@@ -132,7 +132,7 @@ public class NpcCommandScreen extends Screen {
         addRenderableWidget(Button.builder(
                 Component.literal("跟随我" + (commandName.equals("FOLLOW") ? " ✓" : "")),
                 btn -> {
-                    PacketDistributor.sendToServer(new NpcInteractionPacket(npcId, "follow"));
+                    net.neoforged.neoforge.client.network.ClientPacketDistributor.sendToServer(new NpcInteractionPacket(npcId, "follow"));
                     this.onClose();
                 })
                 .bounds(leftX, btnY1, workBtnW, 20)
@@ -161,7 +161,7 @@ public class NpcCommandScreen extends Screen {
                         // 农民：弹出务农模式面板，选完模式再开始工作
                         this.minecraft.setScreen(new NpcFarmModeScreen(npcId, npcName, farmModeName));
                     } else {
-                        PacketDistributor.sendToServer(new NpcInteractionPacket(npcId, "work"));
+                        net.neoforged.neoforge.client.network.ClientPacketDistributor.sendToServer(new NpcInteractionPacket(npcId, "work"));
                         this.onClose();
                     }
                 })
@@ -173,7 +173,7 @@ public class NpcCommandScreen extends Screen {
         addRenderableWidget(Button.builder(
                 Component.literal("原地待命" + (commandName.equals("STAY") ? " ✓" : "")),
                 btn -> {
-                    PacketDistributor.sendToServer(new NpcInteractionPacket(npcId, "stay"));
+                    net.neoforged.neoforge.client.network.ClientPacketDistributor.sendToServer(new NpcInteractionPacket(npcId, "stay"));
                     this.onClose();
                 })
                 .bounds(btn3X, btnY1, workBtnW, 20)
@@ -182,7 +182,7 @@ public class NpcCommandScreen extends Screen {
         addRenderableWidget(Button.builder(
                 Component.literal("装备"),
                 btn -> {
-                    PacketDistributor.sendToServer(new NpcInteractionPacket(npcId, "open_equip"));
+                    net.neoforged.neoforge.client.network.ClientPacketDistributor.sendToServer(new NpcInteractionPacket(npcId, "open_equip"));
                     this.onClose();
                 })
                 .bounds(leftX, btnY2, btnW, 20)
@@ -210,9 +210,9 @@ public class NpcCommandScreen extends Screen {
                 Component.literal(hasMount ? "管理坐骑" : "分配坐骑"),
                 btn -> {
                     if (hasMount) {
-                        PacketDistributor.sendToServer(new NpcInteractionPacket(npcId, "unbind_mount"));
+                        net.neoforged.neoforge.client.network.ClientPacketDistributor.sendToServer(new NpcInteractionPacket(npcId, "unbind_mount"));
                     } else {
-                        PacketDistributor.sendToServer(new NpcInteractionPacket(npcId, "request_mounts"));
+                        net.neoforged.neoforge.client.network.ClientPacketDistributor.sendToServer(new NpcInteractionPacket(npcId, "request_mounts"));
                     }
                     this.onClose();
                 })
@@ -225,7 +225,7 @@ public class NpcCommandScreen extends Screen {
             addRenderableWidget(Button.builder(
                     Component.literal(mountLeashed ? "解除拴马" : "拴在栅栏"),
                     btn -> {
-                        PacketDistributor.sendToServer(new NpcInteractionPacket(npcId,
+                        net.neoforged.neoforge.client.network.ClientPacketDistributor.sendToServer(new NpcInteractionPacket(npcId,
                                 mountLeashed ? "untether_mount" : "tether_mount"));
                         this.onClose();
                     })
@@ -235,7 +235,7 @@ public class NpcCommandScreen extends Screen {
             addRenderableWidget(Button.builder(
                     Component.literal(leadMountMode ? "上马" : "牵马步行"),
                     btn -> {
-                        PacketDistributor.sendToServer(new NpcInteractionPacket(npcId,
+                        net.neoforged.neoforge.client.network.ClientPacketDistributor.sendToServer(new NpcInteractionPacket(npcId,
                                 leadMountMode ? "mount_up" : "lead_mount"));
                         this.onClose();
                     })
@@ -254,7 +254,7 @@ public class NpcCommandScreen extends Screen {
         addRenderableWidget(Button.builder(
                 Component.literal("解散"),
                 btn -> {
-                    PacketDistributor.sendToServer(new NpcInteractionPacket(npcId, "dismiss"));
+                    net.neoforged.neoforge.client.network.ClientPacketDistributor.sendToServer(new NpcInteractionPacket(npcId, "dismiss"));
                     this.onClose();
                 })
                 .bounds(panelLeft + 10, panelTop + PANEL_HEIGHT - 28, PANEL_WIDTH - 20, 20)
@@ -317,8 +317,8 @@ public class NpcCommandScreen extends Screen {
                 moral + " (" + NpcMoraleState.fromValue(moral).displayName() + ")", 0xFF_FF88FF);
 
         if (logisticsStage > 0) {
-            net.minecraft.resources.ResourceLocation id =
-                    net.minecraft.resources.ResourceLocation.tryParse(logisticsItem);
+            net.minecraft.resources.Identifier id =
+                    net.minecraft.resources.Identifier.tryParse(logisticsItem);
             String item = id == null ? logisticsItem : id.getPath();
             String logistics = logisticsStage == 3 ? "护送 " + item
                     : (logisticsStage == 1 ? "取货 " : "送货 ") + item

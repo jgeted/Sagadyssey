@@ -250,7 +250,7 @@ public final class BlacksmithSmeltGoal extends Goal {
         int amount = Math.min(Math.min(RAW_IRON_BATCH, inputSpace),
                 countOwned(rights, bagId, Items.RAW_IRON, inputOwner));
         if (amount <= 0) return false;
-        String dimension = level.dimension().location().toString();
+        String dimension = level.dimension().identifier().toString();
         UUID furnaceId = ContainerIds.block("work_furnace", dimension, target);
         var furnaceContext = rights.ensureContext(furnaceId,
                 dimension + ":furnace:" + target.asLong(), inputOwner, inputOwner, AccessPolicy.CONTRACT);
@@ -338,7 +338,7 @@ public final class BlacksmithSmeltGoal extends Goal {
         RightsStateData rights = RightsStateData.get(level.getServer());
         SubjectRef worker = SubjectRef.character(npc.getCharacterId());
         UUID bagId = ContainerIds.npcPersonal(npc.getCharacterId());
-        String dimension = level.dimension().location().toString();
+        String dimension = level.dimension().identifier().toString();
         UUID furnaceId = ContainerIds.block("work_furnace", dimension, target);
         rights.ensureContext(bagId, "npc:" + npc.getCharacterId() + ":personal",
                 worker, worker, AccessPolicy.PRIVATE);
@@ -408,7 +408,7 @@ public final class BlacksmithSmeltGoal extends Goal {
         NpcWorkContext context = NpcWorkContext.from(npc);
         BlockPos origin = workAnchor(level);
         return LogisticsData.get(level.getServer()).warehouses().stream()
-                .filter(record -> record.dimension().equals(level.dimension().location().toString()))
+                .filter(record -> record.dimension().equals(level.dimension().identifier().toString()))
                 .filter(record -> context.canUseWarehouse(level.getServer(), record))
                 .filter(record -> record.position().distSqr(origin) <= 32 * 32)
                 .filter(record -> level.hasChunkAt(record.position()))
@@ -419,7 +419,7 @@ public final class BlacksmithSmeltGoal extends Goal {
     private BlockPos workAnchor(ServerLevel level) {
         NpcLifeRecord life = NpcLifeData.get(level.getServer()).record(npc.getCharacterId());
         if (life != null && life.activeWorkplace() != null
-                && life.dimension().equals(level.dimension().location().toString())
+                && life.dimension().equals(level.dimension().identifier().toString())
                 && level.hasChunkAt(life.activeWorkplace())) return life.activeWorkplace();
         return npc.blockPosition();
     }

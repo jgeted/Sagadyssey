@@ -1,5 +1,7 @@
 package com.jgeted.sagadyssey.social.needs;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+
 import com.jgeted.sagadyssey.npc.entity.NpcBase;
 import com.jgeted.sagadyssey.npc.brain.fieldwork.FieldworkStorage;
 import com.jgeted.sagadyssey.worldsim.rights.*;
@@ -18,7 +20,7 @@ import java.util.*;
 @EventBusSubscriber(modid="sagadyssey")
 public final class SupplyBrainCommand {
     @SubscribeEvent public static void register(RegisterCommandsEvent event){
-        var root=Commands.literal("supply").requires(s->s.hasPermission(2));
+        var root=Commands.literal("supply").requires(s->MinecraftApi.hasPermission(s, 2));
         root.then(Commands.literal("audit").executes(c->{var server=c.getSource().getServer();
             for(var r:NeedRequestData.get(server).requests())c.getSource().sendSuccess(()->Component.literal("需求 "+r.id()+" "+r.key().purpose()+" "+r.status()+" 原始/当前="+r.originalRequested()+"/"+r.requested()+" 预留/在途/交付/待补="+r.reserved()+"/"+r.inTransit()+"/"+r.delivered()+"/"+r.remaining()+" 原因="+r.detail()),false);
             for(var r:SupplyFlowData.get(server).routes())c.getSource().sendSuccess(()->Component.literal("运输单 "+r.id()+" →需求 "+r.need()+" "+r.stage()+" 携带者="+r.carrierCharacter()+" 原因="+r.detail()),false);
@@ -27,7 +29,7 @@ public final class SupplyBrainCommand {
             if(flows.routes().stream().anyMatch(r->r.need().equals(id)&&!r.closed()&&(r.stage()==SupplyFlowData.Stage.CARRYING||r.pending()!=null))){c.getSource().sendFailure(Component.literal("有在途或待核对货物，先完成交付/人工核对，不能清空库存义务"));return 0;}
             for(var r:flows.routes())if(r.need().equals(id)&&!r.closed())SupplyFlowService.release(server,r,now,"测试者取消需求");NeedRequestData.get(server).transition(id,NeedRequestStatus.CANCELLED,now,"测试者取消，预留已清理");return 1;})));
         root.then(Commands.literal("know-source").then(Commands.argument("npc",EntityArgument.entity()).then(Commands.argument("place",BlockPosArgument.blockPos()).executes(c->{if(!(EntityArgument.getEntity(c,"npc") instanceof NpcBase npc))return 0;
-            var pos=BlockPosArgument.getLoadedBlockPos(c,"place");var server=c.getSource().getServer();String dim=c.getSource().getLevel().dimension().location().toString();
+            var pos=BlockPosArgument.getLoadedBlockPos(c,"place");var server=c.getSource().getServer();String dim=c.getSource().getLevel().dimension().identifier().toString();
             UUID id=com.jgeted.sagadyssey.social.production.ProductionContainerIds.resolve(server,dim,pos);var owner=SubjectRef.character(npc.getCharacterId());var rights=RightsStateData.get(server);var context=rights.context(id);
             if(context==null)context=rights.ensureContext(id,dim+":"+pos.asLong(),owner,owner,AccessPolicy.PRIVATE);
             var point=new FieldworkStorage(dim,pos,id,context.defaultBeneficialOwner(),context.accessPolicy(),TransferIntent.DELIVERY,"explicit_supply_knowledge");
@@ -41,21 +43,21 @@ public final class SupplyBrainCommand {
                         .then(Commands.literal("register-empty")
                                 .executes(c->householdStore(c.getSource(),EntityArgument.getEntity(c,"npc"),BlockPosArgument.getLoadedBlockPos(c,"place")))))));
         root.then(Commands.literal("household-buffer").then(Commands.argument("npc",EntityArgument.entity())
-                .then(Commands.argument("category",StringArgumentType.word()).then(Commands.argument("item",net.minecraft.commands.arguments.ResourceLocationArgument.id())
+                .then(Commands.argument("category",StringArgumentType.word()).then(Commands.argument("item",net.minecraft.commands.arguments.IdentifierArgument.id())
                 .then(Commands.argument("quantity",IntegerArgumentType.integer(1,1728)).then(Commands.argument("place",BlockPosArgument.blockPos())
                 .executes(c->householdBuffer(c.getSource(),EntityArgument.getEntity(c,"npc"),StringArgumentType.getString(c,"category"),
-                        net.minecraft.commands.arguments.ResourceLocationArgument.getId(c,"item").toString(),IntegerArgumentType.getInteger(c,"quantity"),BlockPosArgument.getLoadedBlockPos(c,"place")))))))));
-        root.then(Commands.literal("buffer").then(Commands.argument("npc",EntityArgument.entity()).then(Commands.argument("category",StringArgumentType.word()).then(Commands.argument("item",net.minecraft.commands.arguments.ResourceLocationArgument.id()).then(Commands.argument("quantity",IntegerArgumentType.integer(1,1728)).then(Commands.argument("place",BlockPosArgument.blockPos()).executes(c->{if(!(EntityArgument.getEntity(c,"npc") instanceof NpcBase npc))return 0;
-            var pos=BlockPosArgument.getLoadedBlockPos(c,"place");var server=c.getSource().getServer();String dim=c.getSource().getLevel().dimension().location().toString();var owner=SubjectRef.character(npc.getCharacterId());UUID id=com.jgeted.sagadyssey.social.production.ProductionContainerIds.resolve(server,dim,pos);
+                        net.minecraft.commands.arguments.IdentifierArgument.getId(c,"item").toString(),IntegerArgumentType.getInteger(c,"quantity"),BlockPosArgument.getLoadedBlockPos(c,"place")))))))));
+        root.then(Commands.literal("buffer").then(Commands.argument("npc",EntityArgument.entity()).then(Commands.argument("category",StringArgumentType.word()).then(Commands.argument("item",net.minecraft.commands.arguments.IdentifierArgument.id()).then(Commands.argument("quantity",IntegerArgumentType.integer(1,1728)).then(Commands.argument("place",BlockPosArgument.blockPos()).executes(c->{if(!(EntityArgument.getEntity(c,"npc") instanceof NpcBase npc))return 0;
+            var pos=BlockPosArgument.getLoadedBlockPos(c,"place");var server=c.getSource().getServer();String dim=c.getSource().getLevel().dimension().identifier().toString();var owner=SubjectRef.character(npc.getCharacterId());UUID id=com.jgeted.sagadyssey.social.production.ProductionContainerIds.resolve(server,dim,pos);
             var rights=RightsStateData.get(server);rights.ensureContext(id,dim+":"+pos.asLong(),owner,owner,AccessPolicy.PRIVATE);if(!rights.context(id).defaultBeneficialOwner().equals(owner))throw new IllegalStateException("目标储物不归此 NPC");
             var point=new FieldworkStorage(dim,pos,id,owner,rights.context(id).accessPolicy(),TransferIntent.DELIVERY,"explicit_buffer");var flows=SupplyFlowData.get(server);flows.register(point);
-            String category=StringArgumentType.getString(c,"category"),item=net.minecraft.commands.arguments.ResourceLocationArgument.getId(c,"item").toString();int quantity=IntegerArgumentType.getInteger(c,"quantity");
+            String category=StringArgumentType.getString(c,"category"),item=net.minecraft.commands.arguments.IdentifierArgument.getId(c,"item").toString();int quantity=IntegerArgumentType.getInteger(c,"quantity");
             flows.policy(new SupplyFlowData.Policy("tester:"+npc.getCharacterId()+":"+id+":"+item,owner,id,new ItemFingerprint(item,0),quantity,category));c.getSource().sendSuccess(()->Component.literal("真实储备目标已登记；不会生成物品或更改NPC模式"),false);return 1;})))))));
         root.then(Commands.literal("quote").then(Commands.argument("direction",StringArgumentType.word())
                 .then(Commands.argument("item",StringArgumentType.word()).then(Commands.argument("price",IntegerArgumentType.integer(1,64))
                 .then(Commands.argument("quantity",IntegerArgumentType.integer(1,64)).then(Commands.argument("settlement",StringArgumentType.word())
                 .then(Commands.argument("place",BlockPosArgument.blockPos()).executes(c->{
-                    var server=c.getSource().getServer();var pos=BlockPosArgument.getLoadedBlockPos(c,"place");String dim=c.getSource().getLevel().dimension().location().toString();
+                    var server=c.getSource().getServer();var pos=BlockPosArgument.getLoadedBlockPos(c,"place");String dim=c.getSource().getLevel().dimension().identifier().toString();
                     UUID pointId=com.jgeted.sagadyssey.social.production.ProductionContainerIds.resolve(server,dim,pos);var context=RightsStateData.get(server).context(pointId);
                     if(context==null){c.getSource().sendFailure(Component.literal("请先登记实体储物的权属，报价不能创建所有权"));return 0;}
                     var point=new FieldworkStorage(dim,pos,pointId,context.defaultBeneficialOwner(),context.accessPolicy(),TransferIntent.PAYMENT,"tester_owner_quote");
@@ -71,17 +73,17 @@ public final class SupplyBrainCommand {
                     if(!(EntityArgument.getEntity(c,"npc") instanceof NpcBase npc))return 0;
                     var quote=MerchantSupplyData.get(c.getSource().getServer()).offer(UUID.fromString(StringArgumentType.getString(c,"quote")));
                     int quantity=IntegerArgumentType.getInteger(c,"observedQuantity");if(quantity>quote.limit())return 0;
-                    MerchantSupplyData.get(npc.getServer()).reveal(npc.getCharacterId(),new MerchantSupplyData.Observation(quote.id(),quantity,c.getSource().getLevel().getGameTime()));
+                    MerchantSupplyData.get(MinecraftApi.server(npc)).reveal(npc.getCharacterId(),new MerchantSupplyData.Observation(quote.id(),quantity,c.getSource().getLevel().getGameTime()));
                     c.getSource().sendSuccess(()->Component.literal("已向此商人显式传达报价观察；抵达后仍须核对真实现货、付款和权限"),false);return 1;
                 })))));
         event.getDispatcher().register(Commands.literal("saga").then(root));
     }
     private static int householdStore(net.minecraft.commands.CommandSourceStack source,net.minecraft.world.entity.Entity entity,net.minecraft.core.BlockPos position) {
         if(!(entity instanceof NpcBase npc))return 0;
-        var server=source.getServer();String dimension=source.getLevel().dimension().location().toString();
+        var server=source.getServer();String dimension=source.getLevel().dimension().identifier().toString();
         var home=com.jgeted.sagadyssey.social.household.HouseholdData.get(server).forMember(npc.getCharacterId());
         var inventory=com.jgeted.sagadyssey.social.logistics.WarehouseContainers.asContainer(source.getLevel().getBlockEntity(position));
-        if(home==null||!home.dimension().equals(dimension)||!npc.level().dimension().location().toString().equals(dimension)||inventory==null){source.sendFailure(Component.literal("需要同维度家庭和真实储物容器"));return 0;}
+        if(home==null||!home.dimension().equals(dimension)||!npc.level().dimension().identifier().toString().equals(dimension)||inventory==null){source.sendFailure(Component.literal("需要同维度家庭和真实储物容器"));return 0;}
         if(com.jgeted.sagadyssey.social.household.HouseholdData.get(server).households().stream().anyMatch(h->!h.id().equals(home.id())&&h.dimension().equals(dimension)&&position.equals(h.sharedStorage()))) {
             source.sendFailure(Component.literal("不能登记另一个家庭已经分配的储物"));return 0;
         }
@@ -99,7 +101,7 @@ public final class SupplyBrainCommand {
                                        String category,String item,int quantity,net.minecraft.core.BlockPos position) {
         if(!Set.of("household","workshop","institution").contains(category)){source.sendFailure(Component.literal("未知储备类别"));return 0;}
         if(householdStore(source,entity,position)!=1)return 0;
-        var npc=(NpcBase)entity;var server=source.getServer();String dimension=source.getLevel().dimension().location().toString();
+        var npc=(NpcBase)entity;var server=source.getServer();String dimension=source.getLevel().dimension().identifier().toString();
         var home=com.jgeted.sagadyssey.social.household.HouseholdData.get(server).forMember(npc.getCharacterId());
         UUID id=com.jgeted.sagadyssey.social.production.ProductionContainerIds.resolve(server,dimension,position);
         SupplyFlowData.get(server).policy(new SupplyFlowData.Policy("household:"+home.id()+":"+id+":"+item,SubjectRef.household(home.id()),id,new ItemFingerprint(item,0),quantity,category));
@@ -109,9 +111,9 @@ public final class SupplyBrainCommand {
     private static int householdSource(net.minecraft.commands.CommandSourceStack source,net.minecraft.world.entity.Entity entity,
                                        net.minecraft.core.BlockPos position,boolean allowTransfer) {
         if(!(entity instanceof NpcBase npc))return 0;
-        var server=source.getServer();String dimension=source.getLevel().dimension().location().toString();
+        var server=source.getServer();String dimension=source.getLevel().dimension().identifier().toString();
         var home=com.jgeted.sagadyssey.social.household.HouseholdData.get(server).forMember(npc.getCharacterId());
-        if(home==null||!home.dimension().equals(dimension)||!npc.level().dimension().location().toString().equals(dimension)) {
+        if(home==null||!home.dimension().equals(dimension)||!npc.level().dimension().identifier().toString().equals(dimension)) {
             source.sendFailure(Component.literal("此成员没有同维度家庭，不能替其他家庭登记来源"));return 0;
         }
         if(com.jgeted.sagadyssey.social.logistics.WarehouseContainers.asContainer(source.getLevel().getBlockEntity(position))==null) {

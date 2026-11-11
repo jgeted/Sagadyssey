@@ -1,5 +1,7 @@
 package com.jgeted.sagadyssey.social.commons;
 
+import net.minecraft.core.UUIDUtil;
+
 import com.jgeted.sagadyssey.worldsim.rights.ItemFingerprint;
 import net.minecraft.nbt.CompoundTag;
 
@@ -24,10 +26,10 @@ public record CommonsPolicy(UUID id, UUID institutionId, UUID settlementId,
 
     CompoundTag save() {
         CompoundTag tag = new CompoundTag();
-        tag.putUUID("Id", id);
-        tag.putUUID("Institution", institutionId);
-        tag.putUUID("Settlement", settlementId);
-        tag.putUUID("SourceContainer", sourceContainerId);
+        tag.store("Id", UUIDUtil.CODEC, id);
+        tag.store("Institution", UUIDUtil.CODEC, institutionId);
+        tag.store("Settlement", UUIDUtil.CODEC, settlementId);
+        tag.store("SourceContainer", UUIDUtil.CODEC, sourceContainerId);
         tag.put("Asset", asset.save());
         tag.putInt("DailyQuota", dailyQuota);
         tag.putInt("MaintenanceReserve", maintenanceReserve);
@@ -40,11 +42,11 @@ public record CommonsPolicy(UUID id, UUID institutionId, UUID settlementId,
     }
 
     static CommonsPolicy load(CompoundTag tag) {
-        return new CommonsPolicy(tag.getUUID("Id"), tag.getUUID("Institution"),
-                tag.getUUID("Settlement"), tag.getUUID("SourceContainer"),
-                ItemFingerprint.load(tag.getCompound("Asset")), tag.getInt("DailyQuota"),
-                tag.getInt("MaintenanceReserve"), tag.getInt("MinimumStanding"),
-                tag.getLong("StartsAt"), tag.getLong("EndsAt"), tag.getBoolean("Active"),
-                tag.getString("Purpose"));
+        return new CommonsPolicy(tag.read("Id", UUIDUtil.CODEC).orElseThrow(), tag.read("Institution", UUIDUtil.CODEC).orElseThrow(),
+                tag.read("Settlement", UUIDUtil.CODEC).orElseThrow(), tag.read("SourceContainer", UUIDUtil.CODEC).orElseThrow(),
+                ItemFingerprint.load(tag.getCompoundOrEmpty("Asset")), tag.getIntOr("DailyQuota", 0),
+                tag.getIntOr("MaintenanceReserve", 0), tag.getIntOr("MinimumStanding", 0),
+                tag.getLongOr("StartsAt", 0L), tag.getLongOr("EndsAt", 0L), tag.getBooleanOr("Active", false),
+                tag.getStringOr("Purpose", ""));
     }
 }

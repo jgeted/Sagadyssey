@@ -1,5 +1,7 @@
 package com.jgeted.sagadyssey.social.guild;
 
+import net.minecraft.core.UUIDUtil;
+
 import com.jgeted.sagadyssey.worldsim.rights.SubjectRef;
 import net.minecraft.nbt.CompoundTag;
 
@@ -18,11 +20,11 @@ public record GuildInspection(UUID id, UUID institutionId, UUID standardId,
 
     CompoundTag save() {
         CompoundTag tag = new CompoundTag();
-        tag.putUUID("Id", id);
-        tag.putUUID("Institution", institutionId);
-        tag.putUUID("Standard", standardId);
-        tag.putUUID("Qualification", qualificationId);
-        tag.putUUID("Appraisal", appraisalId);
+        tag.store("Id", UUIDUtil.CODEC, id);
+        tag.store("Institution", UUIDUtil.CODEC, institutionId);
+        tag.store("Standard", UUIDUtil.CODEC, standardId);
+        tag.store("Qualification", UUIDUtil.CODEC, qualificationId);
+        tag.store("Appraisal", UUIDUtil.CODEC, appraisalId);
         tag.put("Inspector", inspector.save());
         tag.putBoolean("Passed", passed);
         tag.putLong("InspectedAt", inspectedAt);
@@ -31,9 +33,9 @@ public record GuildInspection(UUID id, UUID institutionId, UUID standardId,
     }
 
     static GuildInspection load(CompoundTag tag) {
-        return new GuildInspection(tag.getUUID("Id"), tag.getUUID("Institution"),
-                tag.getUUID("Standard"), tag.getUUID("Qualification"),
-                tag.getUUID("Appraisal"), SubjectRef.load(tag.getCompound("Inspector")),
-                tag.getBoolean("Passed"), tag.getLong("InspectedAt"), tag.getString("Finding"));
+        return new GuildInspection(tag.read("Id", UUIDUtil.CODEC).orElseThrow(), tag.read("Institution", UUIDUtil.CODEC).orElseThrow(),
+                tag.read("Standard", UUIDUtil.CODEC).orElseThrow(), tag.read("Qualification", UUIDUtil.CODEC).orElseThrow(),
+                tag.read("Appraisal", UUIDUtil.CODEC).orElseThrow(), SubjectRef.load(tag.getCompoundOrEmpty("Inspector")),
+                tag.getBooleanOr("Passed", false), tag.getLongOr("InspectedAt", 0L), tag.getStringOr("Finding", ""));
     }
 }

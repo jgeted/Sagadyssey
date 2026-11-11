@@ -1,4 +1,6 @@
 package com.jgeted.sagadyssey.core.structure;
+
+import com.jgeted.sagadyssey.gametest.PortedGameTests.TestFunction;
 import com.jgeted.sagadyssey.Sagadyssey;
 import com.jgeted.sagadyssey.npc.brain.fieldwork.*;
 import com.jgeted.sagadyssey.social.life.NpcLifeData;
@@ -9,7 +11,7 @@ import net.minecraft.core.*;
 import net.minecraft.gametest.framework.*;
 import net.minecraft.world.Container;
 import net.minecraft.world.item.*;
-import net.minecraft.world.level.GameRules;
+import net.minecraft.world.level.gamerules.GameRules;
 import net.minecraft.world.level.block.Blocks;
 import java.util.*;
 public final class NaturalVillageShortageGameTests {
@@ -18,8 +20,8 @@ public final class NaturalVillageShortageGameTests {
  private static int food(Container c){int n=0;for(int i=0;i<c.getContainerSize();i++)if(c.getItem(i).is(Items.CARROT))n+=c.getItem(i).getCount();return n;}
  private static void run(GameTestHelper h,String failure,int offset){var b=NaturalVillageR1GameTests.fixture(h,offset);var l=h.getLevel();
   // A frozen zero-growth transport fixture isolates one obstruction; the normal-growth acceptance is separate.
-  l.getGameRules().getRule(GameRules.RULE_RANDOMTICKING).set(0,l.getServer());var restored=new boolean[]{false};var cage=new ArrayList<BlockPos>();
-  h.runAfterDelay(240,()->{var state=NaturalVillageLifeData.get(l.getServer()).village(b.buildingKey());h.assertTrue(state.getBoolean("Ready"),"initialized natural household");
+  l.getGameRules().set(GameRules.RANDOM_TICK_SPEED, 0,l.getServer());var restored=new boolean[]{false};var cage=new ArrayList<BlockPos>();
+  h.runAfterDelay(240,()->{var state=NaturalVillageLifeData.get(l.getServer()).village(b.buildingKey());h.assertTrue(state.getBooleanOr("Ready", false),"initialized natural household");
    var farmer=NaturalVillageR1GameTests.actor(l,b,0);var worker=NaturalVillageR1GameTests.actor(l,b,2);var courier=NaturalVillageR1GameTests.actor(l,b,1);
    if(failure.equals("unripe"))return;
    for(int i=0;i<3;i++)NpcLifeData.get(l.getServer()).setHunger(NaturalVillageR1GameTests.actor(l,b,i).getCharacterId(),900,l.getGameTime());

@@ -1,5 +1,10 @@
 package com.jgeted.sagadyssey.core.structure;
 
+import net.minecraft.world.level.gamerules.GameRules;
+
+import com.jgeted.sagadyssey.core.MinecraftApi;
+import net.minecraft.core.UUIDUtil;
+
 import com.jgeted.sagadyssey.npc.entity.NpcBase;
 import com.jgeted.sagadyssey.social.character.CharacterRegistryData;
 import com.jgeted.sagadyssey.social.growth.SettlementCoordinatorData;
@@ -62,7 +67,7 @@ public final class SettlementRedesignWorldGameTests {
             server.tickRateManager().setTickRate(20);
             server.tickRateManager().requestGameToSprint((int) Math.min(Integer.MAX_VALUE, duration + 24000));
             emit("TICK_PACING", Map.of("method", "vanilla_tick_sprint", "skipSimulationTicks", false,
-                    "watchdogChanged", false, "randomTickSpeed", server.overworld().getGameRules().getInt(net.minecraft.world.level.GameRules.RULE_RANDOMTICKING)));
+                    "watchdogChanged", false, "randomTickSpeed", server.overworld().getGameRules().get(net.minecraft.world.level.gamerules.GameRules.RANDOM_TICK_SPEED)));
         }
 
         @Override void tick() throws Exception {
@@ -137,12 +142,12 @@ public final class SettlementRedesignWorldGameTests {
             var old = super.growth();
             var coordinator = coordination();
             if (coordinator.isEmpty()) return old;
-            var house = coordinator.getCompound("Jobs").getCompound("HOUSE");
-            old.putString("HouseStage", house.getString("HouseStage"));
-            old.putInt("Placed", house.getInt("Placed"));
-            old.putString("WallMaterial", house.getString("WallMaterial"));
+            var house = coordinator.getCompoundOrEmpty("Jobs").getCompoundOrEmpty("HOUSE");
+            old.putString("HouseStage", house.getStringOr("HouseStage", ""));
+            old.putInt("Placed", house.getIntOr("Placed", 0));
+            old.putString("WallMaterial", house.getStringOr("WallMaterial", ""));
             int labor = 0;
-            for (String key : coordinator.getCompound("Jobs").getAllKeys()) labor += coordinator.getCompound("Jobs").getCompound(key).getInt("Labor");
+            for (String key : coordinator.getCompoundOrEmpty("Jobs").keySet()) labor += coordinator.getCompoundOrEmpty("Jobs").getCompoundOrEmpty(key).getIntOr("Labor", 0);
             old.putInt("Labor", labor);
             return old;
         }
@@ -171,7 +176,7 @@ public final class SettlementRedesignWorldGameTests {
                 state.opening.putAll(physical());
                 state.ready = server.overworld().getGameTime();
                 state.formalStart = state.ready;
-                preexistingTemporaryBed = coordination().getCompound("Jobs").getCompound("TEMP_BED").getInt("Placed") == 1
+                preexistingTemporaryBed = coordination().getCompoundOrEmpty("Jobs").getCompoundOrEmpty("TEMP_BED").getIntOr("Placed", 0) == 1
                         && server.overworld().getBlockState(NaturalVillageLayout.at(village,
                         new net.minecraft.core.BlockPos(6, 1, 13))).is(net.minecraft.world.level.block.Blocks.WHITE_BED);
                 var prior = expected();
@@ -196,9 +201,9 @@ public final class SettlementRedesignWorldGameTests {
             var coordinator = coordination();
             if (coordinator.isEmpty()) return;
             long now = server.overworld().getGameTime();
-            for (String key : coordinator.getCompound("Jobs").getAllKeys()) {
-                var job = coordinator.getCompound("Jobs").getCompound(key);
-                require(!job.getBoolean("Review"), "Coordinator job requires review: " + key + ":" + job.getString("Reason"));
+            for (String key : coordinator.getCompoundOrEmpty("Jobs").keySet()) {
+                var job = coordinator.getCompoundOrEmpty("Jobs").getCompoundOrEmpty(key);
+                require(!job.getBooleanOr("Review", false), "Coordinator job requires review: " + key + ":" + job.getStringOr("Reason", ""));
             }
             for (int i = 0; i < 3; i++) if (server.overworld().getEntity(NaturalVillageLifeData.body(village, i)) instanceof NpcBase npc) {
                 var plan = com.jgeted.sagadyssey.npc.brain.persistence.NpcBrainData.get(server).active(npc.getUUID()).orElse(null);
@@ -210,17 +215,17 @@ public final class SettlementRedesignWorldGameTests {
                 }
             }
             StringBuilder summary = new StringBuilder();
-            for (String key : coordinator.getCompound("Jobs").getAllKeys()) {
-                var task = coordinator.getCompound("Jobs").getCompound(key);
-                summary.append(key).append(':').append(task.getString("State")).append(':').append(task.getInt("Placed"))
-                        .append(':').append(task.getInt("Cycle")).append(':').append(task.hasUUID("Person") ? task.getUUID("Person") : "none").append(';');
+            for (String key : coordinator.getCompoundOrEmpty("Jobs").keySet()) {
+                var task = coordinator.getCompoundOrEmpty("Jobs").getCompoundOrEmpty(key);
+                summary.append(key).append(':').append(task.getStringOr("State", "")).append(':').append(task.getIntOr("Placed", 0))
+                        .append(':').append(task.getIntOr("Cycle", 0)).append(':').append(task.read("Person", UUIDUtil.CODEC).isPresent() ? task.read("Person", UUIDUtil.CODEC).orElseThrow() : "none").append(';');
             }
             if (!summary.toString().equals(lastTasks)) { lastTasks = summary.toString(); emit("COORDINATION_PROGRESS", nbt(coordinator)); }
-            if (growth().getString("HouseStage").equals("DONE") && state.slept >= 0
+            if (growth().getStringOr("HouseStage", "").equals("DONE") && state.slept >= 0
                     && (firstTemporarySleep >= 0 || preexistingTemporaryBed)
                     && (!coldStart || state.net.getOrDefault("minecraft:carrot", 0L) > 0
-                        && growth().getInt("ConsumedFeed") >= 4 && growth().getList("Animals", Tag.TAG_COMPOUND).size() == 4
-                        && (!coordinator.getBoolean("ExpandFields") || !state.tilled.isEmpty() && !state.newHarvested.isEmpty()))
+                        && growth().getIntOr("ConsumedFeed", 0) >= 4 && MinecraftApi.listOfType(growth(), "Animals", Tag.TAG_COMPOUND).size() == 4
+                        && (!coordinator.getBooleanOr("ExpandFields", false) || !state.tilled.isEmpty() && !state.newHarvested.isEmpty()))
                     && Arrays.stream(state.meals).allMatch(value -> value > 0) && state.allFeatures < 0) {
                 state.allFeatures = now;
                 emit("REDESIGN_CHAIN_OBSERVED", snapshot());
@@ -231,9 +236,9 @@ public final class SettlementRedesignWorldGameTests {
             var expected = super.expected();
             var coordinator = coordination();
             if (!coordinator.isEmpty()) {
-                var jobs = coordinator.getCompound("Jobs");
-                if (jobs.getCompound("TEMP_BED").getInt("Placed") == 1) expected.merge("minecraft:white_bed", -1L, Long::sum);
-                if (jobs.getCompound("RELOCATE").contains("RecoveredAt")) expected.merge("minecraft:white_bed", 1L, Long::sum);
+                var jobs = coordinator.getCompoundOrEmpty("Jobs");
+                if (jobs.getCompoundOrEmpty("TEMP_BED").getIntOr("Placed", 0) == 1) expected.merge("minecraft:white_bed", -1L, Long::sum);
+                if (jobs.getCompoundOrEmpty("RELOCATE").contains("RecoveredAt")) expected.merge("minecraft:white_bed", 1L, Long::sum);
             }
             openingAdjustment.forEach((key, value) -> expected.merge(key, -value, Long::sum));
             return expected;

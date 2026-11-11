@@ -1,11 +1,15 @@
 package com.jgeted.sagadyssey.core.structure;
 
+import com.jgeted.sagadyssey.gametest.PortedGameTests.*;
+
+import net.minecraft.core.UUIDUtil;
+
 import com.jgeted.sagadyssey.social.settlement.SettlementRegistryData;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.gametest.framework.*;
 import net.minecraft.nbt.*;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.level.ChunkPos;
@@ -23,7 +27,7 @@ import java.util.*;
 @net.neoforged.fml.common.EventBusSubscriber(modid = "sagadyssey")
 public final class NaturalVillageRegistrationGameTests {
     private static final String CHECKPOINT = "vilg2-registration-checkpoint.nbt";
-    private static final ResourceLocation TEMPLATE = ResourceLocation.parse("sagadyssey_natural:empty");
+    private static final Identifier TEMPLATE = Identifier.parse("sagadyssey_natural:empty");
 
     @net.neoforged.bus.api.SubscribeEvent
     public static void install(net.neoforged.neoforge.event.server.ServerStartedEvent event) {
@@ -31,7 +35,7 @@ public final class NaturalVillageRegistrationGameTests {
         var level = event.getServer().overworld();
         try {
             level.getStructureManager().getOrCreate(TEMPLATE).load(level.holderLookup(Registries.BLOCK),
-                    TagParser.parseTag("{size:[16,6,16],entities:[],blocks:[],palette:[{Name:\"minecraft:air\"}]}"));
+                    TagParser.parseCompoundFully("{size:[16,6,16],entities:[],blocks:[],palette:[{Name:\"minecraft:air\"}]}"));
         } catch (Exception e) { throw new IllegalStateException(e); }
     }
 
@@ -51,12 +55,12 @@ public final class NaturalVillageRegistrationGameTests {
 
     private static StructureStart generate(GameTestHelper h, String id, int offset) {
         var l = h.getLevel();
-        var structure = l.registryAccess().registryOrThrow(Registries.STRUCTURE).get(ResourceLocation.parse(id));
+        var structure = l.registryAccess().lookupOrThrow(Registries.STRUCTURE).get(Identifier.parse(id)).orElseThrow();
         var generator = l.getChunkSource().getGenerator();
         var chunk = new ChunkPos(h.absolutePos(new BlockPos(2048 + offset, 0, 2048)));
         // Explicitly select a site in the flat test world; use the shipped Jigsaw definition and templates.
         // This verifies placement/registration, not random-spread or biome distribution.
-        var start = structure.generate(l.registryAccess(), generator, generator.getBiomeSource(),
+        var start = structure.value().generate(structure, l.dimension(), l.registryAccess(), generator, generator.getBiomeSource(),
                 l.getChunkSource().randomState(), l.getStructureManager(), 7019L, chunk, 0, l, biome -> true);
         h.assertTrue(start.isValid() && start.getPieces().size() == 1, "supported vilg template is one physical building");
         return start;
@@ -65,15 +69,15 @@ public final class NaturalVillageRegistrationGameTests {
     private static NaturalVillageBuilding identity(ServerLevel l, StructureStart start) {
         var p = (PoolElementStructurePiece) start.getPieces().getFirst();
         var anchor = start.getChunkPos().getWorldPosition();
-        return new NaturalVillageBuilding(l.dimension().location().toString(), "sagadyssey:vilg_2", anchor,
+        return new NaturalVillageBuilding(l.dimension().identifier().toString(), "sagadyssey:vilg_2", anchor,
                 new BlockPos(anchor.getX() + 8, p.getBoundingBox().minY(), anchor.getZ() + 8),
                 NaturalVillageR1GameTests.template(l,start).toString(), p.getPosition(), p.getRotation());
     }
 
     private static void placeChunk(ServerLevel l, StructureStart start, ChunkPos chunk) {
         l.getChunk(chunk.x, chunk.z);
-        var box = new BoundingBox(chunk.getMinBlockX(), l.getMinBuildHeight(), chunk.getMinBlockZ(),
-                chunk.getMaxBlockX(), l.getMaxBuildHeight() - 1, chunk.getMaxBlockZ());
+        var box = new BoundingBox(chunk.getMinBlockX(), l.getMinY(), chunk.getMinBlockZ(),
+                chunk.getMaxBlockX(), (l.getMaxY() + 1) - 1, chunk.getMaxBlockZ());
         start.placeInChunk(l, l.structureManager(), l.getChunkSource().getGenerator(), RandomSource.create(19), box, chunk);
     }
 
@@ -107,11 +111,11 @@ public final class NaturalVillageRegistrationGameTests {
         h.assertTrue(data.byId(b.settlementId()) != null, "separate village identity exists");
         try {
             var marker = new CompoundTag();
-            marker.putString("BuildingKey", b.buildingKey()); marker.putUUID("Settlement", b.settlementId());
+            marker.putString("BuildingKey", b.buildingKey()); marker.store("Settlement", UUIDUtil.CODEC, b.settlementId());
             marker.put("Building", data.building(b.buildingKey()).save());
             marker.put("Village", data.byId(b.settlementId()).save());
             marker.put("Start", start.createTag(StructurePieceSerializationContext.fromLevel(l), start.getChunkPos()));
-            h.assertTrue(marker.getCompound("Start").getInt(NaturalVillageRegistration.ELIGIBILITY_TAG) == 1,
+            h.assertTrue(marker.getCompoundOrEmpty("Start").getIntOr(NaturalVillageRegistration.ELIGIBILITY_TAG, 0) == 1,
                     "new start eligibility persists before future chunk placement");
             l.getServer().saveEverything(true, true, true);
             NbtIo.writeCompressed(marker, l.getServer().getWorldPath(LevelResource.ROOT).resolve(CHECKPOINT));
@@ -126,13 +130,13 @@ public final class NaturalVillageRegistrationGameTests {
         var cp = new ChunkPos(piece.getPosition()); l.getChunk(cp.x, cp.z);
         // Direct placement has no actual registered StructureStart context.
         piece.place(l, l.structureManager(), l.getChunkSource().getGenerator(), RandomSource.create(1),
-                new BoundingBox(cp.getMinBlockX(), l.getMinBuildHeight(), cp.getMinBlockZ(),
-                        cp.getMaxBlockX(), l.getMaxBuildHeight() - 1, cp.getMaxBlockZ()), piece.getPosition(), false);
+                new BoundingBox(cp.getMinBlockX(), l.getMinY(), cp.getMinBlockZ(),
+                        cp.getMaxBlockX(), (l.getMaxY() + 1) - 1, cp.getMaxBlockZ()), piece.getPosition(), false);
         h.assertTrue(data.building(b.buildingKey()) == null, "unscoped template placement is not natural registration");
-        var template = l.getStructureManager().getOrCreate(ResourceLocation.parse(b.templateId()));
+        var template = l.getStructureManager().getOrCreate(Identifier.parse(b.templateId()));
         var original = template.save(new CompoundTag());
         try {
-            template.load(l.holderLookup(Registries.BLOCK), TagParser.parseTag("{size:[0,0,0],entities:[],blocks:[],palette:[]}"));
+            template.load(l.holderLookup(Registries.BLOCK), TagParser.parseCompoundFully("{size:[0,0,0],entities:[],blocks:[],palette:[]}"));
             placeChunk(l, start, cp);
             h.assertTrue(data.building(b.buildingKey()) == null, "failed vanilla placement does not register");
         } catch (Exception e) { throw new IllegalStateException(e); }
@@ -151,7 +155,7 @@ public final class NaturalVillageRegistrationGameTests {
         var saved = start.createTag(context, start.getChunkPos());
         var pending = StructureStart.loadStaticStart(context, saved, 7019L);
         h.assertTrue(pending != null && pending.createTag(context, pending.getChunkPos())
-                .getInt(NaturalVillageRegistration.ELIGIBILITY_TAG) == 1, "new pending starts survive serialization");
+                .getIntOr(NaturalVillageRegistration.ELIGIBILITY_TAG, 0) == 1, "new pending starts survive serialization");
         saved.remove(NaturalVillageRegistration.ELIGIBILITY_TAG);
         var old = StructureStart.loadStaticStart(context, saved, 7019L);
         h.assertTrue(old != null && !old.createTag(context, old.getChunkPos())
@@ -167,19 +171,19 @@ public final class NaturalVillageRegistrationGameTests {
         var l = h.getLevel(); var data = SettlementRegistryData.get(l.getServer());
         try {
             var marker = NbtIo.readCompressed(l.getServer().getWorldPath(LevelResource.ROOT).resolve(CHECKPOINT), NbtAccounter.unlimitedHeap());
-            var id = marker.getUUID("Settlement"); var key = marker.getString("BuildingKey");
-            h.assertTrue(data.byId(id) != null && data.byId(id).save().equals(marker.getCompound("Village")),
+            var id = marker.read("Settlement", UUIDUtil.CODEC).orElseThrow(); var key = marker.getStringOr("BuildingKey", "");
+            h.assertTrue(data.byId(id) != null && data.byId(id).save().equals(marker.getCompoundOrEmpty("Village")),
                     "village identity and ownership facts loaded from actual server SavedData");
             var loadedBuilding = data.building(key);
             h.assertTrue(loadedBuilding != null && loadedBuilding.equals(data.buildingAt(
                     loadedBuilding.dimension(), loadedBuilding.position(), loadedBuilding.structureId())),
                     "existing coordinate query can find a natural building after restart");
-            h.assertTrue(data.building(key) != null && data.building(key).save().equals(marker.getCompound("Building")),
+            h.assertTrue(data.building(key) != null && data.building(key).save().equals(marker.getCompoundOrEmpty("Building")),
                     "building identity, position and affiliation survive a separate JVM");
-            var start = StructureStart.loadStaticStart(StructurePieceSerializationContext.fromLevel(l), marker.getCompound("Start"), 7019L);
+            var start = StructureStart.loadStaticStart(StructurePieceSerializationContext.fromLevel(l), marker.getCompoundOrEmpty("Start"), 7019L);
             h.assertTrue(start != null, "saved original structure start decodes");
             for (var chunk : footprint(start)) placeChunk(l, start, chunk);
-            h.assertTrue(data.buildingCount(id) == 1 && data.building(key).save().equals(marker.getCompound("Building")),
+            h.assertTrue(data.buildingCount(id) == 1 && data.building(key).save().equals(marker.getCompoundOrEmpty("Building")),
                     "post-restart callbacks do not replace records or duplicate buildings");
         } catch (Exception e) { throw new IllegalStateException(e); }
         h.succeed();

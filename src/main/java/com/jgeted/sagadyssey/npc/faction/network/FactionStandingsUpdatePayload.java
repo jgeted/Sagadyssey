@@ -7,7 +7,7 @@ import io.netty.buffer.ByteBuf;
 import io.netty.handler.codec.DecoderException;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
 
 import java.util.ArrayList;
@@ -35,7 +35,7 @@ public record FactionStandingsUpdatePayload(
     }
 
     public static final Type<FactionStandingsUpdatePayload> TYPE = new Type<>(
-            ResourceLocation.fromNamespaceAndPath(Sagadyssey.MOD_ID, "faction_standings_update")
+            Identifier.fromNamespaceAndPath(Sagadyssey.MOD_ID, "faction_standings_update")
     );
 
     public static final StreamCodec<ByteBuf, FactionStandingsUpdatePayload> STREAM_CODEC = StreamCodec.of(

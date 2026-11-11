@@ -29,7 +29,7 @@ public enum NpcMerchantRegion {
         if (level.dimension() == Level.NETHER) return NETHER;
         if (level.dimension() == Level.END) return END;
         String biome = level.getBiome(pos).unwrapKey()
-                .map(key -> key.location().getPath()).orElse("");
+                .map(key -> key.identifier().getPath()).orElse("");
         if (containsAny(biome, "ocean", "beach", "river")) return COAST;
         if (containsAny(biome, "peak", "slope", "mountain", "stony", "windswept")) return HIGHLAND;
         if (containsAny(biome, "desert", "badlands", "savanna")) return ARID;

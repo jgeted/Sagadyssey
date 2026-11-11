@@ -2,16 +2,16 @@ package com.jgeted.sagadyssey.npc.brain.execution;
 
 import com.jgeted.sagadyssey.npc.brain.plan.NpcPlan;
 import com.jgeted.sagadyssey.npc.brain.plan.NpcPlanStep;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 
 /** 只等待到指定游戏刻的幂等执行器；短暂休整与诊断共用，不修改世界或物资。 */
 public final class WaitUntilTaskExecutor implements NpcTaskExecutor {
-    public static final ResourceLocation ID = ResourceLocation.fromNamespaceAndPath(
+    public static final Identifier ID = Identifier.fromNamespaceAndPath(
             "sagadyssey", "wait_until");
     public static final String UNTIL_GAME_TIME = "until_game_time";
 
     @Override
-    public ResourceLocation id() {
+    public Identifier id() {
         return ID;
     }
 

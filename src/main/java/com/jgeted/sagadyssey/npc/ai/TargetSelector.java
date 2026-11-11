@@ -1,5 +1,7 @@
 package com.jgeted.sagadyssey.npc.ai;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+
 import com.jgeted.sagadyssey.npc.entity.NpcBase;
 import com.jgeted.sagadyssey.npc.entity.NpcCommand;
 import com.jgeted.sagadyssey.npc.command.CommandTactics;
@@ -63,7 +65,7 @@ public class TargetSelector {
         }
         return null;
         } finally {
-            if(npc.getServer()!=null)com.jgeted.sagadyssey.worldsim.lod.LodMetrics.record(npc.getServer(),
+            if(MinecraftApi.server(npc)!=null)com.jgeted.sagadyssey.worldsim.lod.LodMetrics.record(MinecraftApi.server(npc),
                     com.jgeted.sagadyssey.worldsim.lod.LodMetrics.Kind.PERCEPTION,System.nanoTime()-started);
         }
     }
@@ -153,7 +155,7 @@ public class TargetSelector {
     private static TargetSource nearbyHostile(boolean obeySquadTactics, double unmountedRange) {
         return npc -> {
             if (obeySquadTactics && !CommandTactics.allowsAutonomousScan(npc)) return null;
-            var server=npc.getServer();
+            var server=MinecraftApi.server(npc);
             boolean budgeted=server!=null&&com.jgeted.sagadyssey.npc.brain.execution.NpcBrainRuntime.isPlanned(npc);
             if(!budgeted)return scanNearby(npc,obeySquadTactics,unmountedRange);
             var result=com.jgeted.sagadyssey.worldsim.lod.NpcPerceptionQueue.query(npc,obeySquadTactics+":"+unmountedRange,

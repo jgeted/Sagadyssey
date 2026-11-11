@@ -19,13 +19,13 @@ import net.minecraft.world.entity.HumanoidArm;
 import net.minecraft.util.Mth;
 import net.minecraft.world.item.CrossbowItem;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.UseAnim;
+import net.minecraft.world.item.ItemUseAnimation;
 
 /**
  * NPC 自定义模型 — 细手臂 + 全套 outer layer（hat/jacket/sleeves/pants）。
  * 基于 PlayerModel 的 slim 变体，但泛型适配 NpcBase。
  */
-public class NpcModel extends HumanoidModel<NpcBase> {
+public class NpcModel extends HumanoidModel<NpcRenderState> {
 
     private final ModelPart modelRoot;
     private final ModelPart jacket;
@@ -43,7 +43,6 @@ public class NpcModel extends HumanoidModel<NpcBase> {
     private final ModelPart medicSash;
     private final ModelPart traderCoatPanel;
     /** ItemInHandLayer 复用模型；必须在每个实体的 prepare 阶段重新赋值。 */
-    private boolean hideHeldItems;
 
     public NpcModel(ModelPart root) {
         super(root);
@@ -65,15 +64,8 @@ public class NpcModel extends HumanoidModel<NpcBase> {
         this.traderCoatPanel = root.getChild("trader_coat_panel");
     }
 
-    @Override
-    protected Iterable<ModelPart> bodyParts() {
-        return ImmutableList.of(body, rightArm, leftArm, rightLeg, leftLeg, hat,
-                jacket, leftSleeve, rightSleeve, leftPants, rightPants,
-                warriorTabard, archerShoulderCape, heavyPaddedCollar, workerBelt,
-                blacksmithApron, farmerHat, bardMantle, medicSash, traderCoatPanel);
-    }
 
-    /** 细手臂 + 全 outer layer 的 LayerDefinition。1.21.1 所有部件必须是 root 直接子部件。 */
+    /** 细手臂 + 全 outer layer 的 LayerDefinition。帽层由头部骨骼承载。 */
     public static LayerDefinition createBodyLayer() {
         MeshDefinition mesh = new MeshDefinition();
         PartDefinition root = mesh.getRoot();
@@ -82,11 +74,11 @@ public class NpcModel extends HumanoidModel<NpcBase> {
         CubeDeformation hatOuter = new CubeDeformation(0.5F);
 
         // Head + hat — 原点即可
-        root.addOrReplaceChild("head",
+        PartDefinition head = root.addOrReplaceChild("head",
                 CubeListBuilder.create().texOffs(0, 0)
                         .addBox(-4.0F, -8.0F, -4.0F, 8.0F, 8.0F, 8.0F),
                 PartPose.ZERO);
-        root.addOrReplaceChild("hat",
+        head.addOrReplaceChild("hat",
                 CubeListBuilder.create().texOffs(32, 0)
                         .addBox(-4.0F, -8.0F, -4.0F, 8.0F, 8.0F, 8.0F, hatOuter),
                 PartPose.ZERO);
@@ -184,52 +176,17 @@ public class NpcModel extends HumanoidModel<NpcBase> {
         return LayerDefinition.create(mesh, 128, 64);
     }
 
-    // 1.21.1 的 HumanoidMobRenderer 不会设置手臂姿态（getArmPose 已从渲染器移入 Player 等实体类），
-    // 需自行在 setupAnim 之前赋值，否则 NPC 拉弓/持弩时手臂不抬起
-    @Override
-    public void prepareMobModel(NpcBase entity, float limbSwing, float limbSwingAmount, float partialTick) {
-        hideHeldItems = entity.isSleeping();
-        HumanoidModel.ArmPose mainPose = hideHeldItems
-                ? HumanoidModel.ArmPose.EMPTY : armPoseFor(entity, InteractionHand.MAIN_HAND);
-        HumanoidModel.ArmPose offPose = hideHeldItems
-                ? HumanoidModel.ArmPose.EMPTY : armPoseFor(entity, InteractionHand.OFF_HAND);
-        if (mainPose.isTwoHanded()) {
-            offPose = entity.getOffhandItem().isEmpty() ? HumanoidModel.ArmPose.EMPTY : HumanoidModel.ArmPose.ITEM;
-        }
-        if (entity.getMainArm() == HumanoidArm.RIGHT) {
-            this.rightArmPose = mainPose;
-            this.leftArmPose = offPose;
-        } else {
-            this.rightArmPose = offPose;
-            this.leftArmPose = mainPose;
-        }
-        super.prepareMobModel(entity, limbSwing, limbSwingAmount, partialTick);
-    }
-
-    /**
-     * NPC 睡觉时仍保留真实装备和工具，只在客户端隐藏手持物。
-     * 不能临时清空装备槽，否则会造成服务端状态、掉落和多人同步问题。
-     */
-    @Override
-    public void translateToHand(HumanoidArm side, PoseStack poseStack) {
-        if (hideHeldItems) {
-            poseStack.translate(0.0D, -1024.0D, 0.0D);
-            return;
-        }
-        super.translateToHand(side, poseStack);
-    }
-
-    private static HumanoidModel.ArmPose armPoseFor(NpcBase entity, InteractionHand hand) {
+    static HumanoidModel.ArmPose armPoseFor(NpcBase entity, InteractionHand hand) {
         ItemStack stack = entity.getItemInHand(hand);
         if (stack.isEmpty()) {
             return HumanoidModel.ArmPose.EMPTY;
         }
         if (entity.getUsedItemHand() == hand && entity.getUseItemRemainingTicks() > 0) {
-            UseAnim useAnim = stack.getUseAnimation();
-            if (useAnim == UseAnim.BOW) {
+            ItemUseAnimation useAnim = stack.getUseAnimation();
+            if (useAnim == ItemUseAnimation.BOW) {
                 return HumanoidModel.ArmPose.BOW_AND_ARROW;
             }
-            if (useAnim == UseAnim.CROSSBOW) {
+            if (useAnim == ItemUseAnimation.CROSSBOW) {
                 return HumanoidModel.ArmPose.CROSSBOW_CHARGE;
             }
         } else if (!entity.swinging && stack.getItem() instanceof CrossbowItem && CrossbowItem.isCharged(stack)) {
@@ -239,33 +196,32 @@ public class NpcModel extends HumanoidModel<NpcBase> {
     }
 
     @Override
-    public void setupAnim(NpcBase entity, float limbSwing, float limbSwingAmount,
-                          float ageInTicks, float netHeadYaw, float headPitch) {
+    public void setupAnim(NpcRenderState state) {
         // bendUpperBody 会平移原版直连骨骼以模拟腰部支点；模型实例会在多个实体和帧之间复用，
         // 因此必须先恢复烘焙姿势，否则骑乘时的微小前倾会逐帧累加，最终让上半身漂到空中。
         this.modelRoot.getAllParts().forEach(ModelPart::resetPose);
-        super.setupAnim(entity, limbSwing, limbSwingAmount, ageInTicks, netHeadYaw, headPitch);
-        applyGenderShape(entity);
-        if (entity.isPassenger()) applyMountedPose();
+        super.setupAnim(state);
+        applyGenderShape(state);
+        if (state.mounted) applyMountedPose();
         // 脸和发型由独立 NpcFaceLayer 渲染，避免基础职业贴图的旧头发覆盖新人物层。
         hat.visible = false;
-        if (!entity.isSleeping()) applyProfessionAction(entity, ageInTicks);
+        if (!state.resting) applyProfessionAction(state);
 
         // outer layer 跟随 inner layer
-        if (jacket != null) jacket.copyFrom(body);
-        if (leftSleeve != null) leftSleeve.copyFrom(leftArm);
-        if (rightSleeve != null) rightSleeve.copyFrom(rightArm);
-        if (leftPants != null) leftPants.copyFrom(leftLeg);
-        if (rightPants != null) rightPants.copyFrom(rightLeg);
+        if (jacket != null) jacket.loadPose(body.storePose());
+        if (leftSleeve != null) leftSleeve.loadPose(leftArm.storePose());
+        if (rightSleeve != null) rightSleeve.loadPose(rightArm.storePose());
+        if (leftPants != null) leftPants.loadPose(leftLeg.storePose());
+        if (rightPants != null) rightPants.loadPose(rightLeg.storePose());
 
-        updateProfessionParts(entity);
+        updateProfessionParts(state);
     }
 
     /**
      * 保留原版人形骨架与护甲槽兼容，只用克制的肩宽、躯干和下肢比例区分体型。
      * 每帧先恢复默认值，避免渲染器复用模型时把上一名 NPC 的比例带给下一名。
      */
-    private void applyGenderShape(NpcBase entity) {
+    private void applyGenderShape(NpcRenderState state) {
         body.xScale = 1.0F;
         body.yScale = 1.0F;
         body.zScale = 1.0F;
@@ -280,7 +236,7 @@ public class NpcModel extends HumanoidModel<NpcBase> {
         leftLeg.x = 1.9F;
         rightLeg.x = -1.9F;
 
-        if (entity.getGender() != NpcGender.FEMALE) return;
+        if (state.gender != NpcGender.FEMALE) return;
 
         // 中世纪劳动服/长袍下的自然轮廓：略窄肩与躯干，不做夸张现代化曲线。
         body.xScale = 0.94F;
@@ -306,7 +262,7 @@ public class NpcModel extends HumanoidModel<NpcBase> {
     }
 
     /** 职业服装层随人物骨骼移动，同时只显示当前职业对应的一组。 */
-    private void updateProfessionParts(NpcBase entity) {
+    private void updateProfessionParts(NpcRenderState state) {
         warriorTabard.visible = false;
         archerShoulderCape.visible = false;
         heavyPaddedCollar.visible = false;
@@ -317,14 +273,14 @@ public class NpcModel extends HumanoidModel<NpcBase> {
         medicSash.visible = false;
         traderCoatPanel.visible = false;
 
-        switch (entity.getProfession()) {
+        switch (state.profession) {
             case NONE -> { }
             case WARRIOR -> warriorTabard.visible = true;
             case ARCHER -> archerShoulderCape.visible = true;
             case HEAVY -> heavyPaddedCollar.visible = true;
             case WORKER -> workerBelt.visible = true;
             case BLACKSMITH -> blacksmithApron.visible = true;
-            case FARMER -> farmerHat.visible = entity.getItemBySlot(EquipmentSlot.HEAD).isEmpty();
+            case FARMER -> farmerHat.visible = !state.helmeted;
             case BARD -> bardMantle.visible = true;
             case MEDIC -> medicSash.visible = true;
             case TRADER -> traderCoatPanel.visible = true;
@@ -334,16 +290,16 @@ public class NpcModel extends HumanoidModel<NpcBase> {
             }
         }
 
-        warriorTabard.copyFrom(body);
-        archerShoulderCape.copyFrom(body);
-        heavyPaddedCollar.copyFrom(body);
-        workerBelt.copyFrom(body);
-        blacksmithApron.copyFrom(body);
-        bardMantle.copyFrom(body);
-        farmerHat.copyFrom(head);
+        warriorTabard.loadPose(body.storePose());
+        archerShoulderCape.loadPose(body.storePose());
+        heavyPaddedCollar.loadPose(body.storePose());
+        workerBelt.loadPose(body.storePose());
+        blacksmithApron.loadPose(body.storePose());
+        bardMantle.loadPose(body.storePose());
+        farmerHat.loadPose(head.storePose());
 
         copyBodyTransform(medicSash, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, -0.28F);
-        traderCoatPanel.copyFrom(body);
+        traderCoatPanel.loadPose(body.storePose());
     }
 
     private void copyBodyTransform(ModelPart part, float x, float y, float z,
@@ -363,11 +319,11 @@ public class NpcModel extends HumanoidModel<NpcBase> {
      * 在原版行走、骑乘和持物姿势之上叠加职业动作。
      * 动作仅调整人体骨骼，手上的武器和工具仍由原版 ItemInHandLayer 渲染。
      */
-    private void applyProfessionAction(NpcBase entity, float ageInTicks) {
-        NpcAction action = entity.getVisualAction();
+    private void applyProfessionAction(NpcRenderState state) {
+        NpcAction action = state.action;
         if (action == NpcAction.NONE) return;
 
-        float progress = entity.getActionProgress(ageInTicks - entity.tickCount);
+        float progress = state.actionProgress;
         float arc = Mth.sin(progress * Mth.PI);
         float pulse = Mth.sin(progress * Mth.PI * 4.0F);
 

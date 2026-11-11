@@ -1,16 +1,19 @@
 package com.jgeted.sagadyssey.npc.brain.life;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+import net.minecraft.core.UUIDUtil;
+
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.*;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.world.level.saveddata.SavedData;
+import com.jgeted.sagadyssey.worldsim.NbtSavedData;
 import net.minecraft.world.level.storage.LevelResource;
 import java.nio.file.Files;
 import java.util.*;
 
 /** Server-only intent/receipt ledger. Ambiguous interrupted settlements require review, never replay. */
-public final class LifeActivityData extends SavedData {
+public final class LifeActivityData extends NbtSavedData {
     public static final String NAME = "sagadyssey_life_activities_v3";
     public static final Factory<LifeActivityData> FACTORY = new Factory<>(LifeActivityData::new, LifeActivityData::load);
     private final Map<String, String> settlements = new HashMap<>();
@@ -30,11 +33,11 @@ public final class LifeActivityData extends SavedData {
     }
     public static LifeActivityData get(MinecraftServer server) {
         var storage = server.overworld().getDataStorage();
-        var existing = storage.get(FACTORY, NAME);
+        var existing = storage.get(FACTORY.type(NAME));
         if (existing != null) return existing;
         if (Files.exists(server.getWorldPath(LevelResource.ROOT).resolve("data").resolve(NAME + ".dat")))
             throw new IllegalStateException("unreadable life activity ledger; recovery required");
-        var created = new LifeActivityData(); storage.set(NAME, created); return created;
+        var created = new LifeActivityData(); storage.set(FACTORY.type(NAME), created); return created;
     }
     public String settlement(String key) { return settlements.get(key); }
     public void pending(String key) {
@@ -73,38 +76,38 @@ public final class LifeActivityData extends SavedData {
         tag.putInt("Schema", 1);
         var starts = new ListTag(); started.forEach((key,time)-> { var t=new CompoundTag();t.putString("Key",key);t.putLong("Time",time);starts.add(t); });tag.put("Started",starts);
         var receipts = new ListTag(); settlements.forEach((key, state) -> { var t = new CompoundTag(); t.putString("Key", key); t.putString("State", state); receipts.add(t); }); tag.put("Settlements", receipts);
-        var delays = new ListTag(); retry.forEach((npc, time) -> { var t = new CompoundTag(); t.putUUID("Npc", npc); t.putLong("Until", time); delays.add(t); }); tag.put("Retry", delays);
+        var delays = new ListTag(); retry.forEach((npc, time) -> { var t = new CompoundTag(); t.store("Npc", UUIDUtil.CODEC, npc); t.putLong("Until", time); delays.add(t); }); tag.put("Retry", delays);
         var conversations = new ListTag(); sessions.values().forEach(s -> conversations.add(s.save())); tag.put("Sessions", conversations);
-        var locations = new ListTag(); places.forEach((npc, known) -> known.forEach(p -> { var t = new CompoundTag(); t.putUUID("Npc", npc); t.putString("Dimension", p.dimension()); t.putLong("Position", p.position().asLong()); t.putString("Activity", p.activity()); locations.add(t); })); tag.put("Places", locations);
+        var locations = new ListTag(); places.forEach((npc, known) -> known.forEach(p -> { var t = new CompoundTag(); t.store("Npc", UUIDUtil.CODEC, npc); t.putString("Dimension", p.dimension()); t.putLong("Position", p.position().asLong()); t.putString("Activity", p.activity()); locations.add(t); })); tag.put("Places", locations);
         return tag;
     }
     public static LifeActivityData load(CompoundTag tag, HolderLookup.Provider lookup) {
-        if (!tag.contains("Schema",Tag.TAG_INT) || tag.getInt("Schema") != 1) throw new IllegalArgumentException("unknown life ledger schema");
+        if (!MinecraftApi.containsTag(tag, "Schema",Tag.TAG_INT) || tag.getIntOr("Schema", 0) != 1) throw new IllegalArgumentException("unknown life ledger schema");
         for(String field:List.of("Started","Settlements","Retry","Sessions","Places")) {
-            if(!(tag.get(field) instanceof ListTag list)||list.getElementType()!=Tag.TAG_COMPOUND && !list.isEmpty())throw new IllegalArgumentException("invalid life list "+field);
+            if(!(tag.get(field) instanceof ListTag list)||MinecraftApi.elementType(list)!=Tag.TAG_COMPOUND && !list.isEmpty())throw new IllegalArgumentException("invalid life list "+field);
         }
         var data = new LifeActivityData();
-        for(Tag value:tag.getList("Started",Tag.TAG_COMPOUND)) { var t=(CompoundTag)value;if(t.getString("Key").isBlank()||!t.contains("Time",Tag.TAG_LONG)||t.getLong("Time")<0||data.started.putIfAbsent(t.getString("Key"),t.getLong("Time"))!=null)throw new IllegalArgumentException("invalid start checkpoint"); }
+        for(Tag value:MinecraftApi.listOfType(tag, "Started",Tag.TAG_COMPOUND)) { var t=(CompoundTag)value;if(t.getStringOr("Key", "").isBlank()||!MinecraftApi.containsTag(t, "Time",Tag.TAG_LONG)||t.getLongOr("Time", 0L)<0||data.started.putIfAbsent(t.getStringOr("Key", ""),t.getLongOr("Time", 0L))!=null)throw new IllegalArgumentException("invalid start checkpoint"); }
         for (String field : List.of("Settlements", "Retry", "Sessions", "Places"))
-            if (!tag.contains(field, Tag.TAG_LIST)) throw new IllegalArgumentException("missing " + field);
-        for (Tag value : tag.getList("Settlements", Tag.TAG_COMPOUND)) {
-            var t = (CompoundTag) value; String key = t.getString("Key"), state = t.getString("State");
+            if (!MinecraftApi.containsTag(tag, field, Tag.TAG_LIST)) throw new IllegalArgumentException("missing " + field);
+        for (Tag value : MinecraftApi.listOfType(tag, "Settlements", Tag.TAG_COMPOUND)) {
+            var t = (CompoundTag) value; String key = t.getStringOr("Key", ""), state = t.getStringOr("State", "");
             if (key.isBlank() || !(state.equals("PENDING") || state.equals("DONE")) || data.settlements.putIfAbsent(key, state) != null)
                 throw new IllegalArgumentException("invalid/duplicate settlement");
         }
-        for (Tag value : tag.getList("Retry", Tag.TAG_COMPOUND)) {
+        for (Tag value : MinecraftApi.listOfType(tag, "Retry", Tag.TAG_COMPOUND)) {
             var t = (CompoundTag) value;
-            if (!t.hasUUID("Npc") || !t.contains("Until", Tag.TAG_LONG) || t.getLong("Until") < 0
-                    || data.retry.putIfAbsent(t.getUUID("Npc"), t.getLong("Until")) != null) throw new IllegalArgumentException("invalid retry");
+            if (!t.read("Npc", UUIDUtil.CODEC).isPresent() || !MinecraftApi.containsTag(t, "Until", Tag.TAG_LONG) || t.getLongOr("Until", 0L) < 0
+                    || data.retry.putIfAbsent(t.read("Npc", UUIDUtil.CODEC).orElseThrow(), t.getLongOr("Until", 0L)) != null) throw new IllegalArgumentException("invalid retry");
         }
-        for (Tag value : tag.getList("Sessions", Tag.TAG_COMPOUND)) {
+        for (Tag value : MinecraftApi.listOfType(tag, "Sessions", Tag.TAG_COMPOUND)) {
             var session = ConversationSession.load((CompoundTag) value);
             if (data.sessions.putIfAbsent(session.id(), session) != null) throw new IllegalArgumentException("duplicate conversation");
         }
-        for (Tag value : tag.getList("Places", Tag.TAG_COMPOUND)) {
+        for (Tag value : MinecraftApi.listOfType(tag, "Places", Tag.TAG_COMPOUND)) {
             var t = (CompoundTag) value;
-            if (!t.hasUUID("Npc") || !t.contains("Position", Tag.TAG_LONG)) throw new IllegalArgumentException("invalid place");
-            data.reveal(t.getUUID("Npc"), new Place(t.getString("Dimension"), BlockPos.of(t.getLong("Position")), t.getString("Activity")));
+            if (!t.read("Npc", UUIDUtil.CODEC).isPresent() || !MinecraftApi.containsTag(t, "Position", Tag.TAG_LONG)) throw new IllegalArgumentException("invalid place");
+            data.reveal(t.read("Npc", UUIDUtil.CODEC).orElseThrow(), new Place(t.getStringOr("Dimension", ""), BlockPos.of(t.getLongOr("Position", 0L)), t.getStringOr("Activity", "")));
         }
         data.setDirty(false); return data;
     }

@@ -59,7 +59,7 @@ public final class NpcHomeSleepGoal extends Goal {
 
         life = NpcLifeData.get(level.getServer()).record(npc.getCharacterId());
         if (life == null || life.bedPosition() == null
-                || !life.dimension().equals(level.dimension().location().toString())
+                || !life.dimension().equals(level.dimension().identifier().toString())
                 || !NpcLifeBehavior.isRestWindow(life.shift(), level.getDayTime())) return false;
         bed = NpcResidenceFixtures.normalizeBedHead(level, life.bedPosition());
         if (!level.hasChunkAt(bed) || !level.getBlockState(bed).is(BlockTags.BEDS)) return false;

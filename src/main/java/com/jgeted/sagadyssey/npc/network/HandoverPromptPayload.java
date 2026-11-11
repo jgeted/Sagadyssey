@@ -6,14 +6,13 @@ import io.netty.buffer.ByteBuf;
 import io.netty.handler.codec.DecoderException;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.world.InteractionHand;
-import net.neoforged.neoforge.network.handling.IPayloadContext;
 
 public record HandoverPromptPayload(int npcId, InteractionHand hand, String npcName,
                                     String itemName, int availableCount) implements CustomPacketPayload {
     public static final Type<HandoverPromptPayload> TYPE = new Type<>(
-            ResourceLocation.fromNamespaceAndPath(Sagadyssey.MOD_ID, "handover_prompt"));
+            Identifier.fromNamespaceAndPath(Sagadyssey.MOD_ID, "handover_prompt"));
     public static final StreamCodec<ByteBuf, HandoverPromptPayload> STREAM_CODEC = StreamCodec.of(
             (buffer, packet) -> {
                 buffer.writeInt(packet.npcId);
@@ -31,7 +30,4 @@ public record HandoverPromptPayload(int npcId, InteractionHand hand, String npcN
             });
 
     @Override public Type<? extends CustomPacketPayload> type() { return TYPE; }
-    public static void handle(HandoverPromptPayload payload, IPayloadContext context) {
-        ClientHandoverPromptHandler.handle(payload, context);
-    }
 }

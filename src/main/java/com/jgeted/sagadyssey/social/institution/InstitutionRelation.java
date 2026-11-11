@@ -1,5 +1,7 @@
 package com.jgeted.sagadyssey.social.institution;
 
+import net.minecraft.core.UUIDUtil;
+
 import net.minecraft.nbt.CompoundTag;
 
 import java.util.UUID;
@@ -20,8 +22,8 @@ public record InstitutionRelation(UUID sourceInstitutionId, UUID targetInstituti
 
     CompoundTag save() {
         CompoundTag tag = new CompoundTag();
-        tag.putUUID("Source", sourceInstitutionId);
-        tag.putUUID("Target", targetInstitutionId);
+        tag.store("Source", UUIDUtil.CODEC, sourceInstitutionId);
+        tag.store("Target", UUIDUtil.CODEC, targetInstitutionId);
         tag.putString("Kind", kind.name());
         tag.putLong("EstablishedAt", establishedAt);
         tag.putLong("ExpiresAt", expiresAt);
@@ -30,8 +32,8 @@ public record InstitutionRelation(UUID sourceInstitutionId, UUID targetInstituti
     }
 
     static InstitutionRelation load(CompoundTag tag) {
-        return new InstitutionRelation(tag.getUUID("Source"), tag.getUUID("Target"),
-                InstitutionRelationKind.valueOf(tag.getString("Kind")),
-                tag.getLong("EstablishedAt"), tag.getLong("ExpiresAt"), tag.getString("Basis"));
+        return new InstitutionRelation(tag.read("Source", UUIDUtil.CODEC).orElseThrow(), tag.read("Target", UUIDUtil.CODEC).orElseThrow(),
+                InstitutionRelationKind.valueOf(tag.getStringOr("Kind", "")),
+                tag.getLongOr("EstablishedAt", 0L), tag.getLongOr("ExpiresAt", 0L), tag.getStringOr("Basis", ""));
     }
 }

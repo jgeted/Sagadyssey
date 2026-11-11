@@ -33,7 +33,7 @@ public final class ConvoyEscortGoal extends Goal {
     @Override
     public boolean canUse() {
         if(com.jgeted.sagadyssey.npc.brain.execution.NpcBrainRuntime.isPlanned(npc))return false;
-        if (npc.level().isClientSide || !npc.isAlive() || npc.getTarget() != null
+        if (npc.level().isClientSide() || !npc.isAlive() || npc.getTarget() != null
                 || !isGuardProfession(npc.getProfession()) || !NpcSchedulePlanner.allowsPatrol(npc)) return false;
         if ((npc.tickCount - npc.getId()) % 40 != 0) return false;
         carrier = findCarrier();

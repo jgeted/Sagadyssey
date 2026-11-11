@@ -1,5 +1,7 @@
 package com.jgeted.sagadyssey.social.religion;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+
 import com.jgeted.sagadyssey.npc.ai.MovementProgress;
 import com.jgeted.sagadyssey.npc.brain.execution.*;
 import com.jgeted.sagadyssey.npc.brain.fieldwork.*;
@@ -11,26 +13,26 @@ import com.jgeted.sagadyssey.social.needs.*;
 import com.jgeted.sagadyssey.social.work.NpcWorkContext;
 import com.jgeted.sagadyssey.worldsim.rights.*;
 import com.jgeted.sagadyssey.worldsim.transfer.*;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import java.util.*;
 
 /** Two distinct duties: witnessed review, then lawful reserve/travel/carry/gift/receipt. */
 public final class ReligionTask implements NpcTaskExecutor{
-    public static final ResourceLocation ID=ResourceLocation.parse("sagadyssey:religion_alms"),PROVIDER=ResourceLocation.parse("sagadyssey:religion");
+    public static final Identifier ID=Identifier.parse("sagadyssey:religion_alms"),PROVIDER=Identifier.parse("sagadyssey:religion");
     private final Map<UUID,MovementProgress> movement=new HashMap<>();
     private static final Map<net.minecraft.server.MinecraftServer,Long> LAST=new WeakHashMap<>();
     public static boolean eligible(NpcBase n){return n.isAlive()&&NpcBrainRuntime.isPlanned(n)&&n.getCommand()==NpcCommand.WORK&&n.getTarget()==null
-            &&!NpcWorkContext.from(n).hasEmployer()&&InstitutionData.get(n.getServer()).officesHeldBy(SubjectRef.character(n.getCharacterId()),n.level().getGameTime()).stream().anyMatch(o->o.authorities().contains(OfficeAuthority.REVIEW_ALMS)||o.authorities().contains(OfficeAuthority.MANAGE_ALMS));}
-    public static void maintain(NpcBase n){var server=n.getServer();long now=n.level().getGameTime();if(now-LAST.getOrDefault(server,-100L)<100)return;LAST.put(server,now);
+            &&!NpcWorkContext.from(n).hasEmployer()&&InstitutionData.get(MinecraftApi.server(n)).officesHeldBy(SubjectRef.character(n.getCharacterId()),n.level().getGameTime()).stream().anyMatch(o->o.authorities().contains(OfficeAuthority.REVIEW_ALMS)||o.authorities().contains(OfficeAuthority.MANAGE_ALMS));}
+    public static void maintain(NpcBase n){var server=MinecraftApi.server(n);long now=n.level().getGameTime();if(now-LAST.getOrDefault(server,-100L)<100)return;LAST.put(server,now);
         for(var c:ReligionData.get(server).cases())if(!c.closed()&&(c.stage()==AlmsCase.Stage.RESERVED||c.stage()==AlmsCase.Stage.CARRYING))RightsStateData.get(server).renewReservations(c.token(),now,now+1200);}
     public static boolean canCarrySupply(NpcBase npc,SupplyFlowData.Route route){
-        var t=ReligionData.get(npc.getServer()).temples().stream().filter(x->x.id().equals(route.principal().id())).findFirst().orElse(null);
+        var t=ReligionData.get(MinecraftApi.server(npc)).temples().stream().filter(x->x.id().equals(route.principal().id())).findFirst().orElse(null);
         return t!=null&&route.destination().equals(t.alms().containerId())&&eligible(npc)&&ReligionService.authorized(npc,t.id(),OfficeAuthority.MANAGE_ALMS);
     }
     public static Optional<NpcPlan> choose(NpcBase n,long now){
-        if(!eligible(n)||!NpcSchedulePlanner.allowsWork(n))return Optional.empty();var d=ReligionData.get(n.getServer());
+        if(!eligible(n)||!NpcSchedulePlanner.allowsWork(n))return Optional.empty();var d=ReligionData.get(MinecraftApi.server(n));
         var chosen=d.cases().stream().filter(c->!c.closed()&&c.retryAt()<=now&&(c.workerEntity()==null||c.workerEntity().equals(n.getUUID())&&c.workerCharacter().equals(n.getCharacterId())))
-                .filter(c->d.temple(c.temple()).alms().dimension().equals(n.level().dimension().location().toString()))
+                .filter(c->d.temple(c.temple()).alms().dimension().equals(n.level().dimension().identifier().toString()))
                 .filter(c->ReligionService.authorized(n,c.temple(),c.stage()==AlmsCase.Stage.REQUESTED?OfficeAuthority.REVIEW_ALMS:OfficeAuthority.MANAGE_ALMS))
                 .sorted(Comparator.comparing((AlmsCase c)->c.stage()!=AlmsCase.Stage.CARRYING).thenComparingLong(AlmsCase::createdAt)).findFirst().orElse(null);
         if(chosen==null)return Optional.empty();chosen=chosen.claim(n.getUUID(),n.getCharacterId());d.aid(chosen);boolean review=chosen.stage()==AlmsCase.Stage.REQUESTED;
@@ -42,11 +44,11 @@ public final class ReligionTask implements NpcTaskExecutor{
         return Optional.of(new NpcPlan(UUID.randomUUID(),n.getUUID(),chosen.token(),PROVIDER,NpcPlanKind.COMMITMENT,NpcPlanPriority.NORMAL,NpcPlanStatus.SELECTED,steps,0,now,now,now+40,now+12000,null,review?"当面审核救济自述":"搬运并交付真实救济物资"));
     }
     private static void step(List<NpcPlanStep> steps,AlmsCase c,String op,NpcPlanPhase phase,long now,boolean review){steps.add(new NpcPlanStep(steps.size(),phase,ID,Map.of("case",c.id().toString(),"operation",op,"review",Boolean.toString(review)),NpcPlanStepStatus.PENDING,now,"地方教堂具体职责"));}
-    @Override public ResourceLocation id(){return ID;}
+    @Override public Identifier id(){return ID;}
     @Override public TaskTickResult start(NpcExecutionContext c,NpcPlan p,NpcPlanStep s){return tick(c,p,s);}
     @Override public TaskTickResult recover(NpcExecutionContext c,NpcPlan p,NpcPlanStep s){movement.remove(p.id());return tick(c,p,s);}
     @Override public TaskTickResult tick(NpcExecutionContext raw,NpcPlan plan,NpcPlanStep step){
-        if(!(raw instanceof NpcEntityExecutionContext ctx))return TaskTickResult.failed("教堂职责需要真实实体");var n=ctx.npc();var server=n.getServer();long now=ctx.gameTime();var d=ReligionData.get(server);var c=d.aid(UUID.fromString(step.params().get("case")));var t=d.temple(c.temple());String op=step.params().get("operation");boolean review=Boolean.parseBoolean(step.params().get("review"));
+        if(!(raw instanceof NpcEntityExecutionContext ctx))return TaskTickResult.failed("教堂职责需要真实实体");var n=ctx.npc();var server=MinecraftApi.server(n);long now=ctx.gameTime();var d=ReligionData.get(server);var c=d.aid(UUID.fromString(step.params().get("case")));var t=d.temple(c.temple());String op=step.params().get("operation");boolean review=Boolean.parseBoolean(step.params().get("review"));
         if(op.equals("finish")){n.reportWorkActivity("教堂事务收尾",null,"本案步骤已结束，转入下一职责或有限等候");return TaskTickResult.stepSucceeded("收尾完成");}
         if(review&&c.stage()!=AlmsCase.Stage.REQUESTED)return TaskTickResult.stepSucceeded("本案已有审查记录");
         if(c.stage()==AlmsCase.Stage.ISSUED)return TaskTickResult.stepSucceeded("同一救济已实际交付");if(c.closed())return TaskTickResult.failed(c.detail());
@@ -94,7 +96,7 @@ public final class ReligionTask implements NpcTaskExecutor{
         if(!receipt.successful())return defer(n,plan,c,"交接未提交，食品未丢失，稍后重新核验",false);n.playAction(NpcAction.TRADE_PRESENT,20);return TaskTickResult.stepSucceeded(pickup?"机构食品已在真实货舱":"食品产权已合法赠与领取者");
     }
     private AlmsCase reconcile(NpcBase n,AlmsCase c,TransferReceipt receipt,long now){
-        var p=c.pending();if(!receipt.transferId().equals(p.transfer()))throw new IllegalStateException("wrong alms receipt");var server=n.getServer();var rights=RightsStateData.get(server);
+        var p=c.pending();if(!receipt.transferId().equals(p.transfer()))throw new IllegalStateException("wrong alms receipt");var server=MinecraftApi.server(n);var rights=RightsStateData.get(server);
         if(receipt.successful()){
             ReligionData.get(server).receipt(c.id(),p.pickup(),receipt.transferId());
             if(p.pickup()){var owner=SubjectRef.institution(c.temple());if(!rights.reserve(new AssetReservation(SupplyFlowService.receipt(c.id(),"alms-cargo"),p.destination(),c.item(),c.quantity(),owner,c.token(),"机构食品在途保管",now,now+1200),SupplyFlowService.count(n.getTransportInventory(),c.item()),now))throw new IllegalStateException("alms cargo commitment conflict");
@@ -106,14 +108,14 @@ public final class ReligionTask implements NpcTaskExecutor{
     private TaskTickResult defer(NpcBase n,NpcPlan plan,AlmsCase c,String reason,boolean stock){
         movement.remove(plan.id());n.getNavigation().stop();long now=n.level().getGameTime();
         if(!c.closed()){
-            if(c.stage()==AlmsCase.Stage.CARRYING||c.pending()!=null)ReligionData.get(n.getServer()).aid(c.update(c.stage(),c.reviewer(),now,now+600,c.pending(),reason,false));
-            else{RightsStateData.get(n.getServer()).releaseReservations(c.token());var next=c.attempts()>=15?AlmsCase.Stage.CANCELLED:c.stage()==AlmsCase.Stage.REQUESTED?AlmsCase.Stage.REQUESTED:stock?AlmsCase.Stage.WAITING_STOCK:AlmsCase.Stage.APPROVED;ReligionData.get(n.getServer()).aid(c.waitFor(next,now,reason));}
+            if(c.stage()==AlmsCase.Stage.CARRYING||c.pending()!=null)ReligionData.get(MinecraftApi.server(n)).aid(c.update(c.stage(),c.reviewer(),now,now+600,c.pending(),reason,false));
+            else{RightsStateData.get(MinecraftApi.server(n)).releaseReservations(c.token());var next=c.attempts()>=15?AlmsCase.Stage.CANCELLED:c.stage()==AlmsCase.Stage.REQUESTED?AlmsCase.Stage.REQUESTED:stock?AlmsCase.Stage.WAITING_STOCK:AlmsCase.Stage.APPROVED;ReligionData.get(MinecraftApi.server(n)).aid(c.waitFor(next,now,reason));}
         }
         n.reportWorkActivity("教堂事务有限等候",null,reason);return TaskTickResult.failed(reason);
     }
-    @Override public void cancel(NpcExecutionContext raw,NpcPlan p,NpcPlanStep s,PlanCancellationReason reason){if(raw instanceof NpcEntityExecutionContext c){var value=ReligionData.get(c.npc().getServer()).aid(UUID.fromString(s.params().get("case")));defer(c.npc(),p,value,"明确暂停/抢占；已携带食品继续保管",false);}}
-    public static void onDeath(NpcBase n){long now=n.level().getGameTime();var d=ReligionData.get(n.getServer());for(var c:d.cases())if(!c.closed()&&n.getUUID().equals(c.workerEntity())){
-        RightsStateData.get(n.getServer()).releaseReservations(c.token());
+    @Override public void cancel(NpcExecutionContext raw,NpcPlan p,NpcPlanStep s,PlanCancellationReason reason){if(raw instanceof NpcEntityExecutionContext c){var value=ReligionData.get(MinecraftApi.server(c.npc())).aid(UUID.fromString(s.params().get("case")));defer(c.npc(),p,value,"明确暂停/抢占；已携带食品继续保管",false);}}
+    public static void onDeath(NpcBase n){long now=n.level().getGameTime();var d=ReligionData.get(MinecraftApi.server(n));for(var c:d.cases())if(!c.closed()&&n.getUUID().equals(c.workerEntity())){
+        RightsStateData.get(MinecraftApi.server(n)).releaseReservations(c.token());
         if(c.stage()==AlmsCase.Stage.CARRYING||c.pending()!=null)d.aid(c.update(AlmsCase.Stage.REVIEW,c.reviewer(),now,now,c.pending(),"承办者死亡，真实掉落待核对，不登记已发放",false));
         else d.aid(c.waitFor(c.stage()==AlmsCase.Stage.REQUESTED?AlmsCase.Stage.REQUESTED:AlmsCase.Stage.APPROVED,now,"承办者死亡，未取货预留释放，可另派有效在职者"));
     }}

@@ -67,7 +67,7 @@ public final class ReputationChartScreen extends Screen {
         }
         scrollRow = Math.max(0, Math.min(scrollRow, maxScrollRow()));
 
-        PacketDistributor.sendToServer(new RequestStandingsRefreshPacket());
+        net.neoforged.neoforge.client.network.ClientPacketDistributor.sendToServer(new RequestStandingsRefreshPacket());
         addRenderableWidget(Button.builder(Component.literal("×"), button -> onClose())
                 .bounds(panelLeft + panelWidth - 24, panelTop + 8, 16, 16).build());
     }
@@ -319,8 +319,11 @@ public final class ReputationChartScreen extends Screen {
     }
 
     @Override
-    public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        if (super.mouseClicked(mouseX, mouseY, button)) return true;
+    public boolean mouseClicked(net.minecraft.client.input.MouseButtonEvent event, boolean doubleClick) {
+        double mouseX = event.x();
+        double mouseY = event.y();
+        int button = event.button();
+        if (super.mouseClicked(event, doubleClick)) return true;
         if (button != 0) return false;
         int x = panelLeft + 15;
         int width = rosterWidth - 24;

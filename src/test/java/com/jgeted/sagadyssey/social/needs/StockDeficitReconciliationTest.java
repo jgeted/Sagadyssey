@@ -1,5 +1,7 @@
 package com.jgeted.sagadyssey.social.needs;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+
 import com.jgeted.sagadyssey.worldsim.rights.ItemFingerprint;
 import net.minecraft.nbt.CompoundTag;
 import org.junit.jupiter.api.Test;
@@ -30,7 +32,7 @@ class StockDeficitReconciliationTest {
         r = data.reconcileStockDeficit(r.id(), 0, 12);
         assertEquals(NeedRequestStatus.CANCELLED, r.status());
         assertEquals(0, r.delivered());
-        assertTrue(data.save(new CompoundTag(), null).getList("Receipts", 10).isEmpty());
+        assertTrue(MinecraftApi.listOfType(data.save(new CompoundTag(), null), "Receipts", 10).isEmpty());
     }
     @Test void heldAndCarriedGoodsRemainCommittedAfterTopUp() {
         var r = open(10);

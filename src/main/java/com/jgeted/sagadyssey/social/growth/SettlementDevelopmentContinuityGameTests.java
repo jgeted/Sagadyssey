@@ -1,5 +1,10 @@
 package com.jgeted.sagadyssey.social.growth;
 
+import com.jgeted.sagadyssey.gametest.PortedGameTests.*;
+
+import com.jgeted.sagadyssey.core.MinecraftApi;
+import net.minecraft.core.UUIDUtil;
+
 import com.jgeted.sagadyssey.Sagadyssey;
 import com.jgeted.sagadyssey.core.structure.*;
 import com.jgeted.sagadyssey.npc.brain.fieldwork.*;
@@ -18,7 +23,7 @@ import net.minecraft.server.level.*;
 import net.minecraft.world.Container;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.item.*;
-import net.minecraft.world.level.GameRules;
+import net.minecraft.world.level.gamerules.GameRules;
 import net.minecraft.world.level.block.*;
 import net.minecraft.world.level.storage.LevelResource;
 import net.neoforged.neoforge.gametest.*;
@@ -35,7 +40,7 @@ public final class SettlementDevelopmentContinuityGameTests {
     private static CompoundTag restored;
     private static final Set<UUID> admitted=new HashSet<>();
     private static boolean enabled(){return System.getProperty("sagadyssey.development.phase","").startsWith("formal-");}
-    private static void check(boolean value,String why){if(!value)throw new GameTestAssertException(why);}
+    private static void check(boolean value,String why){if(!value)throw new net.minecraft.gametest.framework.GameTestAssertException(net.minecraft.network.chat.Component.literal(why), -1);}
     private static CompoundTag links(ServerLevel l){
         var t=LodContinuityP8GameTests.associatedState(l);var s=l.getServer();
         var development=SettlementDevelopmentData.existing(s);t.put("Development",development==null?new CompoundTag():development.save(new CompoundTag(),s.registryAccess()));
@@ -53,27 +58,27 @@ public final class SettlementDevelopmentContinuityGameTests {
         var s=e.getServer();var l=s.overworld();
         try{
             restored=NbtIo.readCompressed(s.getWorldPath(LevelResource.ROOT).resolve(FILE),NbtAccounter.unlimitedHeap());
-            var actual=links(l);var expected=restored.getCompound("Links").copy();
-            for(var v:expected.getCompound("Economy").getList("Regions",Tag.TAG_COMPOUND)){
+            var actual=links(l);var expected=restored.getCompoundOrEmpty("Links").copy();
+            for(var v:MinecraftApi.listOfType(expected.getCompoundOrEmpty("Economy"), "Regions",Tag.TAG_COMPOUND)){
                 var row=(CompoundTag)v;row.putBoolean("ObservedAway",true);row.putBoolean("ReturnRequested",false);
             }
             NbtIo.writeCompressed(actual,s.getWorldPath(LevelResource.ROOT).resolve("development-before-first-tick.nbt"));
             check(LodContinuityP8GameTests.comparableState(expected).equals(LodContinuityP8GameTests.comparableState(actual)),
                     "All associated ledgers must match before first tick; no partial-object replacement");
-            var level=NbtIo.readCompressed(s.getWorldPath(LevelResource.ROOT).resolve("level.dat"),NbtAccounter.unlimitedHeap()).getCompound("Data");
-            check(level.getLong("Time")==restored.getLong("SavedTime"),"exact full-checkpoint time");
-            l.getGameRules().assignFrom(new GameRules(new com.mojang.serialization.Dynamic<>(NbtOps.INSTANCE,level.getCompound("GameRules"))),s);
-            s.getWorldData().overworldData().setGameTime(level.getLong("Time")+1);
-            s.getWorldData().overworldData().setDayTime(level.getLong("DayTime")+1);
+            var level=NbtIo.readCompressed(s.getWorldPath(LevelResource.ROOT).resolve("level.dat"),NbtAccounter.unlimitedHeap()).getCompoundOrEmpty("Data");
+            check(level.getLongOr("Time", 0L)==restored.getLongOr("SavedTime", 0L),"exact full-checkpoint time");
+            MinecraftApi.loadRules(l, level.getCompoundOrEmpty("game_rules"));
+            s.getWorldData().overworldData().setGameTime(level.getLongOr("Time", 0L)+1);
+            s.getWorldData().overworldData().setDayTime(level.getLongOr("DayTime", 0L)+1);
             Sagadyssey.LOGGER.info("GROWTH_RESTART checkpoint={} fullAssociatedLedgers=true beforeFirstTick=true savedTime={} wallClockCatchup=false",
-                    restored.getInt("NextCheckpoint"),level.getLong("Time"));
+                    restored.getIntOr("NextCheckpoint", 0),level.getLongOr("Time", 0L));
         }catch(Exception x){throw new IllegalStateException("Exact full growth checkpoint required",x);}
     }
     @net.neoforged.bus.api.SubscribeEvent(priority=net.neoforged.bus.api.EventPriority.HIGH)
     public static void joined(net.neoforged.neoforge.event.entity.EntityJoinLevelEvent e){
         if(!enabled()||restored==null||!(e.getEntity() instanceof NpcBase n)||!(e.getLevel() instanceof ServerLevel l)||!admitted.add(n.getUUID()))return;
-        var saved=restored.getList("Bodies",Tag.TAG_COMPOUND).stream().map(x->(CompoundTag)x).filter(x->x.getUUID("Body").equals(n.getUUID())).findFirst().orElseThrow();
-        check(saved.getUUID("Person").equals(n.getCharacterId()),"same original stable person at body load");
+        var saved=MinecraftApi.listOfType(restored, "Bodies",Tag.TAG_COMPOUND).stream().map(x->(CompoundTag)x).filter(x->x.read("Body", UUIDUtil.CODEC).orElseThrow().equals(n.getUUID())).findFirst().orElseThrow();
+        check(saved.read("Person", UUIDUtil.CODEC).orElseThrow().equals(n.getCharacterId()),"same original stable person at body load");
         check(saved.get("Personal").equals(NaturalVillageEconomyData.items(n.getPersonalInventory(),l.registryAccess())),"same actual personal goods before work");
         check(saved.get("Cargo").equals(NaturalVillageEconomyData.items(n.getTransportInventory(),l.registryAccess())),"same actual transport cargo before work");
         Sagadyssey.LOGGER.info("GROWTH_BODY_RELOAD body={} person={} originalPersonal=true originalCargo=true",n.getUUID(),n.getCharacterId());
@@ -101,11 +106,11 @@ public final class SettlementDevelopmentContinuityGameTests {
                         NaturalVillageR1GameTests.fixture(h,512,NaturalVillageLayout.FARM_V3));
                 metadata=new CompoundTag();
             }else{
-                villages=restored.getList("Villages",Tag.TAG_COMPOUND).stream().map(x->NaturalVillageLifeData.decode((CompoundTag)x)).toList();
-                metadata=restored.getCompound("Metadata").copy();next=restored.getInt("NextCheckpoint");
-                if(restored.hasUUID("CarryingRoute"))carryingRoute=restored.getUUID("CarryingRoute");
+                villages=MinecraftApi.listOfType(restored, "Villages",Tag.TAG_COMPOUND).stream().map(x->NaturalVillageLifeData.decode((CompoundTag)x)).toList();
+                metadata=restored.getCompoundOrEmpty("Metadata").copy();next=restored.getIntOr("NextCheckpoint", 0);
+                if(restored.read("CarryingRoute", UUIDUtil.CODEC).isPresent())carryingRoute=restored.read("CarryingRoute", UUIDUtil.CODEC).orElseThrow();
                 initialized=true;stage=3;since=l.getGameTime();
-                check(restored.getBoolean("ActuallyUnloaded"),"original checkpoint already proved actual absence before process exit");
+                check(restored.getBooleanOr("ActuallyUnloaded", false),"original checkpoint already proved actual absence before process exit");
                 // Restart may naturally load a saved ticket before this test callback. The
                 // EntityJoin proof still verifies every original body and item before work.
                 // Clear only this isolated test's observer flags, then request its normal return.
@@ -116,9 +121,9 @@ public final class SettlementDevelopmentContinuityGameTests {
         }
         void start(){
             l.getServer().setDifficulty(net.minecraft.world.Difficulty.NORMAL,true);
-            l.getGameRules().getRule(GameRules.RULE_DOMOBSPAWNING).set(false,l.getServer());
-            l.getGameRules().getRule(GameRules.RULE_DAYLIGHT).set(true,l.getServer());
-            l.getGameRules().getRule(GameRules.RULE_RANDOMTICKING).set(3,l.getServer());
+            l.getGameRules().set(GameRules.SPAWN_MOBS, false,l.getServer());
+            l.getGameRules().set(GameRules.ADVANCE_TIME, true,l.getServer());
+            l.getGameRules().set(GameRules.RANDOM_TICK_SPEED, 3,l.getServer());
             l.getServer().tickRateManager().requestGameToSprint(360000);
             h.onEachTick(this::tick);
         }
@@ -130,32 +135,32 @@ public final class SettlementDevelopmentContinuityGameTests {
         }
         boolean ready(){
             var natural=NaturalVillageLifeData.existing(l.getServer());var d=SettlementDevelopmentData.existing(l.getServer());
-            return natural!=null&&d!=null&&d.site(target().buildingKey())!=null&&villages.stream().allMatch(b->{var v=natural.village(b.buildingKey());return v!=null&&v.getBoolean("Ready");});
+            return natural!=null&&d!=null&&d.site(target().buildingKey())!=null&&villages.stream().allMatch(b->{var v=natural.village(b.buildingKey());return v!=null&&v.getBooleanOr("Ready", false);});
         }
         void observeMeals(){
-            var seen=metadata.getCompound("LastMeal");var meals=metadata.getList("Meals",Tag.TAG_COMPOUND);
+            var seen=metadata.getCompoundOrEmpty("LastMeal");var meals=MinecraftApi.listOfType(metadata, "Meals",Tag.TAG_COMPOUND);
             for(var p:people){var needs=NpcLifeData.get(l.getServer()).needs(p);if(needs==null)continue;
-                String k=p.toString();long before=seen.contains(k)?seen.getLong(k):-1;
+                String k=p.toString();long before=seen.contains(k)?seen.getLongOr(k, 0L):-1;
                 if(needs.lastAteAt()>before){
-                    if(before>=-1&&needs.lastAteAt()>=metadata.getLong("Started")){
-                        var t=new CompoundTag();t.putUUID("Person",p);t.putLong("At",needs.lastAteAt());t.putString("Source",needs.lastFoodSource());meals.add(t);
+                    if(before>=-1&&needs.lastAteAt()>=metadata.getLongOr("Started", 0L)){
+                        var t=new CompoundTag();t.store("Person", UUIDUtil.CODEC,p);t.putLong("At",needs.lastAteAt());t.putString("Source",needs.lastFoodSource());meals.add(t);
                     }seen.putLong(k,needs.lastAteAt());
                 }
             }metadata.put("LastMeal",seen);metadata.put("Meals",meals);
         }
         void observeHunger(){
-            var s=l.getServer();var records=metadata.getCompound("HungerHistory");
+            var s=l.getServer();var records=metadata.getCompoundOrEmpty("HungerHistory");
             for(var n:bodies()){
                 var need=NpcLifeData.get(s).needs(n.getCharacterId());if(need==null)continue;
-                var key=n.getCharacterId().toString();var r=records.getCompound(key);boolean severe=need.hunger()>=800;
-                long loaded=severe?r.getLong("CurrentLoadedSevereTicks")+1:0;
-                r.putLong("CurrentLoadedSevereTicks",loaded);r.putLong("MaxLoadedSevereTicks",Math.max(loaded,r.getLong("MaxLoadedSevereTicks")));
+                var key=n.getCharacterId().toString();var r=records.getCompoundOrEmpty(key);boolean severe=need.hunger()>=800;
+                long loaded=severe?r.getLongOr("CurrentLoadedSevereTicks", 0L)+1:0;
+                r.putLong("CurrentLoadedSevereTicks",loaded);r.putLong("MaxLoadedSevereTicks",Math.max(loaded,r.getLongOr("MaxLoadedSevereTicks", 0L)));
                 var home=HouseholdData.get(s).forMember(n.getCharacterId());
                 boolean targetResident=home!=null&&target().settlementId().equals(home.settlementId())&&!SettlementDevelopmentData.moving(s,n.getCharacterId());
                 boolean supplied=severe&&targetResident&&SettlementDevelopmentData.capacity(s,home).food()>0;
-                boolean declaredBarrier=home!=null&&home.id().equals(NaturalVillageLifeData.home(target()))&&!metadata.getList("TemporaryBarrier",Tag.TAG_COMPOUND).isEmpty();
-                long avoidable=supplied&&!declaredBarrier?r.getLong("CurrentSuppliedSevereTicks")+1:0;
-                r.putLong("CurrentSuppliedSevereTicks",avoidable);r.putLong("MaxSuppliedSevereTicks",Math.max(avoidable,r.getLong("MaxSuppliedSevereTicks")));
+                boolean declaredBarrier=home!=null&&home.id().equals(NaturalVillageLifeData.home(target()))&&!MinecraftApi.listOfType(metadata, "TemporaryBarrier",Tag.TAG_COMPOUND).isEmpty();
+                long avoidable=supplied&&!declaredBarrier?r.getLongOr("CurrentSuppliedSevereTicks", 0L)+1:0;
+                r.putLong("CurrentSuppliedSevereTicks",avoidable);r.putLong("MaxSuppliedSevereTicks",Math.max(avoidable,r.getLongOr("MaxSuppliedSevereTicks", 0L)));
                 r.putInt("LastHunger",need.hunger());r.putLong("At",l.getGameTime());records.put(key,r);
                 check(avoidable<=2400,"frozen severe-hunger waiting limit with a legal stocked target pantry; declared barrier recorded separately");
             }metadata.put("HungerHistory",records);
@@ -184,31 +189,31 @@ public final class SettlementDevelopmentContinuityGameTests {
         }
         void inventoryProof(ListTag result,String role,BlockPos at,UUID id,Container c,RightsStateData rights){
             var t=new CompoundTag();t.putString("Role",role);t.putLong("Position",at.asLong());t.put("Items",NaturalVillageEconomyData.items(c,l.registryAccess()));
-            if(id!=null){t.putUUID("Container",id);var context=rights.context(id);if(context!=null){t.put("BeneficialOwner",context.defaultBeneficialOwner().save());t.put("Custodian",context.custodian().save());t.putLong("Revision",context.revision());}}
+            if(id!=null){t.store("Container", UUIDUtil.CODEC,id);var context=rights.context(id);if(context!=null){t.put("BeneficialOwner",context.defaultBeneficialOwner().save());t.put("Custodian",context.custodian().save());t.putLong("Revision",context.revision());}}
             result.add(t);
         }
         void timingAudit(long now){
             refreshAudit(now);var s=l.getServer();var row=auditSite;
-            var old=auditCoordinator.getCompound("Jobs").getCompound("HOUSE");
-            check(old.getString("State").equals("DONE")||now-metadata.getLong("Started")<=48000,"frozen founder-housing deadline");
-            for(var tag:row.getList("Projects",Tag.TAG_COMPOUND)){var p=(CompoundTag)tag;
-                if(!Set.of("CANCELLED","CANCEL_PENDING").contains(p.getString("State")))
-                    check((p.contains("Built")?p.getLong("Built"):now)-p.getLong("Created")<=48000,"frozen each-construction deadline, no later success erases an overrun");
+            var old=auditCoordinator.getCompoundOrEmpty("Jobs").getCompoundOrEmpty("HOUSE");
+            check(old.getStringOr("State", "").equals("DONE")||now-metadata.getLongOr("Started", 0L)<=48000,"frozen founder-housing deadline");
+            for(var tag:MinecraftApi.listOfType(row, "Projects",Tag.TAG_COMPOUND)){var p=(CompoundTag)tag;
+                if(!Set.of("CANCELLED","CANCEL_PENDING").contains(p.getStringOr("State", "")))
+                    check((p.contains("Built")?p.getLongOr("Built", 0L):now)-p.getLongOr("Created", 0L)<=48000,"frozen each-construction deadline, no later success erases an overrun");
             }
             for(var a:SettlementDevelopmentData.get(s).applications())if(a.contains("Departed"))
-                check((a.contains("Arrived")?a.getLong("Arrived"):now)-a.getLong("Departed")<=36000,"frozen real migration deadline");
+                check((a.contains("Arrived")?a.getLongOr("Arrived", 0L):now)-a.getLongOr("Departed", 0L)<=36000,"frozen real migration deadline");
         }
         void laborAudit(long now){
             refreshAudit(now);
-            var s=l.getServer();var totals=metadata.getCompound("ObservedLabor");var actors=metadata.getCompound("ObservedLaborActors");var byPerson=new HashMap<UUID,Integer>();boolean priming=!metadata.getBoolean("LaborAuditInitialized");
+            var s=l.getServer();var totals=metadata.getCompoundOrEmpty("ObservedLabor");var actors=metadata.getCompoundOrEmpty("ObservedLaborActors");var byPerson=new HashMap<UUID,Integer>();boolean priming=!metadata.getBooleanOr("LaborAuditInitialized", false);
             var rows=new ArrayList<CompoundTag>();
             if(auditCoordinator!=null)rows.add(auditCoordinator);
-            for(var tag:auditSite.getList("Projects",Tag.TAG_COMPOUND))rows.add((CompoundTag)tag);
-            for(var row:rows)if(row!=null)for(var key:row.getCompound("Jobs").getAllKeys()){
-                var job=row.getCompound("Jobs").getCompound(key);if(!job.contains("Labor"))continue;
-                String id=job.getString("Id");if(job.hasUUID("Person"))actors.putUUID(id,job.getUUID("Person"));
-                int count=job.getInt("Labor"),before=totals.getInt(id);if(!priming){check(count>=before&&count-before<=1,"recorded labor does not advance by an unperformed batch");
-                    if(count>before){check(actors.hasUUID(id),"performed labor retains its original actor");byPerson.merge(actors.getUUID(id),count-before,Integer::sum);}}totals.putInt(id,count);
+            for(var tag:MinecraftApi.listOfType(auditSite, "Projects",Tag.TAG_COMPOUND))rows.add((CompoundTag)tag);
+            for(var row:rows)if(row!=null)for(var key:row.getCompoundOrEmpty("Jobs").keySet()){
+                var job=row.getCompoundOrEmpty("Jobs").getCompoundOrEmpty(key);if(!job.contains("Labor"))continue;
+                String id=job.getStringOr("Id", "");if(job.read("Person", UUIDUtil.CODEC).isPresent())actors.store(id, UUIDUtil.CODEC,job.read("Person", UUIDUtil.CODEC).orElseThrow());
+                int count=job.getIntOr("Labor", 0),before=totals.getIntOr(id, 0);if(!priming){check(count>=before&&count-before<=1,"recorded labor does not advance by an unperformed batch");
+                    if(count>before){check(actors.read(id, UUIDUtil.CODEC).isPresent(),"performed labor retains its original actor");byPerson.merge(actors.read(id, UUIDUtil.CODEC).orElseThrow(),count-before,Integer::sum);}}totals.putInt(id,count);
             }
             metadata.put("ObservedLabor",totals);metadata.put("ObservedLaborActors",actors);metadata.putBoolean("LaborAuditInitialized",true);if(priming)return;
             for(var n:bodies())for(var r:FieldworkData.get(s).receiptsFor(n.getUUID()))if(r.committedAt()==now)byPerson.merge(n.getCharacterId(),1,Integer::sum);
@@ -218,8 +223,8 @@ public final class SettlementDevelopmentContinuityGameTests {
             int total=0;var economy=NaturalVillageEconomyData.existing(l.getServer());
             for(var b:villages){
                 var row=economy.row(b.buildingKey());
-                if(row!=null&&!row.getString("Phase").equals("NEAR")){
-                    for(var entry:row.getList("Stores",Tag.TAG_COMPOUND))total+=carrots(NaturalVillageEconomyData.inventory(((CompoundTag)entry).getList("Items",Tag.TAG_COMPOUND),l.registryAccess()));
+                if(row!=null&&!row.getStringOr("Phase", "").equals("NEAR")){
+                    for(var entry:MinecraftApi.listOfType(row, "Stores",Tag.TAG_COMPOUND))total+=carrots(NaturalVillageEconomyData.inventory(MinecraftApi.listOfType(((CompoundTag)entry), "Items",Tag.TAG_COMPOUND),l.registryAccess()));
                 }else for(var p:NaturalVillageLayout.stores(b)){
                     var at=NaturalVillageLayout.at(b,p);if(!(l.getBlockEntity(at) instanceof Container c))return -1;total+=carrots(c);
                 }
@@ -231,12 +236,12 @@ public final class SettlementDevelopmentContinuityGameTests {
         }
         void foodAudit(){
             int stock=physicalFood();if(stock<0)return;
-            var initialKeys=metadata.getCompound("InitialFieldworkKeys");int delta=0;
+            var initialKeys=metadata.getCompoundOrEmpty("InitialFieldworkKeys");int delta=0;
             for(var n:bodies())for(var r:FieldworkData.get(l.getServer()).receiptsFor(n.getUUID()))if(!initialKeys.contains(r.action().key()))
                 for(var item:r.inventoryDeltas())if(item.fingerprint().equals("minecraft:carrot#0"))delta+=item.quantity();
-            int feed=SettlementGrowthData.existing(l.getServer()).sites().stream().mapToInt(r->r.getInt("ConsumedFeed")).sum()-metadata.getInt("InitialFeed");
-            int meals=metadata.getList("Meals",Tag.TAG_COMPOUND).size();
-            int expected=metadata.getInt("InitialFood")+delta-meals-feed;
+            int feed=SettlementGrowthData.existing(l.getServer()).sites().stream().mapToInt(r->r.getIntOr("ConsumedFeed", 0)).sum()-metadata.getIntOr("InitialFeed", 0);
+            int meals=MinecraftApi.listOfType(metadata, "Meals",Tag.TAG_COMPOUND).size();
+            int expected=metadata.getIntOr("InitialFood", 0)+delta-meals-feed;
             check(expected==stock,"exact carrot conservation: expected="+expected+" stock="+stock+" delta="+delta+" meals="+meals+" feed="+feed);
         }
         void tick(){
@@ -246,23 +251,23 @@ public final class SettlementDevelopmentContinuityGameTests {
                 if(!ready())return;
                 SettlementDevelopmentGameTests.observeRoute(l,villages);
                 SettlementDevelopmentGameTests.configureInitial(l,target(),villages.get(1),villages.get(2));
-                metadata.putLongArray("ObservedChunks",l.getForcedChunks().toLongArray());
+                metadata.putLongArray("ObservedChunks",l.getForceLoadedChunks().toLongArray());
                 metadata.putLong("Started",now);metadata.putInt("InitialFood",physicalFood());
                 var initialKeys=new CompoundTag();for(var n:bodies())for(var r:FieldworkData.get(s).receiptsFor(n.getUUID()))initialKeys.putBoolean(r.action().key(),true);
                 metadata.put("InitialFieldworkKeys",initialKeys);
-                metadata.putInt("InitialFeed",SettlementGrowthData.existing(s).sites().stream().mapToInt(r->r.getInt("ConsumedFeed")).sum());
-                check(metadata.getInt("InitialFood")>=0,"all initial physical stores and bodies observed before freezing stock");
+                metadata.putInt("InitialFeed",SettlementGrowthData.existing(s).sites().stream().mapToInt(r->r.getIntOr("ConsumedFeed", 0)).sum());
+                check(metadata.getIntOr("InitialFood", 0)>=0,"all initial physical stores and bodies observed before freezing stock");
                 var baselineMeals=new CompoundTag();for(var p:people){var needs=NpcLifeData.get(s).needs(p);baselineMeals.putLong(p.toString(),needs==null?-1:needs.lastAteAt());}
                 metadata.put("LastMeal",baselineMeals);metadata.put("Meals",new ListTag());laborAudit(now);write("development-initial.nbt",snapshot(false));
-                Sagadyssey.LOGGER.info("GROWTH_FORMAL_INITIAL people=9 initialFood={} targetPantry=64 sourcePantries=64each sourceBeds=1each publicStone=165 publicWool=21 C=24000 W=72000 fullDeadline=360000",metadata.getInt("InitialFood"));
+                Sagadyssey.LOGGER.info("GROWTH_FORMAL_INITIAL people=9 initialFood={} targetPantry=64 sourcePantries=64each sourceBeds=1each publicStone=165 publicWool=21 C=24000 W=72000 fullDeadline=360000",metadata.getIntOr("InitialFood", 0));
                 initialized=true;return;
             }
             observeMeals();observeHunger();identityAudit();timingAudit(now);laborAudit(now);
-            check(now-metadata.getLong("Started")<=360000,"frozen two-round total deadline");
+            check(now-metadata.getLongOr("Started", 0L)<=360000,"frozen two-round total deadline");
             if(stage==3){
                 check(now-since<=2400,"frozen body/region return deadline");
                 var row=NaturalVillageEconomyData.get(s).row(target().buildingKey());
-                if(bodies().size()!=9||row==null||!row.getString("Phase").equals("NEAR"))return;
+                if(bodies().size()!=9||row==null||!row.getStringOr("Phase", "").equals("NEAR"))return;
                 if(restored!=null)check(admitted.size()==9,"all nine exact original body proofs verified");
                 restoreBarrier();
                 Sagadyssey.LOGGER.info("GROWTH_RETURN checkpoint={} originalBodies=9 originalIds=9 nextBusinessMustRun=true",next);
@@ -280,17 +285,17 @@ public final class SettlementDevelopmentContinuityGameTests {
                 check(away(),"region must stay truly absent during pause");
                 if(now-since<200)return;
                 var current=SettlementDevelopmentData.get(s).site(target().buildingKey());
-                if(next==0)check(current.getList("Projects",Tag.TAG_COMPOUND).stream().map(x->(CompoundTag)x).anyMatch(p->p.getString("State").equals("BUILDING")&&p.getCompound("Jobs").getCompound("BUILD").getInt("Placed")>0&&p.getCompound("Jobs").getCompound("BUILD").getInt("Placed")<SettlementDevelopmentLayout.house(target(),p.getInt("Lot")).size()),"construction is still genuinely unfinished at saved pause");
+                if(next==0)check(MinecraftApi.listOfType(current, "Projects",Tag.TAG_COMPOUND).stream().map(x->(CompoundTag)x).anyMatch(p->p.getStringOr("State", "").equals("BUILDING")&&p.getCompoundOrEmpty("Jobs").getCompoundOrEmpty("BUILD").getIntOr("Placed", 0)>0&&p.getCompoundOrEmpty("Jobs").getCompoundOrEmpty("BUILD").getIntOr("Placed", 0)<SettlementDevelopmentLayout.house(target(),p.getIntOr("Lot", 0)).size()),"construction is still genuinely unfinished at saved pause");
                 if(next==1)check(carryingRoute!=null&&SupplyFlowData.get(s).route(carryingRoute).stage()==SupplyFlowData.Stage.CARRYING&&leaving.stream().anyMatch(n->carrots(n.getTransportInventory())>0),"saved original route remains carrying real cargo, not a completed substitute");
-                if(next==2)check(SettlementDevelopmentData.get(s).applications().stream().anyMatch(a->Set.of("WALKING","WAIT_DESTINATION").contains(a.getString("State"))),"saved migration remains genuinely underway");
+                if(next==2)check(SettlementDevelopmentData.get(s).applications().stream().anyMatch(a->Set.of("WALKING","WAIT_DESTINATION").contains(a.getStringOr("State", ""))),"saved migration remains genuinely underway");
                 var proof=snapshot(true);proof.putInt("NextCheckpoint",next+1);
                 write(FILE,proof);check(NbtIoSafeRead().equals(proof),"full associated NBT save/read round trip");
                 fullCheckpoint(proof);h.succeed();return;
             }
             if(now%200==0)foodAudit();
             var d=SettlementDevelopmentData.get(s);var row=d.site(target().buildingKey());
-            if(now%2000==0)Sagadyssey.LOGGER.info("GROWTH_FORMAL_PROGRESS elapsed={} checkpoints={} rounds={} projects={}",now-metadata.getLong("Started"),next,row.getInt("CompletedRounds"),row.get("Projects"));
-            if(next==0&&row.getList("Projects",Tag.TAG_COMPOUND).stream().map(x->(CompoundTag)x).anyMatch(p->p.getString("State").equals("BUILDING")&&p.getCompound("Jobs").getCompound("BUILD").getInt("Placed")>0&&p.getCompound("Jobs").getCompound("BUILD").getInt("Placed")<10)){
+            if(now%2000==0)Sagadyssey.LOGGER.info("GROWTH_FORMAL_PROGRESS elapsed={} checkpoints={} rounds={} projects={}",now-metadata.getLongOr("Started", 0L),next,row.getIntOr("CompletedRounds", 0),row.get("Projects"));
+            if(next==0&&MinecraftApi.listOfType(row, "Projects",Tag.TAG_COMPOUND).stream().map(x->(CompoundTag)x).anyMatch(p->p.getStringOr("State", "").equals("BUILDING")&&p.getCompoundOrEmpty("Jobs").getCompoundOrEmpty("BUILD").getIntOr("Placed", 0)>0&&p.getCompoundOrEmpty("Jobs").getCompoundOrEmpty("BUILD").getIntOr("Placed", 0)<10)){
                 release("construction_pause");return;
             }
             if(next==1){
@@ -300,18 +305,18 @@ public final class SettlementDevelopmentContinuityGameTests {
                     carryingRoute=route.id();release("actual_carrying");return;
                 }
             }
-            if(next==2&&d.applications().stream().filter(a->Set.of("WALKING","WAIT_DESTINATION").contains(a.getString("State"))).anyMatch(a->{
-                var from=NaturalVillageLifeData.decode(a.getCompound("Source"));var at=SettlementDevelopmentLayout.entrance(target(),a.getInt("Lot"));
-                return a.getList("People",Tag.TAG_COMPOUND).stream().map(x->(CompoundTag)x).allMatch(who->l.getEntity(who.getUUID("Body")) instanceof NpcBase n&&n.blockPosition().distSqr(from.buildingOrigin())>32*32&&n.blockPosition().distSqr(at)>128*128);
+            if(next==2&&d.applications().stream().filter(a->Set.of("WALKING","WAIT_DESTINATION").contains(a.getStringOr("State", ""))).anyMatch(a->{
+                var from=NaturalVillageLifeData.decode(a.getCompoundOrEmpty("Source"));var at=SettlementDevelopmentLayout.entrance(target(),a.getIntOr("Lot", 0));
+                return MinecraftApi.listOfType(a, "People",Tag.TAG_COMPOUND).stream().map(x->(CompoundTag)x).allMatch(who->l.getEntity(who.read("Body", UUIDUtil.CODEC).orElseThrow()) instanceof NpcBase n&&n.blockPosition().distSqr(from.buildingOrigin())>32*32&&n.blockPosition().distSqr(at)>128*128);
             })){release("migration_underway");return;}
-            if(row.getInt("CompletedRounds")>=2){
+            if(row.getIntOr("CompletedRounds", 0)>=2){
                 check(next==3,"all three real unload/full-process checkpoints are required");
                 if(carryingRoute!=null)check(SupplyFlowData.get(s).route(carryingRoute).stage()==SupplyFlowData.Stage.DONE,"original carrying route really delivered after restart");
-                for(var a:d.applications())check(a.getString("State").equals("STABLE"),"both original households stable");
+                for(var a:d.applications())check(a.getStringOr("State", "").equals("STABLE"),"both original households stable");
                 var homes=HouseholdData.get(s).households().stream().filter(home->target().settlementId().equals(home.settlementId())).toList();
                 check(homes.size()==3&&homes.stream().mapToInt(home->home.members().size()).sum()==9&&homes.stream().allMatch(home->SettlementDevelopmentData.capacity(s,home).stableFloor()),"nine original residents in three actual stable homes");
                 foodAudit();write("development-final.nbt",snapshot(false));
-                Sagadyssey.LOGGER.info("GROWTH_FINAL_ACCEPT elapsed={} rounds=2 checkpoints=3 originalPeople=9 exactCarrotBalance=true",now-metadata.getLong("Started"));h.succeed();
+                Sagadyssey.LOGGER.info("GROWTH_FINAL_ACCEPT elapsed={} rounds=2 checkpoints=3 originalPeople=9 exactCarrotBalance=true",now-metadata.getLongOr("Started", 0L));h.succeed();
             }
         }
         boolean blockPantry(){
@@ -321,15 +326,15 @@ public final class SettlementDevelopmentContinuityGameTests {
                 if(!l.getBlockState(p).isAir()||!l.getEntitiesOfClass(net.minecraft.world.entity.LivingEntity.class,new net.minecraft.world.phys.AABB(p)).isEmpty())return false;
                 var t=new CompoundTag();t.putLong("Position",p.asLong());t.put("Before",NbtUtils.writeBlockState(l.getBlockState(p)));blocks.add(t);
             }
-            for(var e:blocks)l.setBlock(BlockPos.of(((CompoundTag)e).getLong("Position")),Blocks.GLASS.defaultBlockState(),Block.UPDATE_CLIENTS|Block.UPDATE_KNOWN_SHAPE);
+            for(var e:blocks)l.setBlock(BlockPos.of(((CompoundTag)e).getLongOr("Position", 0L)),Blocks.GLASS.defaultBlockState(),Block.UPDATE_CLIENTS|Block.UPDATE_KNOWN_SHAPE);
             metadata.put("TemporaryBarrier",blocks);
             Sagadyssey.LOGGER.info("GROWTH_DECLARED_INTERVENTION temporaryGlass=24 destinationBlocked=true noInventoryChanges=true");
             return true;
         }
         void restoreBarrier(){
-            var blocks=metadata.getList("TemporaryBarrier",Tag.TAG_COMPOUND);
-            for(var e:blocks){var t=(CompoundTag)e;var p=BlockPos.of(t.getLong("Position"));check(l.getBlockState(p).is(Blocks.GLASS),"only exact test-owned barrier may be restored");
-                l.setBlock(p,NbtUtils.readBlockState(l.holderLookup(net.minecraft.core.registries.Registries.BLOCK),t.getCompound("Before")),Block.UPDATE_CLIENTS|Block.UPDATE_KNOWN_SHAPE);
+            var blocks=MinecraftApi.listOfType(metadata, "TemporaryBarrier",Tag.TAG_COMPOUND);
+            for(var e:blocks){var t=(CompoundTag)e;var p=BlockPos.of(t.getLongOr("Position", 0L));check(l.getBlockState(p).is(Blocks.GLASS),"only exact test-owned barrier may be restored");
+                l.setBlock(p,NbtUtils.readBlockState(l.holderLookup(net.minecraft.core.registries.Registries.BLOCK),t.getCompoundOrEmpty("Before")),Block.UPDATE_CLIENTS|Block.UPDATE_KNOWN_SHAPE);
             }
             if(!blocks.isEmpty()){metadata.remove("TemporaryBarrier");Sagadyssey.LOGGER.info("GROWTH_DECLARED_INTERVENTION temporaryGlassRemoved=24 originalCargoAndObligationKept=true");}
         }
@@ -345,8 +350,8 @@ public final class SettlementDevelopmentContinuityGameTests {
         boolean away(){
             if(!bodies().isEmpty())return false;
             var economy=NaturalVillageEconomyData.existing(l.getServer());var row=economy==null?null:economy.row(target().buildingKey());
-            if(row==null||!row.getString("Phase").equals("REMOTE")||!row.getBoolean("ObservedAway"))return false;
-            for(long key:metadata.getLongArray("ObservedChunks")){
+            if(row==null||!row.getStringOr("Phase", "").equals("REMOTE")||!row.getBooleanOr("ObservedAway", false))return false;
+            for(long key:metadata.getLongArray("ObservedChunks").orElseGet(() -> new long[0])){
                 var p=new net.minecraft.world.level.ChunkPos(key);if(l.getChunkSource().getChunkNow(p.x,p.z)!=null
                         ||((NaturalVillageEconomyData.RetainedChunks)(Object)l.getChunkSource().chunkMap).sagadyssey$retained(key)!=null)return false;
             }
@@ -356,25 +361,25 @@ public final class SettlementDevelopmentContinuityGameTests {
             var t=new CompoundTag();var buildings=new ListTag();var natural=NaturalVillageLifeData.get(l.getServer());
             villages.forEach(b->buildings.add(natural.village(b.buildingKey())));t.put("Villages",buildings);t.put("Metadata",metadata.copy());t.put("Links",links(l));
             var proofs=new ListTag();var originals=unloaded?leaving:bodies();
-            for(var n:originals){var p=new CompoundTag();p.putUUID("Body",n.getUUID());p.putUUID("Person",n.getCharacterId());
-                p.put("Personal",NaturalVillageEconomyData.items(n.getPersonalInventory(),l.registryAccess()));p.put("Cargo",NaturalVillageEconomyData.items(n.getTransportInventory(),l.registryAccess()));p.put("BodyTag",n.saveWithoutId(new CompoundTag()));proofs.add(p);}
-            t.put("Bodies",proofs);if(!unloaded)t.put("PhysicalInventories",physicalInventories());t.putLong("SavedTime",l.getGameTime());t.putInt("NextCheckpoint",next);t.putBoolean("ActuallyUnloaded",unloaded);if(carryingRoute!=null)t.putUUID("CarryingRoute",carryingRoute);return t;
+            for(var n:originals){var p=new CompoundTag();p.store("Body", UUIDUtil.CODEC,n.getUUID());p.store("Person", UUIDUtil.CODEC,n.getCharacterId());
+                p.put("Personal",NaturalVillageEconomyData.items(n.getPersonalInventory(),l.registryAccess()));p.put("Cargo",NaturalVillageEconomyData.items(n.getTransportInventory(),l.registryAccess()));p.put("BodyTag",MinecraftApi.saveEntity(n));proofs.add(p);}
+            t.put("Bodies",proofs);if(!unloaded)t.put("PhysicalInventories",physicalInventories());t.putLong("SavedTime",l.getGameTime());t.putInt("NextCheckpoint",next);t.putBoolean("ActuallyUnloaded",unloaded);if(carryingRoute!=null)t.store("CarryingRoute", UUIDUtil.CODEC,carryingRoute);return t;
         }
         void write(String name,CompoundTag tag){try{NbtIo.writeCompressed(tag,l.getServer().getWorldPath(LevelResource.ROOT).resolve(name));}catch(Exception x){throw new IllegalStateException(x);}}
         CompoundTag NbtIoSafeRead(){try{return NbtIo.readCompressed(l.getServer().getWorldPath(LevelResource.ROOT).resolve(FILE),NbtAccounter.unlimitedHeap());}catch(Exception x){throw new IllegalStateException(x);}}
         void fullCheckpoint(CompoundTag proof){
             try{
-                l.getServer().saveEverything(true,true,true);net.neoforged.neoforge.common.IOUtilities.waitUntilIOWorkerComplete();
+                l.getServer().saveEverything(true,true,true);
                 var forcedFile=l.getServer().getWorldPath(LevelResource.ROOT).resolve("data/chunks.dat");
-                check(l.getForcedChunks().isEmpty(),"all isolated observer flags removed in memory");
-                check(Files.exists(forcedFile)&&NbtIo.readCompressed(forcedFile,NbtAccounter.unlimitedHeap()).getCompound("data").getLongArray("Forced").length==0,"saved observer flags empty too, never reuse stale forcing metadata");
+                check(l.getForceLoadedChunks().isEmpty(),"all isolated observer flags removed in memory");
+                check(Files.exists(forcedFile)&&NbtIo.readCompressed(forcedFile,NbtAccounter.unlimitedHeap()).getCompoundOrEmpty("data").getLongArray("Forced").orElseGet(() -> new long[0]).length==0,"saved observer flags empty too, never reuse stale forcing metadata");
                 var source=l.getServer().getWorldPath(LevelResource.ROOT).toAbsolutePath().normalize();
-                var target=source.resolveSibling("world-growth-checkpoint-"+proof.getInt("NextCheckpoint"));check(Files.notExists(target),"never overwrite a complete checkpoint");
+                var target=source.resolveSibling("world-growth-checkpoint-"+proof.getIntOr("NextCheckpoint", 0));check(Files.notExists(target),"never overwrite a complete checkpoint");
                 try(var paths=Files.walk(source)){for(var p:paths.filter(Files::isRegularFile).toList()){
                     if(p.getFileName().toString().equals("session.lock"))continue;
                     var to=target.resolve(source.relativize(p));Files.createDirectories(to.getParent());Files.copy(p,to);
                 }}
-                Sagadyssey.LOGGER.info("GROWTH_FULL_CHECKPOINT next={} actualUnload=true completeWorld=true snapshot={} checkpointOnlyNotFinalAcceptance=true",proof.getInt("NextCheckpoint"),target);
+                Sagadyssey.LOGGER.info("GROWTH_FULL_CHECKPOINT next={} actualUnload=true completeWorld=true snapshot={} checkpointOnlyNotFinalAcceptance=true",proof.getIntOr("NextCheckpoint", 0),target);
             }catch(Exception x){throw new IllegalStateException(x);}
         }
     }

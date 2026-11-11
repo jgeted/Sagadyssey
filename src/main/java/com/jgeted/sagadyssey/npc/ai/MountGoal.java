@@ -3,7 +3,7 @@ package com.jgeted.sagadyssey.npc.ai;
 import com.jgeted.sagadyssey.npc.entity.NpcBase;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.ai.goal.Goal;
-import net.minecraft.world.entity.animal.horse.AbstractHorse;
+import net.minecraft.world.entity.animal.equine.AbstractHorse;
 
 import java.util.EnumSet;
 

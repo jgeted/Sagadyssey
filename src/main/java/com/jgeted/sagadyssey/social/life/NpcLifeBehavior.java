@@ -59,7 +59,7 @@ public final class NpcLifeBehavior {
 
     /** Missing unloaded blocks are unknown; a courier can use its existing legal household pantry. */
     private static String storageIssue(NpcBase npc, NpcLifeRecord life, ServerLevel level) {
-        String dimension = level.dimension().location().toString();
+        String dimension = level.dimension().identifier().toString();
         if (life.privateStoragePosition() != null) {
             if (!dimension.equals(life.dimension())) return "私人储物位于原维度，等待返回或正式迁居配置";
             if (!level.hasChunkAt(life.privateStoragePosition())) return null;

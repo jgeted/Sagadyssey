@@ -7,7 +7,7 @@ import java.util.*;
 public final class SocietyRegionPerformanceGameTests {
  public static void run(GameTestHelper h){var l=h.getLevel();var s=l.getServer();var villages=List.of(NaturalVillageR1GameTests.fixture(h,0,NaturalVillageLayout.FARM_V2),NaturalVillageR1GameTests.fixture(h,96,NaturalVillageLayout.WOOD_V2),NaturalVillageR1GameTests.fixture(h,512,NaturalVillageLayout.LIVING),NaturalVillageR1GameTests.fixture(h,896,NaturalVillageLayout.FARM_V2));int[] stage={0},last={-1};long[] baseline={0},peak={0},after={0},until={0};h.onEachTick(()->{if(last[0]==s.getTickCount())return;last[0]=s.getTickCount();var d=NaturalVillageEconomyData.get(s);
   if(stage[0]==0&&h.getTick()>=300){for(var b:villages)NaturalVillageR1GameTests.visiting(l,b,false);stage[0]=1;}
-  if(stage[0]==1){for(var b:villages){var r=d.row(b.buildingKey());if(r==null||!r.getString("Phase").equals("REMOTE"))return;for(int i=0;i<3;i++)if(NaturalVillageR1GameTests.actor(l,b,i)!=null)return;}
+  if(stage[0]==1){for(var b:villages){var r=d.row(b.buildingKey());if(r==null||!r.getStringOr("Phase", "").equals("REMOTE"))return;for(int i=0;i<3;i++)if(NaturalVillageR1GameTests.actor(l,b,i)!=null)return;}
    baseline[0]=java.lang.management.ManagementFactory.getMemoryMXBean().getHeapMemoryUsage().getUsed();until[0]=l.getGameTime()+120000;s.getWorldData().overworldData().setGameTime(until[0]);l.setDayTime(l.getDayTime()+120000);peak[0]=d.backlog(l.getGameTime());stage[0]=2;
   }
   if(stage[0]==2){peak[0]=Math.max(peak[0],d.backlog(l.getGameTime()));if(d.backlog(l.getGameTime())>0)return;after[0]=l.getGameTime();stage[0]=3;}

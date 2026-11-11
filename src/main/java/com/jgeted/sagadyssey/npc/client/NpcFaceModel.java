@@ -14,7 +14,7 @@ import net.minecraft.client.model.geom.builders.PartDefinition;
 import net.minecraft.world.entity.EquipmentSlot;
 
 /** 独立于职业贴图的脸、头发和头巾模型。 */
-public final class NpcFaceModel extends HumanoidModel<NpcBase> {
+public final class NpcFaceModel extends HumanoidModel<NpcRenderState> {
     private final ModelPart nose;
     private final ModelPart beard;
     private final ModelPart fringeLeft;
@@ -31,8 +31,11 @@ public final class NpcFaceModel extends HumanoidModel<NpcBase> {
     private final ModelPart veilLeft;
     private final ModelPart veilRight;
 
-    public NpcFaceModel(ModelPart root) {
+    private final NpcModel parent;
+
+    public NpcFaceModel(ModelPart root, NpcModel parent) {
         super(root);
+        this.parent = parent;
         this.nose = head.getChild("nose");
         this.beard = head.getChild("beard");
         this.fringeLeft = head.getChild("fringe_left");
@@ -103,7 +106,7 @@ public final class NpcFaceModel extends HumanoidModel<NpcBase> {
                         .addBox(-4.26F, -6.45F, -1.2F, 0.48F, 7.2F, 4.85F,
                                 new CubeDeformation(0.025F)), PartPose.rotation(0.0F, 0.0F, 0.025F));
 
-        root.addOrReplaceChild("hat", CubeListBuilder.create().texOffs(32, 0)
+        head.addOrReplaceChild("hat", CubeListBuilder.create().texOffs(32, 0)
                         .addBox(-4.0F, -8.0F, -4.0F, 8.0F, 8.0F, 8.0F,
                                 new CubeDeformation(0.18F)), PartPose.ZERO);
         addEmptyHumanoidParts(root);
@@ -120,11 +123,15 @@ public final class NpcFaceModel extends HumanoidModel<NpcBase> {
         root.addOrReplaceChild("left_leg", CubeListBuilder.create(), PartPose.offset(1.9F, 12.0F, 0.0F));
     }
 
-    public void configure(NpcBase entity) {
-        NpcGender gender = entity.getGender();
-        NpcFaceVariant face = entity.getFaceVariant();
+    @Override
+    public void setupAnim(NpcRenderState state) {
+        super.setupAnim(state);
+        parent.setupAnim(state);
+        head.loadPose(parent.head.storePose());
+        NpcGender gender = state.gender;
+        NpcFaceVariant face = state.face;
         boolean female = gender == NpcGender.FEMALE;
-        boolean helmeted = !entity.getItemBySlot(EquipmentSlot.HEAD).isEmpty();
+        boolean helmeted = state.helmeted;
         hat.visible = !helmeted;
 
         // 男女均由同一套 32x32 像素五官表达；禁用旧立体鼻，避免男性退回村民画风。

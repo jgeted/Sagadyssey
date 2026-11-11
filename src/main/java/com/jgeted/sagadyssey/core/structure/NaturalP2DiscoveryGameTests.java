@@ -20,7 +20,7 @@ public final class NaturalP2DiscoveryGameTests {
         if(!Boolean.getBoolean("sagadyssey.p2.discovery"))return;
         var s=e.getServer();var l=s.overworld();
         if(l.getChunkSource().getGenerator() instanceof net.minecraft.world.level.levelgen.FlatLevelSource||!s.getWorldData().worldGenOptions().generateStructures()||s.getWorldData().worldGenOptions().seed()!=7019L)throw new IllegalStateException("P2 frozen seed7019 ordinary terrain required");
-        var holder=l.registryAccess().registryOrThrow(Registries.STRUCTURE).getHolderOrThrow(net.minecraft.resources.ResourceKey.create(Registries.STRUCTURE,NaturalVillageBuilding.SUPPORTED));
+        var holder=l.registryAccess().lookupOrThrow(Registries.STRUCTURE).getOrThrow(net.minecraft.resources.ResourceKey.create(Registries.STRUCTURE,NaturalVillageBuilding.SUPPORTED));
         var found=l.getChunkSource().getGenerator().findNearestMapStructure(l,HolderSet.direct(holder),BlockPos.ZERO,24,false);
         if(found==null)throw new IllegalStateException("P2 natural site not found within frozen radius");
         located=found.getFirst();var cp=new ChunkPos(located);
@@ -34,7 +34,7 @@ public final class NaturalP2DiscoveryGameTests {
         if(elapsed<200||elapsed%20!=0)return;
         var data=NaturalVillageLifeData.existing(s);
         if(data!=null)for(var v:data.villages()){
-            var b=NaturalVillageLifeData.decode(v);if(!v.getBoolean("Ready")||b.settlementCenter().distSqr(located)>128*128)continue;
+            var b=NaturalVillageLifeData.decode(v);if(!v.getBooleanOr("Ready", false)||b.settlementCenter().distSqr(located)>128*128)continue;
             NaturalMemberP2GameTests.verify(l,b);
             try{var marker=new CompoundTag();marker.putLong("Seed",7019);marker.putLong("Located",located.asLong());marker.put("Village",v);marker.putString("Evidence","ordinary terrain automatic callback; only observed template, no manual init or item injection");NbtIo.writeCompressed(marker,s.getWorldPath(LevelResource.ROOT).resolve("p2-natural-discovery.nbt"));s.saveEverything(true,true,true);}
             catch(Exception ex){throw new IllegalStateException(ex);}

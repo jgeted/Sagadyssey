@@ -1,5 +1,7 @@
 package com.jgeted.sagadyssey.social.institution;
 
+import net.minecraft.core.UUIDUtil;
+
 import net.minecraft.nbt.CompoundTag;
 
 import java.util.UUID;
@@ -20,9 +22,9 @@ public record JurisdictionClaim(UUID id, UUID institutionId, UUID settlementId,
 
     CompoundTag save() {
         CompoundTag tag = new CompoundTag();
-        tag.putUUID("Id", id);
-        tag.putUUID("Institution", institutionId);
-        tag.putUUID("Settlement", settlementId);
+        tag.store("Id", UUIDUtil.CODEC, id);
+        tag.store("Institution", UUIDUtil.CODEC, institutionId);
+        tag.store("Settlement", UUIDUtil.CODEC, settlementId);
         tag.putString("Authority", authority.name());
         tag.putInt("Priority", priority);
         tag.putLong("AssertedAt", assertedAt);
@@ -32,9 +34,9 @@ public record JurisdictionClaim(UUID id, UUID institutionId, UUID settlementId,
     }
 
     static JurisdictionClaim load(CompoundTag tag) {
-        return new JurisdictionClaim(tag.getUUID("Id"), tag.getUUID("Institution"),
-                tag.getUUID("Settlement"), OfficeAuthority.valueOf(tag.getString("Authority")),
-                tag.getInt("Priority"), tag.getLong("AssertedAt"),
-                tag.getLong("ExpiresAt"), tag.getString("Basis"));
+        return new JurisdictionClaim(tag.read("Id", UUIDUtil.CODEC).orElseThrow(), tag.read("Institution", UUIDUtil.CODEC).orElseThrow(),
+                tag.read("Settlement", UUIDUtil.CODEC).orElseThrow(), OfficeAuthority.valueOf(tag.getStringOr("Authority", "")),
+                tag.getIntOr("Priority", 0), tag.getLongOr("AssertedAt", 0L),
+                tag.getLongOr("ExpiresAt", 0L), tag.getStringOr("Basis", ""));
     }
 }

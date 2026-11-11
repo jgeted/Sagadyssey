@@ -14,9 +14,8 @@ import io.netty.buffer.ByteBuf;
 import io.netty.handler.codec.DecoderException;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerPlayer;
-import net.neoforged.neoforge.network.handling.IPayloadContext;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -32,21 +31,18 @@ public record TradeSessionPayload(int npcEntityId, UUID sessionId, int revision,
     private static final int MAX_ASSETS = 27;
     private static final int MAX_OFFER_LINES = 9;
     public static final Type<TradeSessionPayload> TYPE = new Type<>(
-            ResourceLocation.fromNamespaceAndPath(Sagadyssey.MOD_ID, "trade_session_v2"));
+            Identifier.fromNamespaceAndPath(Sagadyssey.MOD_ID, "trade_session_v2"));
     public static final StreamCodec<ByteBuf, TradeSessionPayload> STREAM_CODEC = StreamCodec.of(
             TradeSessionPayload::write, TradeSessionPayload::read);
 
     @Override public Type<? extends CustomPacketPayload> type() { return TYPE; }
 
-    public static void handle(TradeSessionPayload payload, IPayloadContext context) {
-        ClientTradeSessionHandler.handle(payload, context);
-    }
 
     public static TradeSessionPayload create(ServerPlayer player, NpcBase npc,
                                              TradeSession session) {
-        RightsStateData rights = RightsStateData.get(player.server);
-        TradeSessionData sessions = TradeSessionData.get(player.server);
-        long now = player.serverLevel().getGameTime();
+        RightsStateData rights = RightsStateData.get(player.level().getServer());
+        TradeSessionData sessions = TradeSessionData.get(player.level().getServer());
+        long now = player.level().getGameTime();
         List<TradeAsset> playerOffer = session.proposal() == null ? List.of()
                 : session.proposal().playerOffers();
         List<TradeAsset> npcOffer = session.proposal() == null ? List.of()

@@ -1,5 +1,7 @@
 package com.jgeted.sagadyssey.worldsim.lod;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+
 import com.jgeted.sagadyssey.npc.brain.execution.NpcBrainRuntime;
 import com.jgeted.sagadyssey.npc.entity.*;
 import net.minecraft.core.BlockPos;
@@ -13,7 +15,7 @@ public final class NpcNavigationQueue {
     private static final Map<MinecraftServer,LinkedHashMap<UUID,Request>> QUEUES=new WeakHashMap<>();
     private static LinkedHashMap<UUID,Request> queue(MinecraftServer s){return QUEUES.computeIfAbsent(s,k->new LinkedHashMap<>());}
     public static boolean move(NpcBase npc,BlockPos target,double speed) {
-        var s=npc.getServer();if(s==null||!NpcBrainRuntime.isPlanned(npc))return npc.getNavigation().moveTo(target.getX()+.5,target.getY(),target.getZ()+.5,speed);
+        var s=MinecraftApi.server(npc);if(s==null||!NpcBrainRuntime.isPlanned(npc))return npc.getNavigation().moveTo(target.getX()+.5,target.getY(),target.getZ()+.5,speed);
         var plan=NpcBrainRuntime.data(s).active(npc.getUUID()).orElse(null);if(plan==null)return false;
         var q=queue(s);if(!q.containsKey(npc.getUUID())&&q.size()>=8192)return false;
         q.put(npc.getUUID(),new Request(new WeakReference<>(npc),plan.id(),plan.currentStepIndex(),npc.getCommand(),target.immutable(),speed));return true;

@@ -1,5 +1,7 @@
 package com.jgeted.sagadyssey.social.commons;
 
+import net.minecraft.core.UUIDUtil;
+
 import com.jgeted.sagadyssey.worldsim.rights.SubjectRef;
 import net.minecraft.nbt.CompoundTag;
 
@@ -15,19 +17,19 @@ public record CommonsWithdrawal(UUID id, UUID policyId, SubjectRef member,
 
     CompoundTag save() {
         CompoundTag tag = new CompoundTag();
-        tag.putUUID("Id", id);
-        tag.putUUID("Policy", policyId);
+        tag.store("Id", UUIDUtil.CODEC, id);
+        tag.store("Policy", UUIDUtil.CODEC, policyId);
         tag.put("Member", member.save());
         tag.putInt("Quantity", quantity);
         tag.putLong("Day", day);
         tag.putLong("WithdrawnAt", withdrawnAt);
-        tag.putUUID("Transfer", transferId);
+        tag.store("Transfer", UUIDUtil.CODEC, transferId);
         return tag;
     }
 
     static CommonsWithdrawal load(CompoundTag tag) {
-        return new CommonsWithdrawal(tag.getUUID("Id"), tag.getUUID("Policy"),
-                SubjectRef.load(tag.getCompound("Member")), tag.getInt("Quantity"),
-                tag.getLong("Day"), tag.getLong("WithdrawnAt"), tag.getUUID("Transfer"));
+        return new CommonsWithdrawal(tag.read("Id", UUIDUtil.CODEC).orElseThrow(), tag.read("Policy", UUIDUtil.CODEC).orElseThrow(),
+                SubjectRef.load(tag.getCompoundOrEmpty("Member")), tag.getIntOr("Quantity", 0),
+                tag.getLongOr("Day", 0L), tag.getLongOr("WithdrawnAt", 0L), tag.read("Transfer", UUIDUtil.CODEC).orElseThrow());
     }
 }

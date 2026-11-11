@@ -1,5 +1,10 @@
 package com.jgeted.sagadyssey.npc.brain.command;
 
+import com.jgeted.sagadyssey.gametest.PortedGameTests.*;
+
+import com.jgeted.sagadyssey.core.MinecraftApi;
+import net.minecraft.core.UUIDUtil;
+
 import com.jgeted.sagadyssey.Sagadyssey;
 import com.jgeted.sagadyssey.social.character.*;
 import com.jgeted.sagadyssey.npc.entity.NpcBase;
@@ -13,7 +18,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.gametest.framework.*;
 import net.minecraft.nbt.*;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.*;
 import net.minecraft.world.Container;
 import net.minecraft.world.item.*;
@@ -27,10 +32,10 @@ import java.util.*;
 @GameTestHolder("sagadyssey_identity") @PrefixGameTestTemplate(false)
 @net.neoforged.fml.common.EventBusSubscriber(modid="sagadyssey")
 public final class IdentityLifecycleGameTests {
-    private static final ResourceLocation EMPTY=ResourceLocation.parse("sagadyssey_identity:empty");
+    private static final Identifier EMPTY=Identifier.parse("sagadyssey_identity:empty");
     @net.neoforged.bus.api.SubscribeEvent public static void install(net.neoforged.neoforge.event.server.ServerStartedEvent e){
         if(!(e.getServer() instanceof GameTestServer))return;
-        try {var l=e.getServer().overworld();l.getStructureManager().getOrCreate(EMPTY).load(l.holderLookup(Registries.BLOCK),TagParser.parseTag("{size:[40,8,40],entities:[],blocks:[],palette:[{Name:\"minecraft:air\"}]}"));}
+        try {var l=e.getServer().overworld();l.getStructureManager().getOrCreate(EMPTY).load(l.holderLookup(Registries.BLOCK),TagParser.parseCompoundFully("{size:[40,8,40],entities:[],blocks:[],palette:[{Name:\"minecraft:air\"}]}"));}
         catch(Exception ex){throw new IllegalStateException(ex);}
     }
     @GameTestGenerator public static Collection<TestFunction> tests(){return List.of(
@@ -45,9 +50,9 @@ public final class IdentityLifecycleGameTests {
         test("valid_existing_client_fixture",NpcCombatClientFixtureGameTests::consolidatedFixtureRunsOnceWithoutChangingOldSquad,1100),
         test("occupied_fixture_remains_rejected",NpcCombatClientFixtureGameTests::occupiedFixtureSiteDoesNotOverwriteUserBlockOrStartIntent,60));}
     private static TestFunction test(String name,java.util.function.Consumer<GameTestHelper> f,int limit){return new TestFunction("identity",name,EMPTY.toString(),limit,0,true,f);}
-    private static CompoundTag registry(ServerPlayer p){return CharacterRegistryData.get(p.server).save(new CompoundTag(),p.server.registryAccess());}
-    private static int lives(ServerPlayer p){for(var x:registry(p).getList("LifeCounts",Tag.TAG_COMPOUND)){var t=(CompoundTag)x;if(t.getUUID("Account").equals(p.getUUID()))return t.getInt("Count");}return 0;}
-    private static int command(ServerPlayer p,String text){try{return p.server.getCommands().getDispatcher().execute(text,p.createCommandSourceStack().withPermission(4));}catch(Exception ex){throw new IllegalStateException("command "+text,ex);}}
+    private static CompoundTag registry(ServerPlayer p){return CharacterRegistryData.get(p.level().getServer()).save(new CompoundTag(),p.level().getServer().registryAccess());}
+    private static int lives(ServerPlayer p){for(var x:MinecraftApi.listOfType(registry(p), "LifeCounts",Tag.TAG_COMPOUND)){var t=(CompoundTag)x;if(t.read("Account", UUIDUtil.CODEC).orElseThrow().equals(p.getUUID()))return t.getIntOr("Count", 0);}return 0;}
+    private static int command(ServerPlayer p,String text){try{return p.level().getServer().getCommands().getDispatcher().execute(text,p.createCommandSourceStack().withPermission(net.minecraft.server.permissions.LevelBasedPermissionSet.OWNER));}catch(Exception ex){throw new IllegalStateException("command "+text,ex);}}
     private static NpcBase owned(GameTestHelper h,ServerPlayer p){
         var n=new NpcBase(NpcEntityTypes.NPC_BASE.get(),h.getLevel());n.setNpcName("identity-owned");n.setOwner(p);n.setPersistenceRequired();n.setNoAi(true);
         var at=h.absolutePos(new BlockPos(8,1,8));n.setPos(at.getX()+.5,at.getY(),at.getZ()+.5);h.getLevel().addFreshEntity(n);h.assertTrue(n.isOwnedBy(p.getUUID()),"initial valid legacy service");return n;
@@ -60,7 +65,7 @@ public final class IdentityLifecycleGameTests {
         NpcCombatClientFixture.status(p);
         var attachment=PlayerIdentityAttachments.get(p);var faction=attachment.titleFactionId();var social=attachment.socialClass();var office=attachment.office();
         try {var set=com.jgeted.sagadyssey.npc.identity.command.PlayerIdentityCommand.class.getDeclaredMethod("set",net.minecraft.commands.CommandSourceStack.class,ServerPlayer.class,String.class,String.class,String.class);set.setAccessible(true);
-            h.assertTrue((int)set.invoke(null,p.createCommandSourceStack().withPermission(4),p,"COMMONER","NONE","identity:denied")==0,"missing/dead target rejected before attachment writes");
+            h.assertTrue((int)set.invoke(null,p.createCommandSourceStack().withPermission(net.minecraft.server.permissions.LevelBasedPermissionSet.OWNER),p,"COMMONER","NONE","identity:denied")==0,"missing/dead target rejected before attachment writes");
         }catch(Exception ex){throw new IllegalStateException(ex);}
         h.assertTrue(attachment.titleFactionId().equals(faction)&&attachment.socialClass()==social&&attachment.office()==office,"denied identity mutation preserves original attachments");
         h.assertTrue(CharterTradeGovernance.actor(p)==null&&ReligionService.currentCharacter(p)==null,"non-creating shared lookups");
@@ -74,10 +79,10 @@ public final class IdentityLifecycleGameTests {
     private static void deadWait(GameTestHelper h){
         var p=NpcCombatIntegrationGameTests.online(h);p.setGameMode(GameType.SURVIVAL);p.getInventory().clearContent();var old=CharacterRegistry.currentId(p);var n=owned(h,p);
         h.setBlock(3,1,3,Blocks.BARREL);var pos=h.absolutePos(new BlockPos(3,1,3));var box=(Container)h.getLevel().getBlockEntity(pos);box.setItem(0,new ItemStack(Items.OAK_LOG,4));
-        var rights=RightsStateData.get(p.server);UUID container=UUID.randomUUID();var owner=SubjectRef.character(old);rights.ensureContext(container,"identity-test:"+pos.asLong(),owner,owner,AccessPolicy.PRIVATE);
+        var rights=RightsStateData.get(p.level().getServer());UUID container=UUID.randomUUID();var owner=SubjectRef.character(old);rights.ensureContext(container,"identity-test:"+pos.asLong(),owner,owner,AccessPolicy.PRIVATE);
         long now=h.getLevel().getGameTime();String token="identity-obligation:"+old;var reservation=new AssetReservation(UUID.randomUUID(),container,new ItemFingerprint("minecraft:oak_log",0),2,owner,token,"pre-existing obligation",now,now+4000);
         h.assertTrue(rights.reserve(reservation,4,now),"initial actual goods reserved");
-        p.kill();h.assertTrue(!p.isAlive()&&CharacterRegistry.currentId(p)==null,"real death event removes CURRENT");
+        MinecraftApi.kill(p);h.assertTrue(!p.isAlive()&&CharacterRegistry.currentId(p)==null,"real death event removes CURRENT");
         long deathAt=h.getLevel().getGameTime();
         h.runAfterDelay(160,()->{
             h.assertTrue(h.getLevel().getGameTime()-deathAt>=160,"normal scheduling crossed at least eight fixture periods");
@@ -85,7 +90,7 @@ public final class IdentityLifecycleGameTests {
             queryChecks(h,p,n);CharacterLifecycleEvents.onLogin(new PlayerEvent.PlayerLoggedInEvent(p));queryChecks(h,p,n);
             CharacterLifecycleEvents.onDeath(new net.neoforged.neoforge.event.entity.living.LivingDeathEvent(p,p.damageSources().genericKill()));
             h.assertTrue(lives(p)==1&&CharacterRegistry.currentId(p)==null,"duplicate death and dead login do not create");
-            var reg=CharacterRegistryData.get(p.server);h.assertTrue(!reg.byId(old).alive()&&old.equals(n.getOwnerCharacterId())&&old.equals(reg.compatibilityOwnerCharacter(p.getUUID())),"original death history and old owner mapping remain");
+            var reg=CharacterRegistryData.get(p.level().getServer());h.assertTrue(!reg.byId(old).alive()&&old.equals(n.getOwnerCharacterId())&&old.equals(reg.compatibilityOwnerCharacter(p.getUUID())),"original death history and old owner mapping remain");
             h.assertTrue(box.getItem(0).getCount()==4&&rights.context(container).defaultBeneficialOwner().equals(owner)&&rights.reservationsForToken(token,h.getLevel().getGameTime()).equals(List.of(reservation)),"old private goods and obligation neither inherited nor cleared");
             Sagadyssey.LOGGER.info("IDENTITY_DEAD_WAIT account={} old={} death={} now={} lifeCount={} current={} privateOak=4 reservedOak=2",p.getUUID(),old,deathAt,h.getLevel().getGameTime(),lives(p),CharacterRegistry.currentId(p));
             NpcCombatIntegrationGameTests.offline(p);h.succeed();
@@ -95,26 +100,26 @@ public final class IdentityLifecycleGameTests {
         var p=NpcCombatIntegrationGameTests.online(h);p.setGameMode(GameType.SURVIVAL);p.getInventory().clearContent();var old=CharacterRegistry.currentId(p);
         h.assertTrue(lives(p)==1&&old!=null,"formal first login created one identity");
         CharacterLifecycleEvents.onLogin(new PlayerEvent.PlayerLoggedInEvent(p));h.assertTrue(lives(p)==1&&old.equals(CharacterRegistry.currentId(p)),"live relog preserves original");
-        p.kill();h.assertTrue(CharacterRegistry.currentId(p)==null,"death before respawn");
+        MinecraftApi.kill(p);h.assertTrue(CharacterRegistry.currentId(p)==null,"death before respawn");
         // Exercise the actual respawn callback twice on a new body with the same account;
         // the independent client run supplies the real click and full-process restart evidence.
-        var body=new ServerPlayer(p.server,h.getLevel(),p.getGameProfile(),ClientInformation.createDefault());body.connection=p.connection;body.setGameMode(GameType.SURVIVAL);
+        var body=new ServerPlayer(p.level().getServer(),h.getLevel(),p.getGameProfile(),ClientInformation.createDefault());body.connection=p.connection;body.setGameMode(GameType.SURVIVAL);
         var event=new PlayerEvent.PlayerRespawnEvent(body,false);CharacterLifecycleEvents.onRespawn(event);UUID fresh=CharacterRegistry.currentId(body);CharacterLifecycleEvents.onRespawn(event);
         h.assertTrue(fresh!=null&&!fresh.equals(old)&&fresh.equals(CharacterRegistry.currentId(body))&&lives(body)==2,"one legal fresh life; repeat callback idempotent");
-        h.assertTrue(!CharacterRegistryData.get(p.server).byId(old).alive()&&CharacterRegistryData.get(p.server).byId(fresh).alive(),"distinct retained history");
+        h.assertTrue(!CharacterRegistryData.get(p.level().getServer()).byId(old).alive()&&CharacterRegistryData.get(p.level().getServer()).byId(fresh).alive(),"distinct retained history");
         NpcCombatIntegrationGameTests.offline(p);h.succeed();
     }
     private static void rescue(GameTestHelper h){
         var p=NpcCombatIntegrationGameTests.online(h);p.setGameMode(GameType.SURVIVAL);p.getInventory().clearContent();p.getInventory().setItem(0,new ItemStack(Items.EMERALD,4));var before=CharacterRegistry.current(p);var id=before.id();
-        p.kill();h.assertTrue(p.isAlive()&&id.equals(CharacterRegistry.currentId(p))&&lives(p)==1&&before.rescueCount()==1,"real lethal event rescued same first identity");
+        MinecraftApi.kill(p);h.assertTrue(p.isAlive()&&id.equals(CharacterRegistry.currentId(p))&&lives(p)==1&&before.rescueCount()==1,"real lethal event rescued same first identity");
         h.assertTrue(p.getInventory().countItem(Items.EMERALD)==0,"four actual emeralds consumed");
         h.runAfterDelay(100,()->{h.assertTrue(p.isAlive()&&lives(p)==1&&id.equals(CharacterRegistry.currentId(p)),"rescued identity stable over normal ticks");NpcCombatIntegrationGameTests.offline(p);h.succeed();});
     }
     private static void missing(GameTestHelper h){
         var profile=new com.mojang.authlib.GameProfile(UUID.randomUUID(),"identity-new");var p=new ServerPlayer(h.getLevel().getServer(),h.getLevel(),profile,ClientInformation.createDefault());
         var connection=new net.minecraft.network.Connection(net.minecraft.network.protocol.PacketFlow.SERVERBOUND);new io.netty.channel.embedded.EmbeddedChannel(connection);
-        p.connection=new net.minecraft.server.network.ServerGamePacketListenerImpl(p.server,connection,p,net.minecraft.server.network.CommonListenerCookie.createInitial(profile,false)){
-            @Override public void send(net.minecraft.network.protocol.Packet<?> packet){} @Override public void send(net.minecraft.network.protocol.Packet<?> packet,net.minecraft.network.PacketSendListener listener){}
+        p.connection=new net.minecraft.server.network.ServerGamePacketListenerImpl(p.level().getServer(),connection,p,net.minecraft.server.network.CommonListenerCookie.createInitial(profile,false)){
+            @Override public void send(net.minecraft.network.protocol.Packet<?> packet){} 
         };
         h.assertTrue(lives(p)==0,"no test-created identity");queryChecks(h,p,null);h.assertTrue(lives(p)==0,"queries cannot implement first login");
         CharacterLifecycleEvents.onLogin(new PlayerEvent.PlayerLoggedInEvent(p));h.assertTrue(lives(p)==1,"formal first login still works");h.succeed();
@@ -131,10 +136,10 @@ public final class IdentityLifecycleGameTests {
         h.assertTrue(invokeBoolean(com.jgeted.sagadyssey.npc.command.NpcLifeCommand.class,"authorized",lifeTypes,p,n,work),"existing lawful work authority remains");
         h.assertTrue(invokeBoolean(com.jgeted.sagadyssey.npc.command.network.CommandGroupActionPacket.class,"authorized",groupTypes,p,n,work,false),"existing lawful group authority remains");
         var b=com.jgeted.sagadyssey.core.structure.NaturalVillageR1GameTests.fixture(h,0);
-        p.kill();h.assertTrue(!p.isAlive()&&CharacterRegistry.currentId(p)==null,"real death before permission reads");
+        MinecraftApi.kill(p);h.assertTrue(!p.isAlive()&&CharacterRegistry.currentId(p)==null,"real death before permission reads");
         h.runAfterDelay(240,()->{
             var pos=com.jgeted.sagadyssey.core.structure.NaturalVillageLayout.at(b,com.jgeted.sagadyssey.core.structure.NaturalVillageLayout.PUBLIC);
-            h.assertTrue(com.jgeted.sagadyssey.core.structure.NaturalVillageLifeData.managedStore(p.server,h.getLevel().dimension().location().toString(),pos)!=null,"formal initialization registered actual managed store");
+            h.assertTrue(com.jgeted.sagadyssey.core.structure.NaturalVillageLifeData.managedStore(p.level().getServer(),h.getLevel().dimension().identifier().toString(),pos)!=null,"formal initialization registered actual managed store");
             h.assertTrue(invokeBoolean(com.jgeted.sagadyssey.social.settlement.NaturalStorageAccessEvents.class,"denied",new Class<?>[]{ServerLevel.class,ServerPlayer.class,BlockPos.class},h.getLevel(),p,pos),"dead actor denied managed storage");
             h.assertTrue(!invokeBoolean(com.jgeted.sagadyssey.npc.command.NpcLifeCommand.class,"authorized",lifeTypes,p,n,work),"dead actor denied life authority");
             h.assertTrue(!invokeBoolean(com.jgeted.sagadyssey.npc.command.network.CommandGroupActionPacket.class,"authorized",groupTypes,p,n,work,false),"dead actor denied group authority");
@@ -159,11 +164,11 @@ public final class IdentityLifecycleGameTests {
         var temple=(com.jgeted.sagadyssey.social.religion.TempleRecord)member(fixture,"temple");
         var deacon=(NpcBase)member(fixture,"deacon");var recipient=(NpcBase)member(fixture,"recipient");
         var near=NpcCombatIntegrationGameTests.online(h);var remote=NpcCombatIntegrationGameTests.online(h);var dead=NpcCombatIntegrationGameTests.online(h);
-        var missing=new ServerPlayer(near.server,h.getLevel(),new com.mojang.authlib.GameProfile(UUID.randomUUID(),"unboundwitness"),ClientInformation.createDefault());missing.connection=near.connection;
+        var missing=new ServerPlayer(near.level().getServer(),h.getLevel(),new com.mojang.authlib.GameProfile(UUID.randomUUID(),"unboundwitness"),ClientInformation.createDefault());missing.connection=near.connection;
         var at=temple.counter();for(var p:List.of(near,dead,missing))p.setPos(at.getX()+.5,at.getY(),at.getZ()-.5);remote.setPos(near.getX()+100,near.getY(),near.getZ());
-        dead.setGameMode(GameType.SURVIVAL);dead.getInventory().clearContent();UUID old=CharacterRegistry.currentId(dead);dead.kill();
+        dead.setGameMode(GameType.SURVIVAL);dead.getInventory().clearContent();UUID old=CharacterRegistry.currentId(dead);MinecraftApi.kill(dead);
         h.assertTrue(!dead.isAlive()&&CharacterRegistry.currentId(dead)==null,"real death before actual alms event");
-        var data=CharacterRegistryData.get(near.server);int before=data.allCharacters().size();
+        var data=CharacterRegistryData.get(near.level().getServer());int before=data.allCharacters().size();
         for(var p:List.of(dead,missing)){
             h.assertTrue(command(p,"saga church here")==0&&command(p,"saga church known "+temple.id())==0,"unbound/dead church queries reject");
             var status=com.jgeted.sagadyssey.social.religion.life.ChurchLifeClientFixture.status(p,temple);
@@ -172,11 +177,11 @@ public final class IdentityLifecycleGameTests {
         h.assertTrue(command(near,"saga church here")==1,"existing living reader can inspect local church");command(near,"saga church known "+temple.id());
         h.assertTrue(com.jgeted.sagadyssey.social.religion.life.ChurchLifeClientFixture.status(near,temple).stream().anyMatch(x->x.contains("教学时长=0/40")),"existing living fixture status remains usable without invented lesson credit");
         h.assertTrue(data.allCharacters().size()==before&&lives(missing)==0&&lives(dead)==1,"all church query counts unchanged");
-        var request=ReligionService.request(near.server,temple,recipient,new ItemFingerprint("minecraft:bread",0),3,"identity test real finite relief");
+        var request=ReligionService.request(near.level().getServer(),temple,recipient,new ItemFingerprint("minecraft:bread",0),3,"identity test real finite relief");
         h.succeedWhen(()->{
-            var issued=com.jgeted.sagadyssey.social.religion.ReligionData.get(near.server).aid(request.id());
+            var issued=com.jgeted.sagadyssey.social.religion.ReligionData.get(near.level().getServer()).aid(request.id());
             h.assertTrue(issued.stage()==com.jgeted.sagadyssey.social.religion.AlmsCase.Stage.ISSUED,"normal deacon actually delivered three bread");long now=h.getLevel().getGameTime();
-            h.assertTrue(ReligionService.knownRecords(near.server,CharacterRegistry.currentId(near),temple.id()).size()==1,"normal background issuance informed existing nearby witness");
+            h.assertTrue(ReligionService.knownRecords(near.level().getServer(),CharacterRegistry.currentId(near),temple.id()).size()==1,"normal background issuance informed existing nearby witness");
             var forged=issued.update(com.jgeted.sagadyssey.social.religion.AlmsCase.Stage.ISSUED,issued.reviewer(),now,now,null,"forged witness payload",false);
             h.assertTrue(!ReligionService.witness(near,deacon,forged,now),"forged evidence still rejected");
             boolean nearAccepted=ReligionService.witness(near,deacon,issued,now),remoteAccepted=ReligionService.witness(remote,deacon,issued,now);
@@ -184,7 +189,7 @@ public final class IdentityLifecycleGameTests {
             h.assertTrue(nearAccepted&&!remoteAccepted,"real visible witness accepted; distant witness rejected");
             h.assertTrue(!ReligionService.witness(dead,deacon,issued,now)&&!ReligionService.witness(missing,deacon,issued,now),"dead and unbound observers excluded from real event");
             h.assertTrue(lives(dead)==1&&lives(missing)==0&&CharacterRegistry.currentId(dead)==null&&CharacterRegistry.currentId(missing)==null,"background and direct reads never create observers for either account");
-            h.assertTrue(!data.byId(old).alive()&&ReligionService.knownRecords(near.server,old,temple.id()).isEmpty(),"old dead identity remains dead without new observation");
+            h.assertTrue(!data.byId(old).alive()&&ReligionService.knownRecords(near.level().getServer(),old,temple.id()).isEmpty(),"old dead identity remains dead without new observation");
             h.assertTrue(recipient.getPersonalInventory().countItem(Items.BREAD)==3&&((Container)member(fixture,"alms")).countItem(Items.BREAD)==3,"actual six bread split into three retained and three delivered");
             Sagadyssey.LOGGER.info("IDENTITY_CHURCH_WITNESS tick={} case={} deliveredBread=3 retainedBread=3 deadLives=1 missingLives=0 nearbyObserved=true",now,issued.id());
             for(var p:List.of(near,remote,dead))NpcCombatIntegrationGameTests.offline(p);h.succeed();

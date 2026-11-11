@@ -1,5 +1,7 @@
 package com.jgeted.sagadyssey.social.life;
 
+import net.minecraft.core.UUIDUtil;
+
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 
@@ -25,7 +27,7 @@ public record NpcWorkZoneRecord(UUID npcId,
 
     public CompoundTag save() {
         CompoundTag tag = new CompoundTag();
-        tag.putUUID("Npc", npcId);
+        tag.store("Npc", UUIDUtil.CODEC, npcId);
         put(tag, "InstitutionMin", institutionMin);
         put(tag, "InstitutionMax", institutionMax);
         put(tag, "ActiveMin", activeMin);
@@ -34,7 +36,7 @@ public record NpcWorkZoneRecord(UUID npcId,
     }
 
     public static NpcWorkZoneRecord load(CompoundTag tag) {
-        return new NpcWorkZoneRecord(tag.getUUID("Npc"), get(tag, "InstitutionMin"),
+        return new NpcWorkZoneRecord(tag.read("Npc", UUIDUtil.CODEC).orElseThrow(), get(tag, "InstitutionMin"),
                 get(tag, "InstitutionMax"), get(tag, "ActiveMin"), get(tag, "ActiveMax"));
     }
 
@@ -42,6 +44,6 @@ public record NpcWorkZoneRecord(UUID npcId,
         if (pos != null) tag.putLong(key, pos.asLong());
     }
     private static BlockPos get(CompoundTag tag, String key) {
-        return tag.contains(key) ? BlockPos.of(tag.getLong(key)) : null;
+        return tag.contains(key) ? BlockPos.of(tag.getLongOr(key, 0L)) : null;
     }
 }

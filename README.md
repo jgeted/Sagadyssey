@@ -1,6 +1,6 @@
 # Sagadyssey (Epic Odyssey)
 
-A medieval-themed Minecraft 1.21.1 expansion mod built with NeoForge.
+A medieval-themed Minecraft 1.21.11 expansion mod built with NeoForge.
 
 > **Current Phase:** Playable social-simulation alpha
 > **GitHub:** https://github.com/jgeted/Sagadyssey
@@ -11,17 +11,19 @@ A medieval-themed Minecraft 1.21.1 expansion mod built with NeoForge.
 
 ### Prerequisites
 
-1. Install **Minecraft 1.21.1** (Java Edition)
-2. Install **NeoForge 21.1.233** (download from [NeoForge website](https://neoforged.net/))
+1. Install **Minecraft 1.21.11** (Java Edition)
+2. Install **NeoForge 21.11.48** (download from [NeoForge website](https://neoforged.net/))
 
 ### Installation
 
-1. Download the latest `.jar` from the [Releases page](https://github.com/jgeted/Sagadyssey/releases)
+1. Download the `.jar` from the [Minecraft 1.21.11 release](https://github.com/jgeted/Sagadyssey/releases/tag/dev-v1.9.0-mc1.21.11)
 2. Place the `.jar` file into Minecraft's `mods` folder:
    - **Windows:** `%APPDATA%\.minecraft\mods`
    - **macOS:** `~/Library/Application Support/minecraft/mods`
    - **Linux:** `~/.minecraft/mods`
-3. Launch the NeoForge 1.21.1 client
+3. Launch the NeoForge 1.21.11 client and create a new world.
+
+The [Minecraft 1.21.1 development release](https://github.com/jgeted/Sagadyssey/releases/tag/dev-v1.9.0-20261105) remains available for existing installations.
 
 ---
 
@@ -32,8 +34,8 @@ A medieval-themed Minecraft 1.21.1 expansion mod built with NeoForge.
 | Tool | Version |
 |------|---------|
 | JDK | **21** (Eclipse Adoptium / Temurin recommended) |
-| Minecraft | 1.21.1 |
-| NeoForge | 21.1.233 |
+| Minecraft | 1.21.11 |
+| NeoForge | 21.11.48 |
 | Gradle | Bundled with project (`gradlew` / `gradlew.bat`) |
 
 ### Clone & Build
@@ -63,10 +65,15 @@ from the single-player menu for phase 3 testing.
 
 Minecraft will launch automatically after building, with the mod loaded.
 
-For world-simulation phase 8, double-click `verify-phase8.bat` to run a complete
-build and two independent game-test processes. This uses an isolated test world,
-not player saves. The concentrated in-game acceptance and save/re-enter checklist
-is in [the phase 8 acceptance guide](docs/world-simulation-v3/08-phase8-acceptance.md).
+### In-game regression tests
+
+```bash
+./gradlew runGameTestServer -Pphase9GameTestRun=mc12111-core
+```
+
+Use a fresh run label for each GameTest launch. For a restart scenario, pass
+`-PgameTestRestartFrom=<stopped-run-label>` and a separate
+`-Pphase9GameTestRun=<new-run-label>` to load a copy of that test world.
 
 ---
 

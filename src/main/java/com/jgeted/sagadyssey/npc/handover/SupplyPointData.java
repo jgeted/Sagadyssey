@@ -1,11 +1,13 @@
 package com.jgeted.sagadyssey.npc.handover;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.world.level.saveddata.SavedData;
+import com.jgeted.sagadyssey.worldsim.NbtSavedData;
 
 import javax.annotation.Nullable;
 import java.util.ArrayList;
@@ -16,7 +18,7 @@ import java.util.Map;
 import java.util.UUID;
 
 /** Persistent supply policies. The stock itself always remains in the block container. */
-public final class SupplyPointData extends SavedData {
+public final class SupplyPointData extends NbtSavedData {
     private static final String DATA_NAME = "sagadyssey_supply_points_v2";
     private static final int DATA_VERSION = 1;
     private static final Factory<SupplyPointData> FACTORY =
@@ -26,7 +28,7 @@ public final class SupplyPointData extends SavedData {
     private final Map<String, Long> lastClaims = new HashMap<>();
 
     public static SupplyPointData get(MinecraftServer server) {
-        return server.overworld().getDataStorage().computeIfAbsent(FACTORY, DATA_NAME);
+        return server.overworld().getDataStorage().computeIfAbsent(FACTORY.type(DATA_NAME));
     }
 
     public void put(SupplyPointPolicy policy) {
@@ -74,18 +76,18 @@ public final class SupplyPointData extends SavedData {
 
     private static SupplyPointData load(CompoundTag tag, HolderLookup.Provider registries) {
         SupplyPointData data = new SupplyPointData();
-        ListTag policyTags = tag.getList("Policies", Tag.TAG_COMPOUND);
+        ListTag policyTags = MinecraftApi.listOfType(tag, "Policies", Tag.TAG_COMPOUND);
         for (int index = 0; index < policyTags.size(); index++) {
             try {
-                SupplyPointPolicy policy = SupplyPointPolicy.load(policyTags.getCompound(index));
+                SupplyPointPolicy policy = SupplyPointPolicy.load(policyTags.getCompoundOrEmpty(index));
                 data.policies.put(policy.id(), policy);
             } catch (RuntimeException ignored) { }
         }
-        ListTag claimTags = tag.getList("LastClaims", Tag.TAG_COMPOUND);
+        ListTag claimTags = MinecraftApi.listOfType(tag, "LastClaims", Tag.TAG_COMPOUND);
         for (int index = 0; index < claimTags.size(); index++) {
-            CompoundTag claim = claimTags.getCompound(index);
-            if (!claim.getString("Key").isBlank()) {
-                data.lastClaims.put(claim.getString("Key"), claim.getLong("GameTime"));
+            CompoundTag claim = claimTags.getCompoundOrEmpty(index);
+            if (!claim.getStringOr("Key", "").isBlank()) {
+                data.lastClaims.put(claim.getStringOr("Key", ""), claim.getLongOr("GameTime", 0L));
             }
         }
         return data;

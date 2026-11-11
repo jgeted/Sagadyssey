@@ -7,7 +7,7 @@ import io.netty.buffer.ByteBuf;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
 
 /**
@@ -17,7 +17,7 @@ import net.neoforged.neoforge.network.handling.IPayloadContext;
 public record ResearchUnlockPacket(String researchId) implements CustomPacketPayload {
 
     public static final Type<ResearchUnlockPacket> TYPE = new Type<>(
-            ResourceLocation.fromNamespaceAndPath(Sagadyssey.MOD_ID, "research_unlock")
+            Identifier.fromNamespaceAndPath(Sagadyssey.MOD_ID, "research_unlock")
     );
 
     public static final StreamCodec<ByteBuf, ResearchUnlockPacket> STREAM_CODEC = StreamCodec.of(

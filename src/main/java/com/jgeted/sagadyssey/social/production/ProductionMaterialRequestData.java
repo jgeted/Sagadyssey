@@ -1,11 +1,13 @@
 package com.jgeted.sagadyssey.social.production;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.world.level.saveddata.SavedData;
+import com.jgeted.sagadyssey.worldsim.NbtSavedData;
 
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -16,7 +18,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 /** 世界级生产缺料请求簿；容量压力只允许淘汰已经终结的请求。 */
-public final class ProductionMaterialRequestData extends SavedData {
+public final class ProductionMaterialRequestData extends NbtSavedData {
     public static final String DATA_NAME = "sagadyssey_production_material_requests_v3";
     public static final int SCHEMA_VERSION = 1;
     public static final int MAX_REQUESTS = 4_096;
@@ -36,7 +38,7 @@ public final class ProductionMaterialRequestData extends SavedData {
 
     public static ProductionMaterialRequestData get(MinecraftServer server) {
         if (server == null) throw new IllegalArgumentException("server is required");
-        return server.overworld().getDataStorage().computeIfAbsent(FACTORY, DATA_NAME);
+        return server.overworld().getDataStorage().computeIfAbsent(FACTORY.type(DATA_NAME));
     }
 
     /** 创建一张请求，或返回相同固定身份的既有请求。 */
@@ -112,16 +114,16 @@ public final class ProductionMaterialRequestData extends SavedData {
     static ProductionMaterialRequestData load(CompoundTag tag,
                                               HolderLookup.Provider registries) {
         ProductionMaterialRequestData data = new ProductionMaterialRequestData();
-        if (tag == null || !tag.contains("Schema", Tag.TAG_INT)
-                || tag.getInt("Schema") != SCHEMA_VERSION
-                || !tag.contains("Requests", Tag.TAG_LIST)) {
+        if (tag == null || !MinecraftApi.containsTag(tag, "Schema", Tag.TAG_INT)
+                || tag.getIntOr("Schema", 0) != SCHEMA_VERSION
+                || !MinecraftApi.containsTag(tag, "Requests", Tag.TAG_LIST)) {
             return data;
         }
-        ListTag list = tag.getList("Requests", Tag.TAG_COMPOUND);
+        ListTag list = MinecraftApi.listOfType(tag, "Requests", Tag.TAG_COMPOUND);
         for (int index = 0; index < list.size(); index++) {
             try {
                 ProductionMaterialRequest request = ProductionMaterialRequest.load(
-                        list.getCompound(index));
+                        list.getCompoundOrEmpty(index));
                 if (data.requests.containsKey(request.idempotencyKey())) continue;
                 data.addLoaded(request);
             } catch (RuntimeException ignored) {

@@ -1,5 +1,8 @@
 package com.jgeted.sagadyssey.npc.brain.fieldwork;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+import net.minecraft.core.UUIDUtil;
+
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
@@ -120,7 +123,7 @@ class FieldworkDataTest {
         var action = FieldworkCommitServiceTest.action(FieldworkAction.Operation.HARVEST);
         data.record(FieldworkCommitServiceTest.receipt(action, 10L));
         CompoundTag tag = data.save(new CompoundTag(), null);
-        tag.getList("Receipts", Tag.TAG_COMPOUND).getCompound(0).remove("ToolDamage");
+        MinecraftApi.listOfType(tag, "Receipts", Tag.TAG_COMPOUND).getCompoundOrEmpty(0).remove("ToolDamage");
         assertThrows(IllegalStateException.class, () -> FieldworkData.load(tag, null));
         CompoundTag another = data.save(new CompoundTag(), null);
         another.put("Receipts", new ListTag());
@@ -134,8 +137,8 @@ class FieldworkDataTest {
         var action = FieldworkCommitServiceTest.action(FieldworkAction.Operation.MINE);
         data.record(FieldworkCommitServiceTest.receipt(action, 10L));
         CompoundTag tag = data.save(new CompoundTag(), null);
-        ListTag receipts = tag.getList("Receipts", Tag.TAG_COMPOUND);
-        CompoundTag conflicting = receipts.getCompound(0).copy();
+        ListTag receipts = MinecraftApi.listOfType(tag, "Receipts", Tag.TAG_COMPOUND);
+        CompoundTag conflicting = receipts.getCompoundOrEmpty(0).copy();
         conflicting.putLong("CommittedAt", 20L);
         receipts.add(conflicting);
         assertThrows(IllegalStateException.class, () -> FieldworkData.load(tag, null));
@@ -151,7 +154,7 @@ class FieldworkDataTest {
         var receipt = FieldworkCommitServiceTest.receipt(action, 10L);
         data.record(receipt);
         CompoundTag tag = data.save(new CompoundTag(), null);
-        tag.getList("Scans", Tag.TAG_COMPOUND).getCompound(0).putLong("NextIndex", 1_000L);
+        MinecraftApi.listOfType(tag, "Scans", Tag.TAG_COMPOUND).getCompoundOrEmpty(0).putLong("NextIndex", 1_000L);
         FieldworkData loaded = FieldworkData.load(tag, null);
         assertTrue(loaded.scan(npc).isEmpty());
         assertEquals(FieldworkScan.Cursor.begin(area), loaded.scanFor(npc, area));
@@ -221,7 +224,7 @@ class FieldworkDataTest {
         assertEquals("",committed.outputConsumptionReview(intent.npcId(),key->"DONE"));
         assertFalse(committed.outputConsumptionReview(intent.npcId(),key->"PENDING").isEmpty());
         var tag=committed.save(new CompoundTag(),null);
-        assertEquals(2,tag.getInt("Schema"));assertEquals(0,tag.getList("Deliveries",Tag.TAG_COMPOUND).size());
+        assertEquals(2,tag.getIntOr("Schema", 0));assertEquals(0,MinecraftApi.listOfType(tag, "Deliveries",Tag.TAG_COMPOUND).size());
         assertEquals(tag,committed.save(new CompoundTag(),null));
     }
     @Test void conflictsAndUnprovenCommitCannotOverwriteConsumptionEvidence() {
@@ -257,16 +260,16 @@ class FieldworkDataTest {
         var loaded=FieldworkData.load(old,null);
         assertTrue(loaded.outputConsumptions(intent.npcId()).isEmpty());
         assertEquals(1,loaded.pendingCargo(intent.npcId()).get("minecraft:carrot#0"),"legacy unexplained tail is not silently repaired");
-        assertEquals(2,loaded.save(new CompoundTag(),null).getInt("Schema"));
+        assertEquals(2,loaded.save(new CompoundTag(),null).getIntOr("Schema", 0));
         assertFalse(loaded.isDirty(),"compatibility read itself is not a world migration write");
     }
     @Test void missingCorruptDuplicateOrDowngradedConsumptionListIsRejectedWithoutEmptyFallback() {
         var data=producedCarrots();var intent=consumptionIntent(data,"meal-one");data.beginOutputConsumption(intent);
         var missing=data.save(new CompoundTag(),null);missing.remove("OutputConsumptions");
         assertThrows(IllegalStateException.class,()->FieldworkData.load(missing,null));
-        var duplicate=data.save(new CompoundTag(),null);var rows=duplicate.getList("OutputConsumptions",Tag.TAG_COMPOUND);rows.add(rows.getCompound(0).copy());
+        var duplicate=data.save(new CompoundTag(),null);var rows=MinecraftApi.listOfType(duplicate, "OutputConsumptions",Tag.TAG_COMPOUND);rows.add(rows.getCompoundOrEmpty(0).copy());
         assertThrows(IllegalStateException.class,()->FieldworkData.load(duplicate,null));
-        var invalid=data.save(new CompoundTag(),null);invalid.getList("OutputConsumptions",Tag.TAG_COMPOUND).getCompound(0).putInt("OutputQuantity",2);
+        var invalid=data.save(new CompoundTag(),null);MinecraftApi.listOfType(invalid, "OutputConsumptions",Tag.TAG_COMPOUND).getCompoundOrEmpty(0).putInt("OutputQuantity",2);
         assertThrows(IllegalStateException.class,()->FieldworkData.load(invalid,null));
         var downgrade=data.save(new CompoundTag(),null);downgrade.putInt("Schema",1);
         assertThrows(IllegalStateException.class,()->FieldworkData.load(downgrade,null));
@@ -320,7 +323,7 @@ class FieldworkDataTest {
         return data;
     }
     private static FieldworkCargo.OutputConsumption consumptionIntent(FieldworkData data,String key){
-        var tag=data.save(new CompoundTag(),null);UUID body=tag.getList("Receipts",Tag.TAG_COMPOUND).getCompound(0).getUUID("NpcId"),person=UUID.randomUUID();
+        var tag=data.save(new CompoundTag(),null);UUID body=MinecraftApi.listOfType(tag, "Receipts",Tag.TAG_COMPOUND).getCompoundOrEmpty(0).read("NpcId", UUIDUtil.CODEC).orElseThrow(),person=UUID.randomUUID();
         return new FieldworkCargo.OutputConsumption(key,body,person,ContainerIds.npcPersonal(person),SubjectRef.character(person),
                 "minecraft:carrot#0",1,1,30,-1,5,-1,FieldworkCargo.ConsumptionState.PENDING);
     }

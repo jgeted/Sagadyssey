@@ -55,7 +55,7 @@ public class BlacksmithWorkGoal extends Goal {
     @Override
     public boolean canUse() {
         if (com.jgeted.sagadyssey.npc.brain.execution.NpcBrainRuntime.isPlanned(npc)) return false;
-        if (!npc.isAlive() || npc.level().isClientSide
+        if (!npc.isAlive() || npc.level().isClientSide()
                 || npc.getProfession() != NpcProfession.BLACKSMITH
                 || npc.getCommand() != NpcCommand.WORK
                 || !com.jgeted.sagadyssey.social.life.NpcSchedulePlanner.allowsWork(npc)

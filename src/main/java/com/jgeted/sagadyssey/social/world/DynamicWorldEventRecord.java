@@ -1,5 +1,7 @@
 package com.jgeted.sagadyssey.social.world;
 
+import net.minecraft.core.UUIDUtil;
+
 import net.minecraft.nbt.CompoundTag;
 
 import javax.annotation.Nullable;
@@ -12,9 +14,9 @@ public record DynamicWorldEventRecord(UUID id, DynamicWorldEventType type,
 
     public CompoundTag save() {
         CompoundTag tag = new CompoundTag();
-        tag.putUUID("Id", id);
+        tag.store("Id", UUIDUtil.CODEC, id);
         tag.putString("Type", type.name());
-        if (settlementId != null) tag.putUUID("Settlement", settlementId);
+        if (settlementId != null) tag.store("Settlement", UUIDUtil.CODEC, settlementId);
         tag.putString("Faction", factionId == null ? "" : factionId);
         tag.putLong("StartDay", startDay);
         tag.putLong("EndDay", endDay);
@@ -23,10 +25,10 @@ public record DynamicWorldEventRecord(UUID id, DynamicWorldEventType type,
     }
 
     public static DynamicWorldEventRecord load(CompoundTag tag) {
-        return new DynamicWorldEventRecord(tag.getUUID("Id"),
-                DynamicWorldEventType.byName(tag.getString("Type")),
-                tag.hasUUID("Settlement") ? tag.getUUID("Settlement") : null,
-                tag.getString("Faction"), tag.getLong("StartDay"), tag.getLong("EndDay"),
-                Math.max(1, Math.min(5, tag.getInt("Severity"))));
+        return new DynamicWorldEventRecord(tag.read("Id", UUIDUtil.CODEC).orElseThrow(),
+                DynamicWorldEventType.byName(tag.getStringOr("Type", "")),
+                tag.read("Settlement", UUIDUtil.CODEC).isPresent() ? tag.read("Settlement", UUIDUtil.CODEC).orElseThrow() : null,
+                tag.getStringOr("Faction", ""), tag.getLongOr("StartDay", 0L), tag.getLongOr("EndDay", 0L),
+                Math.max(1, Math.min(5, tag.getIntOr("Severity", 0))));
     }
 }

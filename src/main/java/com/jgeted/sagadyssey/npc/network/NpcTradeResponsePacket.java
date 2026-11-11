@@ -4,7 +4,7 @@ import com.jgeted.sagadyssey.Sagadyssey;
 import io.netty.buffer.ByteBuf;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
 
 /**
@@ -13,7 +13,7 @@ import net.neoforged.neoforge.network.handling.IPayloadContext;
 public record NpcTradeResponsePacket(int npcId, int newExperience, int newLevel) implements CustomPacketPayload {
 
     public static final Type<NpcTradeResponsePacket> TYPE = new Type<>(
-            ResourceLocation.fromNamespaceAndPath(Sagadyssey.MOD_ID, "npc_trade_response")
+            Identifier.fromNamespaceAndPath(Sagadyssey.MOD_ID, "npc_trade_response")
     );
 
     public static final StreamCodec<ByteBuf, NpcTradeResponsePacket> STREAM_CODEC = StreamCodec.of(

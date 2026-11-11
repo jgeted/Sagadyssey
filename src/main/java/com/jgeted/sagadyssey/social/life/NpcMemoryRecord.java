@@ -1,5 +1,7 @@
 package com.jgeted.sagadyssey.social.life;
 
+import net.minecraft.core.UUIDUtil;
+
 import net.minecraft.nbt.CompoundTag;
 
 import javax.annotation.Nullable;
@@ -20,7 +22,7 @@ public record NpcMemoryRecord(String type, @Nullable UUID subjectCharacterId, St
     public CompoundTag save() {
         CompoundTag tag = new CompoundTag();
         tag.putString("Type", type);
-        if (subjectCharacterId != null) tag.putUUID("Subject", subjectCharacterId);
+        if (subjectCharacterId != null) tag.store("Subject", UUIDUtil.CODEC, subjectCharacterId);
         tag.putString("Summary", summary);
         tag.putInt("Valence", valence);
         tag.putInt("Intensity", intensity);
@@ -30,9 +32,9 @@ public record NpcMemoryRecord(String type, @Nullable UUID subjectCharacterId, St
     }
 
     public static NpcMemoryRecord load(CompoundTag tag) {
-        return new NpcMemoryRecord(tag.getString("Type"),
-                tag.hasUUID("Subject") ? tag.getUUID("Subject") : null,
-                tag.getString("Summary"), tag.getInt("Valence"), tag.getInt("Intensity"),
-                tag.getLong("HappenedAt"), tag.contains("ExpiresAt") ? tag.getLong("ExpiresAt") : -1L);
+        return new NpcMemoryRecord(tag.getStringOr("Type", ""),
+                tag.read("Subject", UUIDUtil.CODEC).isPresent() ? tag.read("Subject", UUIDUtil.CODEC).orElseThrow() : null,
+                tag.getStringOr("Summary", ""), tag.getIntOr("Valence", 0), tag.getIntOr("Intensity", 0),
+                tag.getLongOr("HappenedAt", 0L), tag.contains("ExpiresAt") ? tag.getLongOr("ExpiresAt", 0L) : -1L);
     }
 }

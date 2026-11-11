@@ -191,7 +191,10 @@ public class ResearchScreen extends Screen {
     }
 
     @Override
-    public boolean mouseClicked(double mouseX, double mouseY, int button) {
+    public boolean mouseClicked(net.minecraft.client.input.MouseButtonEvent event, boolean doubleClick) {
+        double mouseX = event.x();
+        double mouseY = event.y();
+        int button = event.button();
         // 关闭按钮
         if (closeButtonClicked(mouseX, mouseY)) {
             onClose();
@@ -218,7 +221,7 @@ public class ResearchScreen extends Screen {
                 if (!unlocked.contains(node.getId())
                         && node.arePrerequisitesMet(unlocked)
                         && pts >= node.getCost()) {
-                    PacketDistributor.sendToServer(new ResearchUnlockPacket(node.getId()));
+                    net.neoforged.neoforge.client.network.ClientPacketDistributor.sendToServer(new ResearchUnlockPacket(node.getId()));
                     // 乐观更新：立即刷新缓存（扣除点数、标记解锁）
                     unlocked.add(node.getId());
                     ClientResearchCache.set(pts - node.getCost(), unlocked);
@@ -227,7 +230,7 @@ public class ResearchScreen extends Screen {
             }
         }
 
-        return super.mouseClicked(mouseX, mouseY, button);
+        return super.mouseClicked(event, doubleClick);
     }
 
     @Override

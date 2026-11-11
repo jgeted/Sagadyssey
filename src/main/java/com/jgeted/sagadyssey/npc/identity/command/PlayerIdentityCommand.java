@@ -1,5 +1,7 @@
 package com.jgeted.sagadyssey.npc.identity.command;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+
 import com.jgeted.sagadyssey.npc.identity.NpcOffice;
 import com.jgeted.sagadyssey.npc.identity.NpcSocialClass;
 import com.jgeted.sagadyssey.npc.identity.PlayerIdentityAttachments;
@@ -25,12 +27,12 @@ public final class PlayerIdentityCommand {
                         .then(Commands.literal("get")
                                 .executes(ctx -> show(ctx.getSource(), ctx.getSource().getPlayerOrException()))
                                 .then(Commands.argument("player", EntityArgument.player())
-                                        .requires(src -> src.hasPermission(2))
+                                        .requires(src -> MinecraftApi.hasPermission(src, 2))
                                         .executes(ctx -> show(ctx.getSource(), EntityArgument.getPlayer(ctx, "player")))))
                         .then(Commands.literal("history")
                                 .executes(ctx -> history(ctx.getSource())))
                         .then(Commands.literal("set")
-                                .requires(src -> src.hasPermission(2))
+                                .requires(src -> MinecraftApi.hasPermission(src, 2))
                                 .then(Commands.argument("player", EntityArgument.player())
                                         .then(Commands.argument("social_class", StringArgumentType.word())
                                                 .suggests((ctx, builder) -> {
@@ -108,7 +110,7 @@ public final class PlayerIdentityCommand {
         var identity = PlayerIdentityAttachments.get(player);
         identity.set(socialClass, office, factionId);
         CharacterRegistry.updateIdentity(player, socialClass, office, factionId);
-        source.sendSuccess(() -> Component.literal("§a已将 " + player.getGameProfile().getName() + " 设为 ")
+        source.sendSuccess(() -> Component.literal("§a已将 " + player.getGameProfile().name() + " 设为 ")
                 .append(identity.title()), true);
         return 1;
     }

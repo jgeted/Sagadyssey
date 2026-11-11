@@ -1,5 +1,7 @@
 package com.jgeted.sagadyssey.social.logistics;
 
+import net.minecraft.core.UUIDUtil;
+
 import net.minecraft.nbt.CompoundTag;
 
 import java.util.UUID;
@@ -60,32 +62,32 @@ public record LogisticsOrderRecord(UUID id, UUID sourceWarehouseId, UUID destina
 
     public CompoundTag save() {
         CompoundTag tag = new CompoundTag();
-        tag.putUUID("Id", id);
-        tag.putUUID("Source", sourceWarehouseId);
-        tag.putUUID("Destination", destinationWarehouseId);
+        tag.store("Id", UUIDUtil.CODEC, id);
+        tag.store("Source", UUIDUtil.CODEC, sourceWarehouseId);
+        tag.store("Destination", UUIDUtil.CODEC, destinationWarehouseId);
         tag.putString("Item", itemId);
         tag.putInt("Requested", requestedCount);
         tag.putInt("Delivered", deliveredCount);
         tag.putString("Status", status.name());
-        tag.putUUID("CreatedBy", createdByCharacter);
+        tag.store("CreatedBy", UUIDUtil.CODEC, createdByCharacter);
         tag.putLong("Created", createdGameTime);
-        if (assignedNpcId != null) tag.putUUID("AssignedNpc", assignedNpcId);
+        if (assignedNpcId != null) tag.store("AssignedNpc", UUIDUtil.CODEC, assignedNpcId);
         tag.putInt("PickedUp", pickedUpCount);
         tag.putLong("LastProgress", lastProgressGameTime);
         tag.putInt("Components", componentsHash);
-        if (needRequestId != null) tag.putUUID("Need", needRequestId);
+        if (needRequestId != null) tag.store("Need", UUIDUtil.CODEC, needRequestId);
         return tag;
     }
 
     public static LogisticsOrderRecord load(CompoundTag tag) {
-        return new LogisticsOrderRecord(tag.getUUID("Id"), tag.getUUID("Source"),
-                tag.getUUID("Destination"), tag.getString("Item"),
-                Math.max(1, tag.getInt("Requested")), Math.max(0, tag.getInt("Delivered")),
-                LogisticsOrderStatus.byName(tag.getString("Status")), tag.getUUID("CreatedBy"),
-                tag.getLong("Created"),
-                tag.hasUUID("AssignedNpc") ? tag.getUUID("AssignedNpc") : null,
-                Math.max(tag.getInt("Delivered"), tag.getInt("PickedUp")),
-                tag.contains("LastProgress") ? tag.getLong("LastProgress") : tag.getLong("Created"),
-                tag.getInt("Components"), tag.hasUUID("Need") ? tag.getUUID("Need") : null);
+        return new LogisticsOrderRecord(tag.read("Id", UUIDUtil.CODEC).orElseThrow(), tag.read("Source", UUIDUtil.CODEC).orElseThrow(),
+                tag.read("Destination", UUIDUtil.CODEC).orElseThrow(), tag.getStringOr("Item", ""),
+                Math.max(1, tag.getIntOr("Requested", 0)), Math.max(0, tag.getIntOr("Delivered", 0)),
+                LogisticsOrderStatus.byName(tag.getStringOr("Status", "")), tag.read("CreatedBy", UUIDUtil.CODEC).orElseThrow(),
+                tag.getLongOr("Created", 0L),
+                tag.read("AssignedNpc", UUIDUtil.CODEC).isPresent() ? tag.read("AssignedNpc", UUIDUtil.CODEC).orElseThrow() : null,
+                Math.max(tag.getIntOr("Delivered", 0), tag.getIntOr("PickedUp", 0)),
+                tag.contains("LastProgress") ? tag.getLongOr("LastProgress", 0L) : tag.getLongOr("Created", 0L),
+                tag.getIntOr("Components", 0), tag.read("Need", UUIDUtil.CODEC).isPresent() ? tag.read("Need", UUIDUtil.CODEC).orElseThrow() : null);
     }
 }

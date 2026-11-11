@@ -1,5 +1,7 @@
 package com.jgeted.sagadyssey.worldsim.rights;
 
+import net.minecraft.core.UUIDUtil;
+
 import net.minecraft.nbt.CompoundTag;
 
 import java.util.UUID;
@@ -18,12 +20,12 @@ public record SubjectRef(SubjectType type, UUID id) {
     public CompoundTag save() {
         CompoundTag tag = new CompoundTag();
         tag.putString("Type", type.name());
-        tag.putUUID("Id", id);
+        tag.store("Id", UUIDUtil.CODEC, id);
         return tag;
     }
 
     public static SubjectRef load(CompoundTag tag) {
-        return new SubjectRef(SubjectType.valueOf(tag.getString("Type")), tag.getUUID("Id"));
+        return new SubjectRef(SubjectType.valueOf(tag.getStringOr("Type", "")), tag.read("Id", UUIDUtil.CODEC).orElseThrow());
     }
 
     public enum SubjectType { CHARACTER, HOUSEHOLD, INSTITUTION, CONTAINER }

@@ -119,7 +119,7 @@ final class BlacksmithExecutionSupport {
     }
 
     static Container targetContainer(NpcEntityExecutionContext context, ProductionOrder order) {
-        String currentDimension = context.level().dimension().location().toString();
+        String currentDimension = context.level().dimension().identifier().toString();
         if (!currentDimension.equals(order.targetContainerDimension())) {
             throw new IllegalStateException("成品容器不在当前维度");
         }
@@ -135,7 +135,7 @@ final class BlacksmithExecutionSupport {
     static boolean workstationAvailable(NpcEntityExecutionContext context,
                                         ProductionOrder order) {
         if (order.workstationDimension() == null || order.workstationPosition() == null
-                || !context.level().dimension().location().toString()
+                || !context.level().dimension().identifier().toString()
                 .equals(order.workstationDimension())
                 || !context.level().hasChunkAt(order.workstationPosition())) {
             return false;

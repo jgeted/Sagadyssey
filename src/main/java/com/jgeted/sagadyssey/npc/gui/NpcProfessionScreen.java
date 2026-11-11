@@ -58,7 +58,7 @@ public class NpcProfessionScreen extends Screen {
             addRenderableWidget(Button.builder(
                     Component.literal(label),
                     btn -> {
-                        PacketDistributor.sendToServer(new NpcProfessionPacket(npcId, prof.name()));
+                        net.neoforged.neoforge.client.network.ClientPacketDistributor.sendToServer(new NpcProfessionPacket(npcId, prof.name()));
                         this.onClose();
                     })
                     .bounds(x, y, btnW, btnH)

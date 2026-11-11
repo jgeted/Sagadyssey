@@ -1,11 +1,13 @@
 package com.jgeted.sagadyssey.social.combat;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.world.level.saveddata.SavedData;
+import com.jgeted.sagadyssey.worldsim.NbtSavedData;
 
 import java.util.HashMap;
 import java.util.List;
@@ -13,7 +15,7 @@ import java.util.Map;
 import java.util.UUID;
 
 /** Event-backed individual morale. Squad state is an aggregation, never a second hidden score. */
-public final class CombatMoraleData extends SavedData {
+public final class CombatMoraleData extends NbtSavedData {
     private static final String DATA_NAME = "sagadyssey_combat_morale";
     private static final Factory<CombatMoraleData> FACTORY =
             new Factory<>(CombatMoraleData::new, CombatMoraleData::load);
@@ -21,7 +23,7 @@ public final class CombatMoraleData extends SavedData {
     private final Map<UUID, MoraleEvent> events = new HashMap<>();
 
     public static CombatMoraleData get(MinecraftServer server) {
-        return server.overworld().getDataStorage().computeIfAbsent(FACTORY, DATA_NAME);
+        return server.overworld().getDataStorage().computeIfAbsent(FACTORY.type(DATA_NAME));
     }
 
     public MoraleProfile profile(UUID characterId, long now) {
@@ -83,14 +85,14 @@ public final class CombatMoraleData extends SavedData {
 
     private static CombatMoraleData load(CompoundTag tag, HolderLookup.Provider registries) {
         CombatMoraleData data = new CombatMoraleData();
-        ListTag profiles = tag.getList("Profiles", Tag.TAG_COMPOUND);
+        ListTag profiles = MinecraftApi.listOfType(tag, "Profiles", Tag.TAG_COMPOUND);
         for (int index = 0; index < profiles.size(); index++) {
-            MoraleProfile value = MoraleProfile.load(profiles.getCompound(index));
+            MoraleProfile value = MoraleProfile.load(profiles.getCompoundOrEmpty(index));
             data.profiles.put(value.characterId(), value);
         }
-        ListTag events = tag.getList("Events", Tag.TAG_COMPOUND);
+        ListTag events = MinecraftApi.listOfType(tag, "Events", Tag.TAG_COMPOUND);
         for (int index = 0; index < events.size(); index++) {
-            MoraleEvent value = MoraleEvent.load(events.getCompound(index));
+            MoraleEvent value = MoraleEvent.load(events.getCompoundOrEmpty(index));
             data.events.put(value.id(), value);
         }
         return data;

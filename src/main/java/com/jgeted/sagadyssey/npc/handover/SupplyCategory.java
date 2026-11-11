@@ -2,7 +2,6 @@ package com.jgeted.sagadyssey.npc.handover;
 
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.world.item.ArrowItem;
-import net.minecraft.world.item.DiggerItem;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 
@@ -20,10 +19,10 @@ public enum SupplyCategory {
             case FOOD -> stack.has(DataComponents.FOOD);
             case FUEL -> stack.is(Items.COAL) || stack.is(Items.CHARCOAL)
                     || stack.is(Items.COAL_BLOCK) || stack.is(Items.BLAZE_ROD);
-            case TOOL -> stack.getItem() instanceof DiggerItem;
+            case TOOL -> com.jgeted.sagadyssey.core.MinecraftApi.isDigger(stack);
             case AMMUNITION -> stack.getItem() instanceof ArrowItem;
             case MATERIAL -> !stack.has(DataComponents.FOOD)
-                    && !(stack.getItem() instanceof DiggerItem)
+                    && !(com.jgeted.sagadyssey.core.MinecraftApi.isDigger(stack))
                     && !(stack.getItem() instanceof ArrowItem);
         };
     }

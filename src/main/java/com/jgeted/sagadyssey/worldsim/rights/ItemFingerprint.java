@@ -69,6 +69,6 @@ public record ItemFingerprint(String itemId, int componentsHash) {
     }
 
     public static ItemFingerprint load(CompoundTag tag) {
-        return new ItemFingerprint(tag.getString("Item"), tag.getInt("Components"));
+        return new ItemFingerprint(tag.getStringOr("Item", ""), tag.getIntOr("Components", 0));
     }
 }

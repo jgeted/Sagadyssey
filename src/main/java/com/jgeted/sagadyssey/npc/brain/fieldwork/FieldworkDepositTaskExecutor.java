@@ -1,5 +1,7 @@
 package com.jgeted.sagadyssey.npc.brain.fieldwork;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+
 import com.jgeted.sagadyssey.npc.ai.MovementProgress;
 import com.jgeted.sagadyssey.npc.brain.execution.*;
 import com.jgeted.sagadyssey.npc.brain.plan.*;
@@ -13,7 +15,7 @@ import com.jgeted.sagadyssey.social.work.NpcWorkContext;
 import com.jgeted.sagadyssey.worldsim.rights.*;
 import com.jgeted.sagadyssey.worldsim.transfer.*;
 import net.minecraft.core.BlockPos;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.world.Container;
 import net.minecraft.world.item.*;
 import java.util.*;
@@ -22,7 +24,7 @@ import java.util.*;
 public final class FieldworkDepositTaskExecutor implements NpcTaskExecutor {
     private final Map<UUID, MovementProgress> progress = new HashMap<>();
     @Override public void forget(UUID body,UUID plan){progress.remove(plan);}
-    @Override public ResourceLocation id() { return FieldworkPlanFactory.DEPOSIT; }
+    @Override public Identifier id() { return FieldworkPlanFactory.DEPOSIT; }
     @Override public TaskTickResult start(NpcExecutionContext c, NpcPlan p, NpcPlanStep s) { return deposit(c, p); }
     @Override public TaskTickResult tick(NpcExecutionContext c, NpcPlan p, NpcPlanStep s) { return deposit(c, p); }
     @Override public TaskTickResult recover(NpcExecutionContext c, NpcPlan p, NpcPlanStep s) { progress.remove(p.id()); return deposit(c, p); }
@@ -55,7 +57,7 @@ public final class FieldworkDepositTaskExecutor implements NpcTaskExecutor {
             progress.remove(plan.id()); return TaskTickResult.stepSucceeded("没有可交付产出，种子和工作投入留在随身库存");
         }
         FieldworkStorage storage = pending == null ? selectStorage(npc, data) : pending.storage();
-        if (storage == null || !storage.dimension().equals(c.level().dimension().location().toString())
+        if (storage == null || !storage.dimension().equals(c.level().dimension().identifier().toString())
                 || !c.level().hasChunkAt(storage.position()) || !authorized(npc, storage, data)) {
             return defer(c, plan, "没有当前可用且有权限的入库目的地，保留产出并休整");
         }
@@ -123,7 +125,8 @@ public final class FieldworkDepositTaskExecutor implements NpcTaskExecutor {
     }
     private static int transferable(NpcBase npc, ItemStack sample) {
         int count = npc.getPersonalInventory().count(stack -> ItemStack.isSameItemSameComponents(stack, sample));
-        if(sample.is(Items.OAK_SAPLING) && com.jgeted.sagadyssey.social.industry.forestry.TreePlantTask.enabled(npc)) count-=1;
+        if(com.jgeted.sagadyssey.social.industry.forestry.ForestrySeedPolicy.isRenewalSeed(sample)
+                && com.jgeted.sagadyssey.social.industry.forestry.TreePlantTask.enabled(npc)) count-=1;
         if (npc.getProfession() == NpcProfession.FARMER) {
             if (sample.is(Items.WHEAT_SEEDS) || sample.is(Items.CARROT) || sample.is(Items.POTATO) || sample.is(Items.BEETROOT_SEEDS))
                 count -= sample.is(Items.CARROT)?com.jgeted.sagadyssey.core.structure.NaturalFarmRules.seedProtection(npc):16;
@@ -143,10 +146,13 @@ public final class FieldworkDepositTaskExecutor implements NpcTaskExecutor {
         }
         return capacity;
     }
+    /** Read the same destination used by actual deposits; grants no rights or title. */
+    public static FieldworkStorage storageFor(NpcBase npc, FieldworkData data) { return selectStorage(npc,data); }
+
     private static FieldworkStorage selectStorage(NpcBase npc, FieldworkData data) {
         var configured = data.testStorage(npc.getUUID()).orElse(null);
         if (configured != null) return configured;
-        var server = npc.getServer(); String dimension = npc.level().dimension().location().toString();
+        var server = MinecraftApi.server(npc); String dimension = npc.level().dimension().identifier().toString();
         var warehouse = LogisticsData.get(server).warehouses().stream().filter(value -> value.dimension().equals(dimension))
                 .filter(value -> NpcWorkContext.from(npc).canUseWarehouse(server, value))
                 .min(Comparator.comparingDouble(value -> npc.blockPosition().distSqr(value.position()))).orElse(null);

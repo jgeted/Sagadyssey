@@ -17,7 +17,7 @@ import io.netty.buffer.ByteBuf;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.neoforge.network.PacketDistributor;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
@@ -26,7 +26,7 @@ import java.util.UUID;
 
 public record OpenNpcTradePacket(int npcEntityId) implements CustomPacketPayload {
     public static final Type<OpenNpcTradePacket> TYPE = new Type<>(
-            ResourceLocation.fromNamespaceAndPath(Sagadyssey.MOD_ID, "open_trade_v2"));
+            Identifier.fromNamespaceAndPath(Sagadyssey.MOD_ID, "open_trade_v2"));
     public static final StreamCodec<ByteBuf, OpenNpcTradePacket> STREAM_CODEC = StreamCodec.of(
             (buffer, value) -> buffer.writeInt(value.npcEntityId),
             buffer -> new OpenNpcTradePacket(buffer.readInt()));
@@ -36,7 +36,7 @@ public record OpenNpcTradePacket(int npcEntityId) implements CustomPacketPayload
         context.enqueueWork(() -> {
             if (!(context.player() instanceof ServerPlayer player)
                     || !NetworkRateLimiter.allow(player, "open_trade_v2", 4)
-                    || !(player.serverLevel().getEntity(packet.npcEntityId) instanceof NpcBase npc)
+                    || !(player.level().getEntity(packet.npcEntityId) instanceof NpcBase npc)
                     || player.distanceToSqr(npc) > 36.0D) return;
             UUID playerId = CharacterRegistry.currentId(player);
             if (!player.isAlive() || playerId == null) {
@@ -44,8 +44,8 @@ public record OpenNpcTradePacket(int npcEntityId) implements CustomPacketPayload
                 return;
             }
             UUID npcId = npc.getCharacterId();
-            long now = player.serverLevel().getGameTime();
-            boolean directServiceParty = ServiceRelationshipData.get(player.server)
+            long now = player.level().getGameTime();
+            boolean directServiceParty = ServiceRelationshipData.get(player.level().getServer())
                     .hasActiveBetween(playerId, npcId, now);
             NpcTradeAccessPolicy.Decision access = NpcTradeAccessPolicy.evaluate(
                     FactionAttachments.getStandings(player), npc.getFaction(), directServiceParty);
@@ -55,12 +55,12 @@ public record OpenNpcTradePacket(int npcEntityId) implements CustomPacketPayload
             }
             UUID playerContainer = ContainerIds.playerPersonal(playerId);
             UUID npcContainer = ContainerIds.npcPersonal(npcId);
-            RightsStateData rights = RightsStateData.get(player.server);
+            RightsStateData rights = RightsStateData.get(player.level().getServer());
             rights.ensureContext(playerContainer, "player:" + playerId + ":personal",
                     SubjectRef.character(playerId), SubjectRef.character(playerId), AccessPolicy.PRIVATE);
             rights.ensureContext(npcContainer, "npc:" + npcId + ":personal",
                     SubjectRef.character(npcId), SubjectRef.character(npcId), AccessPolicy.PRIVATE);
-            TradeSession session = TradeSessionData.get(player.server).open(playerId, npcId,
+            TradeSession session = TradeSessionData.get(player.level().getServer()).open(playerId, npcId,
                     playerContainer, npcContainer, now);
             PacketDistributor.sendToPlayer(player, TradeSessionPayload.create(player, npc, session));
         });

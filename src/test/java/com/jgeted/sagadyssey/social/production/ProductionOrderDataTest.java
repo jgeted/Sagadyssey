@@ -1,5 +1,7 @@
 package com.jgeted.sagadyssey.social.production;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.Tag;
 import org.junit.jupiter.api.Test;
@@ -58,7 +60,7 @@ class ProductionOrderDataTest {
         ProductionOrder valid = ProductionOrderTest.open(10L);
         source.put(valid);
         CompoundTag tag = source.save(new CompoundTag(), null);
-        tag.getList("Orders", Tag.TAG_COMPOUND).add(new CompoundTag());
+        MinecraftApi.listOfType(tag, "Orders", Tag.TAG_COMPOUND).add(new CompoundTag());
 
         ProductionOrderData loaded = ProductionOrderData.load(tag, null);
 
@@ -114,7 +116,7 @@ class ProductionOrderDataTest {
 
     private static ProductionOrderData roundTrip(ProductionOrderData data) {
         CompoundTag tag = data.save(new CompoundTag(), null);
-        assertEquals(ProductionOrderData.SCHEMA_VERSION, tag.getInt("Schema"));
+        assertEquals(ProductionOrderData.SCHEMA_VERSION, tag.getIntOr("Schema", 0));
         return ProductionOrderData.load(tag, null);
     }
 }

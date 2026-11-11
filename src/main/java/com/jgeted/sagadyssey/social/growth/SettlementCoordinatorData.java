@@ -1,5 +1,8 @@
 package com.jgeted.sagadyssey.social.growth;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+import net.minecraft.core.UUIDUtil;
+
 import com.jgeted.sagadyssey.core.structure.NaturalFarmRules;
 import com.jgeted.sagadyssey.core.structure.NaturalVillageBuilding;
 import com.jgeted.sagadyssey.core.structure.NaturalVillageLayout;
@@ -43,7 +46,7 @@ import net.minecraft.world.Container;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
-import net.minecraft.world.level.saveddata.SavedData;
+import com.jgeted.sagadyssey.worldsim.NbtSavedData;
 import net.neoforged.bus.api.SubscribeEvent;
 
 import java.util.ArrayList;
@@ -54,18 +57,18 @@ import java.util.Optional;
 import java.util.UUID;
 
 /** 只保存决策、责任和原回执引用；人物、库存和物权仍归原领域账本。 */
-public final class SettlementCoordinatorData extends SavedData {
+public final class SettlementCoordinatorData extends NbtSavedData {
     public static final String NAME = "sagadyssey_settlement_coordinator_v1";
     private static final Factory<SettlementCoordinatorData> FACTORY = new Factory<>(
             SettlementCoordinatorData::new, SettlementCoordinatorData::load);
     private final Map<String, CompoundTag> sites = new LinkedHashMap<>();
 
     public static SettlementCoordinatorData get(MinecraftServer server) {
-        return server.overworld().getDataStorage().computeIfAbsent(FACTORY, NAME);
+        return server.overworld().getDataStorage().computeIfAbsent(FACTORY.type(NAME));
     }
 
     public static SettlementCoordinatorData existing(MinecraftServer server) {
-        return server.overworld().getDataStorage().get(FACTORY, NAME);
+        return server.overworld().getDataStorage().get(FACTORY.type(NAME));
     }
 
     public static boolean active(MinecraftServer server, String key) {
@@ -83,7 +86,7 @@ public final class SettlementCoordinatorData extends SavedData {
     }
 
     static NaturalVillageBuilding building(CompoundTag row) {
-        return NaturalVillageLifeData.decode(row.getCompound("Village"));
+        return NaturalVillageLifeData.decode(row.getCompoundOrEmpty("Village"));
     }
 
     CompoundTag resident(UUID person) {
@@ -104,18 +107,18 @@ public final class SettlementCoordinatorData extends SavedData {
         if (previous == null) return "NO_REGISTERED_GROWTH_SITE";
         var village = building(previous);
         if (!NaturalPolityData.get(server).authorized(server, village, official)) return "UNAUTHORIZED";
-        if (previous.getBoolean("Review") || previous.getBoolean("Submitting")
-                || previous.getBoolean("MaterialCarried") || previous.getBoolean("Feeding")
-                || previous.getInt("Placed") != 0 || previous.getInt("Work") != 0
-                || !List.of("WAITING_DECISION", "MATERIALS").contains(previous.getString("HouseStage"))) {
+        if (previous.getBooleanOr("Review", false) || previous.getBooleanOr("Submitting", false)
+                || previous.getBooleanOr("MaterialCarried", false) || previous.getBooleanOr("Feeding", false)
+                || previous.getIntOr("Placed", 0) != 0 || previous.getIntOr("Work", 0) != 0
+                || !List.of("WAITING_DECISION", "MATERIALS").contains(previous.getStringOr("HouseStage", ""))) {
             return "OLD_CONSTRUCTION_OBLIGATION_REQUIRES_RECONCILIATION";
         }
         var row = new CompoundTag();
-        row.put("Village", previous.getCompound("Village").copy());
+        row.put("Village", previous.getCompoundOrEmpty("Village").copy());
         row.putInt("PolicyVersion", SettlementPolicy.VERSION);
         row.putLong("Activated", now);
-        row.putLong("NeedCreated", previous.contains("HouseApprovedAt") ? previous.getLong("HouseApprovedAt") : now);
-        row.putUUID("ApprovedBy", official);
+        row.putLong("NeedCreated", previous.contains("HouseApprovedAt") ? previous.getLongOr("HouseApprovedAt", 0L) : now);
+        row.store("ApprovedBy", UUIDUtil.CODEC, official);
         row.putString("OldGrowthReference", key);
         row.put("OldGrowthSnapshot", previous);
         row.putBoolean("Harvest", true);
@@ -123,19 +126,19 @@ public final class SettlementCoordinatorData extends SavedData {
         row.putString("Reason", "保留原居民、库存、运输及工程义务，开始分项协作");
         SettlementResourceSurvey.declareParcel(row, village, official, now);
         sites.put(key, row);
-        for (String job : List.of("LOGS", "PLANKS", "BED", "TEMP_BED", "STONE", "DOOR", "HOUSE", "RELOCATE", "SURVEY")) {
+        for (String job : List.of("LOGS", "PLANKS", "WOOL", "BED", "TEMP_BED", "STONE", "DOOR", "HOUSE", "RELOCATE", "SURVEY")) {
             var task = new CompoundTag();
-            task.put("Village", row.getCompound("Village").copy());
+            task.put("Village", row.getCompoundOrEmpty("Village").copy());
             task.putString("Kind", job);
             task.putString("Id", key + ":coord-v1:" + job);
-            task.putString("ProjectKey", task.getString("Id"));
+            task.putString("ProjectKey", task.getStringOr("Id", ""));
             task.putString("NeedId", key + ":housing");
             task.putString("State", "WAITING");
             task.putString("Reason", "等待前置条件");
-            task.putLong("Created", row.getLong("NeedCreated"));
+            task.putLong("Created", row.getLongOr("NeedCreated", 0L));
             task.putLong("LastProgress", now);
             task.putString("HouseStage", job.equals("HOUSE") ? "BUILD" : job);
-            row.getCompound("Jobs").put(job, task);
+            row.getCompoundOrEmpty("Jobs").put(job, task);
         }
         job(row, "BED").putString("DependsOn", "PLANKS");
         job(row, "TEMP_BED").putString("DependsOn", "BED");
@@ -147,8 +150,8 @@ public final class SettlementCoordinatorData extends SavedData {
         return "ACTIVATED";
     }
 
-    static CompoundTag job(CompoundTag row, String kind) { return row.getCompound("Jobs").getCompound(kind); }
-    static boolean done(CompoundTag row, String kind) { return job(row, kind).getString("State").equals("DONE"); }
+    static CompoundTag job(CompoundTag row, String kind) { return row.getCompoundOrEmpty("Jobs").getCompoundOrEmpty(kind); }
+    static boolean done(CompoundTag row, String kind) { return job(row, kind).getStringOr("State", "").equals("DONE"); }
     static ItemFingerprint item(Item item) { return ItemFingerprint.of(new ItemStack(item)); }
     static Container store(MinecraftServer server, NaturalVillageBuilding village, int index) {
         return NaturalPolityData.inventory(server, village, index);
@@ -183,15 +186,15 @@ public final class SettlementCoordinatorData extends SavedData {
         if(SettlementDevelopmentLayout.supports(building(row))) { int extra=SettlementDevelopmentData.materialDeficit(server,building(row)); if(extra>0)return extra; }
         if (houseMaterial(row) != Items.COBBLESTONE) return 0;
         var village = building(row);
-        int placed = Math.min(55, job(row, "HOUSE").getInt("Placed"));
-        int carried = job(row, "HOUSE").getBoolean("MaterialCarried") && placed < 55 ? 1 : 0;
-        int donation = job(row, "STONE").getBoolean("Cargo") ? job(row, "STONE").getInt("Quantity") : 0;
-        return SettlementPolicy.materialDeficit(55, placed, available(server, village, 1, Items.COBBLESTONE)
-                + available(server, village, 3, Items.COBBLESTONE) + available(server, village, 2, Items.COBBLESTONE), carried + donation);
+        int placed = Math.min(55, job(row, "HOUSE").getIntOr("Placed", 0));
+        int carried = job(row, "HOUSE").getBooleanOr("MaterialCarried", false) && placed < 55 ? 1 : 0;
+        int donation = job(row, "STONE").getBooleanOr("Cargo", false) ? job(row, "STONE").getIntOr("Quantity", 0) : 0;
+        return SettlementPolicy.materialDeficit(55, placed, SettlementMaterials.available(server,village,1)
+                + SettlementMaterials.available(server,village,3) + SettlementMaterials.available(server,village,2), carried + donation);
     }
 
     static Item houseMaterial(CompoundTag row) {
-        return job(row, "HOUSE").getString("WallMaterial").equals("WOOD") ? Items.OAK_PLANKS : Items.COBBLESTONE;
+        return job(row, "HOUSE").getStringOr("WallMaterial", "").equals("WOOD") ? Items.OAK_PLANKS : Items.COBBLESTONE;
     }
 
     private void assess(MinecraftServer server, CompoundTag row, long now) {
@@ -203,7 +206,7 @@ public final class SettlementCoordinatorData extends SavedData {
         if (!growth.authority(server, village)) { row.putString("Reason", "NO_AUTHORITY"); return; }
         var house = job(row, "HOUSE");
         // 未领料、未施工才可采用已有合法木板的有限替代蓝图，不拆换旧半成品。
-        if (!house.contains("WallMaterial") && house.getInt("Placed") == 0 && !house.getBoolean("MaterialCarried")) {
+        if (!house.contains("WallMaterial") && house.getIntOr("Placed", 0) == 0 && !house.getBooleanOr("MaterialCarried", false)) {
             int planks = available(server, village, 1, Items.OAK_PLANKS) + available(server, village, 3, Items.OAK_PLANKS);
             int parts = (done(row, "BED") ? 0 : 3) + (done(row, "DOOR") ? 0 : 6);
             if (planks >= 55 + parts) {
@@ -225,28 +228,28 @@ public final class SettlementCoordinatorData extends SavedData {
             return person == null || person.alive();
         }).count();
         row.putDouble("DailyMeals", residents * SettlementPolicy.DAILY_MEALS_PER_PERSON);
-        row.putBoolean("Harvest", residents > 0 && SettlementPolicy.harvest(row.getBoolean("Harvest"), usable,
-                row.getDouble("DailyMeals"), emergency));
-        row.putDouble("FoodDays", residents == 0 ? 0 : usable / row.getDouble("DailyMeals"));
-        if (row.getDouble("FoodDays") < SettlementPolicy.LOW_DAYS) {
+        row.putBoolean("Harvest", residents > 0 && SettlementPolicy.harvest(row.getBooleanOr("Harvest", false), usable,
+                row.getDoubleOr("DailyMeals", 0.0), emergency));
+        row.putDouble("FoodDays", residents == 0 ? 0 : usable / row.getDoubleOr("DailyMeals", 0.0));
+        if (row.getDoubleOr("FoodDays", 0.0) < SettlementPolicy.LOW_DAYS) {
             if (!row.contains("LowFoodSince")) row.putLong("LowFoodSince", now);
-            if (now - row.getLong("LowFoodSince") >= 24000) row.putBoolean("ExpandFields", true);
+            if (now - row.getLongOr("LowFoodSince", 0L) >= 24000) row.putBoolean("ExpandFields", true);
         } else row.remove("LowFoodSince");
         row.putLong("Observed", now);
         var owner = SubjectRef.household(NaturalVillageLifeData.home(village));
         var flows = SupplyFlowData.get(server);
-        int remaining = Math.max(0, 55 - Math.min(55, job(row, "HOUSE").getInt("Placed"))
+        int remaining = Math.max(0, 55 - Math.min(55, job(row, "HOUSE").getIntOr("Placed", 0))
                 - available(server, village, 3, houseMaterial(row))
-                - (job(row, "STONE").getBoolean("Cargo") ? job(row, "STONE").getInt("Quantity") : 0)
-                - (job(row, "HOUSE").getBoolean("MaterialCarried") ? 1 : 0));
+                - (job(row, "STONE").getBooleanOr("Cargo", false) ? job(row, "STONE").getIntOr("Quantity", 0) : 0)
+                - (job(row, "HOUSE").getBooleanOr("MaterialCarried", false) ? 1 : 0));
         updateMaterialPolicy(server, village, "growth-stone:", Items.COBBLESTONE,
-                houseMaterial(row) == Items.COBBLESTONE ? remaining : 0, now);
+                0, now); // Functional masonry is supplied locally; retain existing committed routes, stop new concrete-only requests.
         if (houseMaterial(row) == Items.OAK_PLANKS) updateMaterialPolicy(server, village,
                 "growth-planks:", Items.OAK_PLANKS, remaining, now);
         updateMaterialPolicy(server, village, "growth-timber:", Items.OAK_LOG, done(row, "LOGS") ? 0 : 3, now);
         row.putInt("StoneDeficit", stoneDeficit(server, row));
         if (done(row, "HOUSE")) {
-            if (!done(row, "STONE") && !job(row, "STONE").getBoolean("Cargo")) {
+            if (!done(row, "STONE") && !job(row, "STONE").getBooleanOr("Cargo", false)) {
                 complete(job(row, "STONE"), now);
                 job(row, "STONE").putString("Reason", "工程实物预算已满足，本任务无待交材料；原运输义务仍归运输账本");
             }
@@ -296,30 +299,31 @@ public final class SettlementCoordinatorData extends SavedData {
     }
 
     public static boolean ordinaryFieldwork(NpcBase npc) {
+        if(npc.getProfession()==NpcProfession.WORKER&&SettlementResourceStock.applies(npc))return SettlementResourceStock.needsAny(npc)||SettlementDevelopmentData.ordinaryWorker(npc);
         if(SettlementDevelopmentData.farmer(npc))return SettlementDevelopmentData.harvest(npc)||SettlementDevelopmentData.needsFieldPreparation(npc);
-        if(SettlementDevelopmentData.residentVillage(npc.getServer(),npc.getCharacterId())!=null && npc.getProfession()==NpcProfession.WORKER && SettlementDevelopmentData.ordinaryWorker(npc))return true;
-        var data = existing(npc.getServer());
+        if(SettlementDevelopmentData.residentVillage(MinecraftApi.server(npc),npc.getCharacterId())!=null && npc.getProfession()==NpcProfession.WORKER && SettlementDevelopmentData.ordinaryWorker(npc))return true;
+        var data = existing(MinecraftApi.server(npc));
         var row = data == null ? null : data.resident(npc.getCharacterId());
         if (row == null) return true;
-        if (npc.getProfession() == NpcProfession.FARMER) return row.getBoolean("Harvest");
+        if (npc.getProfession() == NpcProfession.FARMER) return row.getBooleanOr("Harvest", false);
         return npc.getProfession() == NpcProfession.WORKER
-                && (!done(row, "LOGS") || data.stoneDeficit(npc.getServer(), row) > 0);
+                && (!done(row, "LOGS") || data.stoneDeficit(MinecraftApi.server(npc), row) > 0);
     }
 
     public static boolean resourceAllowed(NpcBase npc, BlockPos position) {
         if(SettlementDevelopmentData.resourceAllowed(npc,position))return true;
-        var data = existing(npc.getServer());
+        var data = existing(MinecraftApi.server(npc));
         var row = data == null ? null : data.resident(npc.getCharacterId());
-        return row != null && SettlementGrowthData.get(npc.getServer()).authority(npc.getServer(), building(row))
+        return row != null && SettlementGrowthData.get(MinecraftApi.server(npc)).authority(MinecraftApi.server(npc), building(row))
                 && SettlementResourceSurvey.allowed(npc, row, position);
     }
 
     public static boolean needsBoundedNavigation(NpcBase npc, BlockPos target) {
-        if (npc.getServer() == null) return false;
+        if (MinecraftApi.server(npc) == null) return false;
         // Admitted households use the same physical obstacle planner as founders.
         // This is routing only; work sites and item rights retain separate checks.
-        if(SettlementDevelopmentData.residentVillage(npc.getServer(),npc.getCharacterId())!=null)return true;
-        var data = existing(npc.getServer());
+        if(SettlementDevelopmentData.residentVillage(MinecraftApi.server(npc),npc.getCharacterId())!=null)return true;
+        var data = existing(MinecraftApi.server(npc));
         var row = data == null ? null : data.resident(npc.getCharacterId());
         if (row == null) return false;
         var village = building(row);
@@ -333,33 +337,33 @@ public final class SettlementCoordinatorData extends SavedData {
     }
 
     public static boolean extraField(NpcBase npc, BlockPos position) {
-        var data = existing(npc.getServer());
+        var data = existing(MinecraftApi.server(npc));
         var row = data == null ? null : data.resident(npc.getCharacterId());
-        if (row == null || !row.getBoolean("ExpandFields") || npc.getProfession() != NpcProfession.FARMER) return false;
+        if (row == null || !row.getBooleanOr("ExpandFields", false) || npc.getProfession() != NpcProfession.FARMER) return false;
         return GrowthLayout.extension().stream().map(local -> NaturalVillageLayout.at(building(row), local))
                 .anyMatch(point -> point.getX() == position.getX() && point.getZ() == position.getZ());
     }
 
     public Optional<NpcPlan> choose(NpcBase npc, long now) {
         var row = resident(npc.getCharacterId());
-        if (row == null || row.getBoolean("Review")) return Optional.empty();
-        var work = FieldworkData.get(npc.getServer());
+        if (row == null || row.getBooleanOr("Review", false)) return Optional.empty();
+        var work = FieldworkData.get(MinecraftApi.server(npc));
         // 原携货先沿旧交付计划安置；不能被新项目抢走。
         if (FieldworkDepositTaskExecutor.hasDeliverableCargo(npc, work) && work.deliveryRetryAt(npc.getUUID()) <= now) return Optional.of(
                 FieldworkPlanFactory.deposit(npc.getUUID(), now));
-        if (!SettlementGrowthData.get(npc.getServer()).eligible(npc, row)) return Optional.empty();
-        if (npc.getProfession() == NpcProfession.FARMER && row.getBoolean("Harvest")) return Optional.empty();
+        if (!SettlementGrowthData.get(MinecraftApi.server(npc)).eligible(npc, row)) return Optional.empty();
+        if (npc.getProfession() == NpcProfession.FARMER && row.getBooleanOr("Harvest", false)) return Optional.empty();
         var candidates = new ArrayList<SettlementPolicy.Candidate>();
-        for (String kind : row.getCompound("Jobs").getAllKeys()) {
+        for (String kind : row.getCompoundOrEmpty("Jobs").keySet()) {
             var task = job(row, kind);
-            boolean ours = !task.hasUUID("Person") || task.getUUID("Person").equals(npc.getCharacterId());
-            boolean ready = ours && !task.getBoolean("Review") && now >= task.getLong("RetryAt")
+            boolean ours = !task.read("Person", UUIDUtil.CODEC).isPresent() || task.read("Person", UUIDUtil.CODEC).orElseThrow().equals(npc.getCharacterId());
+            boolean ready = ours && !task.getBooleanOr("Review", false) && now >= task.getLongOr("RetryAt", 0L)
                     && feasible(npc, row, task);
-            int tier = List.of("LOGS", "PLANKS", "BED", "TEMP_BED").contains(kind) ? 1
+            int tier = List.of("LOGS", "PLANKS", "WOOL", "BED", "TEMP_BED").contains(kind) ? 1
                     : kind.equals("SURVEY") ? 3 : 4;
-            if (task.getBoolean("Cargo") || task.getBoolean("MaterialCarried")) tier = 2;
+            if (task.getBooleanOr("Cargo", false) || task.getBooleanOr("MaterialCarried", false)) tier = 2;
             double effort = npc.distanceToSqr(NaturalVillageLayout.at(building(row), NaturalVillageLayout.PUBLIC).getCenter());
-            candidates.add(new SettlementPolicy.Candidate(kind, tier, task.getLong("Created"),
+            candidates.add(new SettlementPolicy.Candidate(kind, tier, task.getLongOr("Created", 0L),
                     Long.MAX_VALUE, effort, kind.equals("SURVEY") ? 2 : 1, ready));
         }
         var candidate = SettlementPolicy.choose(candidates);
@@ -368,42 +372,47 @@ public final class SettlementCoordinatorData extends SavedData {
         if (candidate.id().equals("SURVEY")) {
             var mining = SettlementResourceSurvey.mining(npc, row, now);
             if (mining.isPresent()) {
-                task.putUUID("FieldworkPlan", mining.get().id());
+                task.store("FieldworkPlan", UUIDUtil.CODEC, mining.get().id());
                 task.putString("Reason", "已发现的合法资源交原采掘执行器");
                 setDirty();
                 return mining;
             }
         }
-        task.putUUID("Person", npc.getCharacterId());
-        task.putUUID("Body", npc.getUUID());
+        task.store("Person", UUIDUtil.CODEC, npc.getCharacterId());
+        task.store("Body", UUIDUtil.CODEC, npc.getUUID());
         task.putString("State", "CLAIMED");
         var plan = SettlementCoordinatorTask.plan(npc, candidate.id(), now);
-        task.putUUID("Plan", plan.id());
+        task.store("Plan", UUIDUtil.CODEC, plan.id());
         setDirty();
         return Optional.of(plan);
     }
 
     private boolean feasible(NpcBase npc, CompoundTag row, CompoundTag task) {
-        if (task.getString("State").equals("DONE")) return false;
-        if (task.getBoolean("Cargo") || task.getBoolean("MaterialCarried")) return true;
-        var server = npc.getServer();
+        if (task.getStringOr("State", "").equals("DONE")) return false;
+        if (task.getBooleanOr("Cargo", false) || task.getBooleanOr("MaterialCarried", false)) return true;
+        var server = MinecraftApi.server(npc);
         var village = building(row);
-        return switch (task.getString("Kind")) {
+        return switch (task.getStringOr("Kind", "")) {
             case "LOGS" -> available(server, village, 1, Items.OAK_LOG) >= 3;
             case "PLANKS" -> done(row, "LOGS");
-            case "BED" -> done(row, "PLANKS");
+            case "BED" -> done(row, "PLANKS") && (available(server,village,3,Items.WHITE_WOOL)>=3
+                    || SettlementGrowthData.canResumeReservedBed(npc, task));
+            case "WOOL" -> com.jgeted.sagadyssey.social.industry.common.SettlementIndustryAccess.resident(npc)
+                    && com.jgeted.sagadyssey.social.industry.animal.WoolSupplyNeeds.publicWoolDeficit(server,village)>0
+                    && available(server,village,1,Items.WHITE_WOOL)
+                        +available(server,village,2,Items.WHITE_WOOL)>0;
             case "TEMP_BED" -> done(row, "BED");
             case "DOOR" -> done(row, "PLANKS");
-            case "STONE" -> available(server, village, 1, houseMaterial(row)) > 0
-                    && available(server, village, 3, houseMaterial(row)) < 55 - Math.min(55, job(row, "HOUSE").getInt("Placed"));
+            case "STONE" -> (houseMaterial(row)==Items.COBBLESTONE?(SettlementMaterials.available(server,village,1)+SettlementMaterials.available(server,village,2)):(available(server,village,1,houseMaterial(row))+available(server,village,2,houseMaterial(row)))) > 0
+                    && (houseMaterial(row)==Items.COBBLESTONE?SettlementMaterials.available(server,village,3):available(server,village,3,houseMaterial(row))) < 55 - Math.min(55, job(row, "HOUSE").getIntOr("Placed", 0));
             case "HOUSE" -> {
-                int index = task.getInt("Placed");
-                yield index >= 57 || index < 55 && available(server, village, 3, houseMaterial(row)) > 0
+                int index = task.getIntOr("Placed", 0);
+                yield index >= 57 || index < 55 && (houseMaterial(row)==Items.COBBLESTONE?SettlementMaterials.available(server,village,3):available(server,village,3,houseMaterial(row))) > 0
                         || index == 55 && done(row, "DOOR") || index == 56 && done(row, "RELOCATE");
             }
-            case "RELOCATE" -> done(row, "TEMP_BED") && job(row, "HOUSE").getInt("Placed") >= 56;
+            case "RELOCATE" -> done(row, "TEMP_BED") && job(row, "HOUSE").getIntOr("Placed", 0) >= 56;
             case "SURVEY" -> npc.getProfession() == NpcProfession.WORKER && done(row, "LOGS")
-                    && stoneDeficit(server, row) > 0 && SettlementResourceSurvey.needsSurvey(npc, row);
+                    && (stoneDeficit(server,row)>0||SettlementResourceStock.applies(npc)&&SettlementResourceStock.needsAny(npc)) && SettlementResourceSurvey.needsSurvey(npc,row);
             default -> false;
         };
     }
@@ -413,44 +422,54 @@ public final class SettlementCoordinatorData extends SavedData {
         if (row == null) return "YIELD";
         var task = job(row, kind);
         if (done(row, kind)) return "YIELD";
-        if (!task.hasUUID("Person") || !task.getUUID("Person").equals(npc.getCharacterId())
-                || !task.getUUID("Body").equals(npc.getUUID()) || !task.getUUID("Plan").equals(planId)
-                || !SettlementGrowthData.get(npc.getServer()).eligible(npc, row)) return "YIELD";
-        if (task.getLong("LastTick") == now) return "同刻不重复劳动";
+        if (!task.read("Person", UUIDUtil.CODEC).isPresent() || !task.read("Person", UUIDUtil.CODEC).orElseThrow().equals(npc.getCharacterId())
+                || !task.read("Body", UUIDUtil.CODEC).orElseThrow().equals(npc.getUUID()) || !task.read("Plan", UUIDUtil.CODEC).orElseThrow().equals(planId)
+                || !SettlementGrowthData.get(MinecraftApi.server(npc)).eligible(npc, row)) return "YIELD";
+        if (task.getLongOr("LastTick", 0L) == now) return "同刻不重复劳动";
         task.putLong("LastTick", now);
         task.putString("State", "WORKING");
-        var growth = SettlementGrowthData.get(npc.getServer());
-        int beforeWork = task.getInt("Work"), beforePlaced = task.getInt("Placed");
+        var growth = SettlementGrowthData.get(MinecraftApi.server(npc));
+        int beforeWork = task.getIntOr("Work", 0), beforePlaced = task.getIntOr("Placed", 0);
         String result;
         switch (kind) {
-            case "LOGS", "STONE" -> result = moveMaterial(npc, row, task, now);
+            case "LOGS", "STONE", "WOOL" -> result = moveMaterial(npc, row, task, now);
             case "PLANKS", "BED", "DOOR" -> {
                 result = growth.craft(npc, task, kind);
-                if (!task.getString("HouseStage").equals(kind)) complete(task, now);
+                if (!task.getStringOr("HouseStage", "").equals(kind)) complete(task, now);
             }
-            case "TEMP_BED" -> {
-                result = growth.place(npc, task, SettlementBedRelocation.temporary(building(row)), 0);
-                if (task.getInt("Placed") == 1) {
-                    var village = building(row);
-                    if (NpcLifeData.get(npc.getServer()).assignBed(NaturalVillageLifeData.person(village, 2),
-                            village.dimension(), NaturalVillageLayout.at(village, new BlockPos(6, 1, 13)),
-                            "已有安全屋内的真实临时床", now)) complete(task, now);
-                }
-            }
+            case "TEMP_BED" -> result = temporaryBed(npc, growth, building(row), task, now);
             case "HOUSE" -> {
                 if (!task.contains("WallMaterial")) task.putString("WallMaterial", "STONE");
                 result = growth.build(npc, task);
-                if (task.getString("HouseStage").equals("DONE")) complete(task, now);
+                if (task.getStringOr("HouseStage", "").equals("DONE")) complete(task, now);
             }
             case "RELOCATE" -> result = SettlementBedRelocation.work(npc, row, task, now);
             case "SURVEY" -> result = SettlementResourceSurvey.work(npc, row, task, now);
             default -> result = "YIELD";
         }
-        if (task.getInt("Work") != beforeWork || task.getInt("Placed") != beforePlaced) task.putLong("LastProgress", now);
+        if (task.getIntOr("Work", 0) != beforeWork || task.getIntOr("Placed", 0) != beforePlaced) task.putLong("LastProgress", now);
         if (!result.equals("YIELD")) task.putString("Reason", result);
         if (result.equals("YIELD")) task.putLong("RetryAt", now + 200);
         setDirty();
-        return task.getString("State").equals("DONE") ? "YIELD" : result;
+        return task.getStringOr("State", "").equals("DONE") ? "YIELD" : result;
+    }
+
+    static String temporaryBed(NpcBase npc, SettlementGrowthData growth, NaturalVillageBuilding village,
+                               CompoundTag task, long now) {
+        var bed = SettlementBedRelocation.temporary(village);
+        String result = task.getIntOr("Placed", 0) == 0 ? growth.place(npc, task, bed, 0) : "YIELD";
+        if (task.getIntOr("Placed", 0) != 1) return result;
+        if (!SettlementBedRelocation.originalBedPresent((ServerLevel) npc.level(), bed)) {
+            task.putString("Reason", "已施工的临时床缺失、变更或未加载，保留原放置责任");
+            return "YIELD";
+        }
+        if (NpcLifeData.get(MinecraftApi.server(npc)).assignBed(NaturalVillageLifeData.person(village, 2),
+                village.dimension(), bed.positions().getLast(), "已有安全屋内的真实临时床", now)) {
+            complete(task, now);
+        } else {
+            task.putString("Reason", "临时床归属交接被拒绝，保留原施工结果并等待重检");
+        }
+        return "YIELD";
     }
 
     static void complete(CompoundTag task, long now) {
@@ -463,7 +482,7 @@ public final class SettlementCoordinatorData extends SavedData {
         var row = resident(npc.getCharacterId());
         if (row == null) return;
         var task = job(row, kind);
-        if (!task.hasUUID("Plan") || !task.getUUID("Plan").equals(plan) || done(row, kind)) return;
+        if (!task.read("Plan", UUIDUtil.CODEC).isPresent() || !task.read("Plan", UUIDUtil.CODEC).orElseThrow().equals(plan) || done(row, kind)) return;
         task.putString("State", "WAITING");
         task.putLong("LastYield", now);
         setDirty();
@@ -471,40 +490,47 @@ public final class SettlementCoordinatorData extends SavedData {
 
     private String moveMaterial(NpcBase npc, CompoundTag row, CompoundTag task, long now) {
         var village = building(row);
-        var growth = SettlementGrowthData.get(npc.getServer());
-        Item type = task.getString("Kind").equals("LOGS") ? Items.OAK_LOG : houseMaterial(row);
+        var growth = SettlementGrowthData.get(MinecraftApi.server(npc));
+        Item type = task.getStringOr("Kind", "").equals("WOOL") ? Items.WHITE_WOOL
+                : task.getStringOr("Kind", "").equals("LOGS") ? Items.OAK_LOG : houseMaterial(row)==Items.COBBLESTONE
+                ? task.getBooleanOr("Cargo", false)?SettlementMaterials.carried(MinecraftApi.server(npc),task,"Pickup",Items.COBBLESTONE,ContainerIds.npcPersonal(npc.getCharacterId())):SettlementMaterials.choose(MinecraftApi.server(npc),village,1,2)
+                :houseMaterial(row);
+        if(type==Items.AIR){if(task.getBooleanOr("Cargo", false))task.putBoolean("Review",true);return "没有可核实的具体材料，保留原携货与责任";}
         UUID personal = ContainerIds.npcPersonal(npc.getCharacterId());
         var character = SubjectRef.character(npc.getCharacterId());
-        RightsStateData.get(npc.getServer()).ensureContext(personal, "npc:" + npc.getCharacterId() + ":personal",
+        RightsStateData.get(MinecraftApi.server(npc)).ensureContext(personal, "npc:" + npc.getCharacterId() + ":personal",
                 character, character, AccessPolicy.PRIVATE);
-        if (!task.getBoolean("Cargo")) {
-            if (!growth.near(npc, NaturalVillageLayout.at(village, NaturalVillageLayout.PANTRY))) return "前往领取合法材料";
-            int quantity = type == Items.OAK_LOG ? 3 : Math.min(16, available(npc.getServer(), village, 1, type));
-            if (type != Items.OAK_LOG) quantity = Math.min(quantity,
-                    Math.max(0, 55 - Math.min(55, job(row, "HOUSE").getInt("Placed"))
-                            - available(npc.getServer(), village, 3, type)
-                            - (job(row, "HOUSE").getBoolean("MaterialCarried") ? 1 : 0)));
+        if (!task.getBooleanOr("Cargo", false)) {
+            int sourceIndex=available(MinecraftApi.server(npc),village,1,type)>0?1:2;
+            if (!growth.near(npc, NaturalVillageLayout.at(village, NaturalVillageLayout.stores(village).get(sourceIndex)))) return "前往领取合法材料";
+            int quantity = type == Items.OAK_LOG ? 3 : Math.min(16, available(MinecraftApi.server(npc), village, sourceIndex, type));
+            if (type == Items.WHITE_WOOL) quantity = Math.min(quantity,
+                    com.jgeted.sagadyssey.social.industry.animal.WoolSupplyNeeds.publicWoolDeficit(MinecraftApi.server(npc),village));
+            else if (type != Items.OAK_LOG) quantity = Math.min(quantity,
+                    Math.max(0, 55 - Math.min(55, job(row, "HOUSE").getIntOr("Placed", 0))
+                            - (houseMaterial(row)==Items.COBBLESTONE?SettlementMaterials.available(MinecraftApi.server(npc),village,3):available(MinecraftApi.server(npc),village,3,type))
+                            - (job(row, "HOUSE").getBooleanOr("MaterialCarried", false) ? 1 : 0)));
             if (quantity == 0) return "YIELD";
-            UUID source = NaturalVillageEconomyData.storeId(village, 1);
-            UUID transaction = ContainerIds.named(task.getString("Id") + ":pickup:" + task.getInt("Cycle"));
+            UUID source = NaturalVillageEconomyData.storeId(village, sourceIndex);
+            UUID transaction = ContainerIds.named(task.getStringOr("Id", "") + ":pickup:" + task.getIntOr("Cycle", 0));
             if (!growth.transfer(npc, task, transaction, SubjectRef.household(NaturalVillageLifeData.home(village)),
                     TransferIntent.GIFT, List.of(new TransferLeg(source, personal, item(type), quantity)),
-                    Map.of(source, store(npc.getServer(), village, 1), personal, npc.getPersonalInventory()))) return "YIELD";
+                    Map.of(source, store(MinecraftApi.server(npc), village, sourceIndex), personal, npc.getPersonalInventory()))) return "YIELD";
             task.putBoolean("Cargo", true);
             task.putInt("Quantity", quantity);
-            task.putUUID("Pickup", task.getUUID("LastTransfer"));
+            task.store("Pickup", UUIDUtil.CODEC, task.read("LastTransfer", UUIDUtil.CODEC).orElseThrow());
             task.putLong("LastProgress", now);
             return "材料已进入原协作者背包，接续实际搬运";
         }
         if (!growth.near(npc, NaturalVillageLayout.at(village, NaturalVillageLayout.PUBLIC))) return "携带材料前往公共仓";
         UUID target = NaturalVillageEconomyData.storeId(village, 3);
-        UUID transaction = ContainerIds.named(task.getString("Id") + ":deposit:" + task.getInt("Cycle"));
+        UUID transaction = ContainerIds.named(task.getStringOr("Id", "") + ":deposit:" + task.getIntOr("Cycle", 0));
         if (!growth.transfer(npc, task, transaction, character, TransferIntent.GIFT,
-                List.of(new TransferLeg(personal, target, item(type), task.getInt("Quantity"))),
-                Map.of(personal, npc.getPersonalInventory(), target, store(npc.getServer(), village, 3)))) return "YIELD";
-        task.putUUID("Delivery", task.getUUID("LastTransfer"));
+                List.of(new TransferLeg(personal, target, item(type), task.getIntOr("Quantity", 0))),
+                Map.of(personal, npc.getPersonalInventory(), target, store(MinecraftApi.server(npc), village, 3)))) return "YIELD";
+        task.store("Delivery", UUIDUtil.CODEC, task.read("LastTransfer", UUIDUtil.CODEC).orElseThrow());
         task.remove("Cargo");
-        task.putInt("Cycle", task.getInt("Cycle") + 1);
+        task.putInt("Cycle", task.getIntOr("Cycle", 0) + 1);
         task.putLong("LastProgress", now);
         if (type == Items.OAK_LOG) complete(task, now);
         return "材料已真实入公共仓，保留两段转移回执";
@@ -525,10 +551,10 @@ public final class SettlementCoordinatorData extends SavedData {
         var data = existing(level.getServer());
         if (data == null) return;
         for (var row : data.sites.values()) {
-            if (building(row).dimension().equals(level.dimension().location().toString())
+            if (building(row).dimension().equals(level.dimension().identifier().toString())
                     && (SettlementResourceSurvey.inParcel(row, position)
                     || SettlementResourceSurvey.exitClearanceCell(building(row), position))) {
-                row.getCompound("ProtectedEdits").putLong(Long.toString(position.asLong()), level.getGameTime());
+                row.getCompoundOrEmpty("ProtectedEdits").putLong(Long.toString(position.asLong()), level.getGameTime());
                 data.setDirty();
             }
         }
@@ -561,14 +587,14 @@ public final class SettlementCoordinatorData extends SavedData {
     }
 
     private static SettlementCoordinatorData load(CompoundTag tag, HolderLookup.Provider lookup) {
-        if (tag.getInt("Schema") != 1) throw new IllegalArgumentException("Unknown coordinator schema");
+        if (tag.getIntOr("Schema", 0) != 1) throw new IllegalArgumentException("Unknown coordinator schema");
         var data = new SettlementCoordinatorData();
-        for (var value : tag.getList("Sites", Tag.TAG_COMPOUND)) {
+        for (var value : MinecraftApi.listOfType(tag, "Sites", Tag.TAG_COMPOUND)) {
             var row = ((CompoundTag) value).copy();
-            if (row.getInt("PolicyVersion") != SettlementPolicy.VERSION) throw new IllegalArgumentException("Unknown policy");
-            for (String key : row.getCompound("Jobs").getAllKeys()) {
+            if (row.getIntOr("PolicyVersion", 0) != SettlementPolicy.VERSION) throw new IllegalArgumentException("Unknown policy");
+            for (String key : row.getCompoundOrEmpty("Jobs").keySet()) {
                 var task = job(row, key);
-                if (task.getBoolean("Submitting")) {
+                if (task.getBooleanOr("Submitting", false)) {
                     task.putBoolean("Review", true);
                     task.putString("Reason", "提交中断，原回执和物资需核对，不重放或清账");
                 }

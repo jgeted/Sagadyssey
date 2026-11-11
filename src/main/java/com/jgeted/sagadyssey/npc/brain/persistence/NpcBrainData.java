@@ -1,5 +1,8 @@
 package com.jgeted.sagadyssey.npc.brain.persistence;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+import net.minecraft.core.UUIDUtil;
+
 import com.jgeted.sagadyssey.npc.brain.plan.NpcPlan;
 import com.jgeted.sagadyssey.npc.brain.plan.NpcPlanStatus;
 import com.jgeted.sagadyssey.npc.brain.plan.NpcPlanStep;
@@ -9,7 +12,7 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.world.level.saveddata.SavedData;
+import com.jgeted.sagadyssey.worldsim.NbtSavedData;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -23,7 +26,7 @@ import java.util.Set;
 import java.util.UUID;
 
 /** 世界级 NPC 计划持久化容器；按 NPC 保证至多一个活动计划。 */
-public final class NpcBrainData extends SavedData implements NpcPlanStore {
+public final class NpcBrainData extends NbtSavedData implements NpcPlanStore {
     public static final String DATA_NAME = "sagadyssey_npc_brain_v3";
     public static final int SCHEMA_VERSION = 1;
     public static final Factory<NpcBrainData> FACTORY =
@@ -106,7 +109,7 @@ public final class NpcBrainData extends SavedData implements NpcPlanStore {
         ListTag brains = new ListTag();
         for (UUID npcId : allNpcIds()) {
             CompoundTag brain = new CompoundTag();
-            brain.putUUID("NpcId", npcId);
+            brain.store("NpcId", UUIDUtil.CODEC, npcId);
             brain.putString("Mode", mode(npcId).name());
 
             NpcPlan active = activePlans.get(npcId);
@@ -130,19 +133,19 @@ public final class NpcBrainData extends SavedData implements NpcPlanStore {
 
     static NpcBrainData load(CompoundTag tag, HolderLookup.Provider registries) {
         NpcBrainData data = new NpcBrainData();
-        if (tag == null || !tag.contains("Schema", Tag.TAG_INT)
-                || tag.getInt("Schema") != SCHEMA_VERSION
-                || !tag.contains("Brains", Tag.TAG_LIST)) {
+        if (tag == null || !MinecraftApi.containsTag(tag, "Schema", Tag.TAG_INT)
+                || tag.getIntOr("Schema", 0) != SCHEMA_VERSION
+                || !MinecraftApi.containsTag(tag, "Brains", Tag.TAG_LIST)) {
             throw new IllegalArgumentException("Invalid or unsupported NPC brain schema; recovery required");
         }
 
         ListTag brains = com.jgeted.sagadyssey.worldsim.PersistentDataAccess.compounds(tag, "Brains");
         Set<UUID> loadedNpcIds = new LinkedHashSet<>();
         for (int index = 0; index < brains.size(); index++) {
-            CompoundTag brain = brains.getCompound(index);
-            if (!brain.hasUUID("NpcId"))
+            CompoundTag brain = brains.getCompoundOrEmpty(index);
+            if (!brain.read("NpcId", UUIDUtil.CODEC).isPresent())
                 throw new IllegalArgumentException("Missing NPC identity at brain record " + index);
-            UUID npcId = brain.getUUID("NpcId");
+            UUID npcId = brain.read("NpcId", UUIDUtil.CODEC).orElseThrow();
             if (!loadedNpcIds.add(npcId))
                 throw new IllegalArgumentException("Duplicate NPC brain identity: " + npcId);
 
@@ -156,17 +159,17 @@ public final class NpcBrainData extends SavedData implements NpcPlanStore {
     private static void loadMode(NpcBrainData data, UUID npcId, CompoundTag brain) {
         // A missing mode is the documented legacy default; an unknown value is not.
         if (!brain.contains("Mode")) return;
-        if (!brain.contains("Mode", Tag.TAG_STRING))
+        if (!MinecraftApi.containsTag(brain, "Mode", Tag.TAG_STRING))
             throw new IllegalArgumentException("Invalid NPC mode: " + npcId);
-        NpcBehaviorMode mode = NpcBehaviorMode.valueOf(brain.getString("Mode"));
+        NpcBehaviorMode mode = NpcBehaviorMode.valueOf(brain.getStringOr("Mode", ""));
         if (mode != NpcBehaviorMode.LEGACY) data.modes.put(npcId, mode);
     }
 
     private static void loadActive(NpcBrainData data, UUID npcId, CompoundTag brain) {
         if (!brain.contains("Active")) return;
-        if (!brain.contains("Active", Tag.TAG_COMPOUND))
+        if (!MinecraftApi.containsTag(brain, "Active", Tag.TAG_COMPOUND))
             throw new IllegalArgumentException("Invalid active plan tag: " + npcId);
-        NpcPlan plan = NpcPlanNbtCodec.load(brain.getCompound("Active"));
+        NpcPlan plan = NpcPlanNbtCodec.load(brain.getCompoundOrEmpty("Active"));
         if (!plan.npcId().equals(npcId) || plan.terminal())
             throw new IllegalArgumentException("Invalid active plan ownership or status: " + npcId);
         data.activePlans.put(npcId, plan);
@@ -180,7 +183,7 @@ public final class NpcBrainData extends SavedData implements NpcPlanStore {
         NpcPlan active = data.activePlans.get(npcId);
         if (active != null) planIds.add(active.id());
         for (int index = 0; index < historyTags.size(); index++) {
-            NpcPlan plan = NpcPlanNbtCodec.load(historyTags.getCompound(index));
+            NpcPlan plan = NpcPlanNbtCodec.load(historyTags.getCompoundOrEmpty(index));
             if (!plan.npcId().equals(npcId) || !plan.terminal() || !planIds.add(plan.id()))
                 throw new IllegalArgumentException("Invalid NPC history: " + npcId + " at " + index);
             if (history.size() < HISTORY_LIMIT) history.addLast(plan);

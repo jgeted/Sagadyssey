@@ -1,5 +1,7 @@
 package com.jgeted.sagadyssey.social.market;
 
+import net.minecraft.core.UUIDUtil;
+
 import com.jgeted.sagadyssey.worldsim.rights.ItemFingerprint;
 import net.minecraft.nbt.CompoundTag;
 
@@ -18,8 +20,8 @@ public record MerchantPriceMemory(UUID merchantId, UUID settlementId,
 
     CompoundTag save() {
         CompoundTag tag = new CompoundTag();
-        tag.putUUID("Merchant", merchantId);
-        tag.putUUID("Settlement", settlementId);
+        tag.store("Merchant", UUIDUtil.CODEC, merchantId);
+        tag.store("Settlement", UUIDUtil.CODEC, settlementId);
         tag.put("Fingerprint", fingerprint.save());
         tag.putInt("Price", unitEmeraldMilli);
         tag.putInt("Samples", sourceSamples);
@@ -28,8 +30,8 @@ public record MerchantPriceMemory(UUID merchantId, UUID settlementId,
     }
 
     static MerchantPriceMemory load(CompoundTag tag) {
-        return new MerchantPriceMemory(tag.getUUID("Merchant"), tag.getUUID("Settlement"),
-                ItemFingerprint.load(tag.getCompound("Fingerprint")), tag.getInt("Price"),
-                tag.getInt("Samples"), tag.getLong("ObservedAt"));
+        return new MerchantPriceMemory(tag.read("Merchant", UUIDUtil.CODEC).orElseThrow(), tag.read("Settlement", UUIDUtil.CODEC).orElseThrow(),
+                ItemFingerprint.load(tag.getCompoundOrEmpty("Fingerprint")), tag.getIntOr("Price", 0),
+                tag.getIntOr("Samples", 0), tag.getLongOr("ObservedAt", 0L));
     }
 }

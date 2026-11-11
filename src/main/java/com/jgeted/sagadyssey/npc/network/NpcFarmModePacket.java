@@ -14,7 +14,7 @@ import io.netty.buffer.ByteBuf;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
@@ -26,7 +26,7 @@ import net.neoforged.neoforge.network.handling.IPayloadContext;
 public record NpcFarmModePacket(int npcId, String modeName) implements CustomPacketPayload {
 
     public static final Type<NpcFarmModePacket> TYPE = new Type<>(
-            ResourceLocation.fromNamespaceAndPath(Sagadyssey.MOD_ID, "npc_farm_mode")
+            Identifier.fromNamespaceAndPath(Sagadyssey.MOD_ID, "npc_farm_mode")
     );
 
     public static final StreamCodec<ByteBuf, NpcFarmModePacket> STREAM_CODEC = StreamCodec.of(
@@ -46,7 +46,7 @@ public record NpcFarmModePacket(int npcId, String modeName) implements CustomPac
         context.enqueueWork(() -> {
             ServerPlayer player = (ServerPlayer) context.player();
             if (!NetworkRateLimiter.allow(player, "npc_farm_mode", 2)) return;
-            Entity entity = player.serverLevel().getEntity(data.npcId);
+            Entity entity = player.level().getEntity(data.npcId);
 
             if (!(entity instanceof NpcBase npc)) {
                 player.displayClientMessage(Component.literal("§c这个 NPC 已经不存在了"), true);
@@ -57,9 +57,9 @@ public record NpcFarmModePacket(int npcId, String modeName) implements CustomPac
                 player.displayClientMessage(Component.literal("当前没有可用的在生人物，不能行使工作授权。"), true);
                 return;
             }
-            var verdict = ServiceRelationshipData.get(player.server).authorize(
+            var verdict = ServiceRelationshipData.get(player.level().getServer()).authorize(
                     principal, npc.getCharacterId(),
-                    AuthorityScope.WORK, false, player.serverLevel().getGameTime());
+                    AuthorityScope.WORK, false, player.level().getGameTime());
             if (!verdict.allowed()) {
                 player.displayClientMessage(Component.literal("§c没有工作模式授权：" + verdict.reason()), true);
                 return;

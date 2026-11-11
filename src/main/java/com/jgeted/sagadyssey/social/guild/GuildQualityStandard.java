@@ -1,5 +1,8 @@
 package com.jgeted.sagadyssey.social.guild;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+import net.minecraft.core.UUIDUtil;
+
 import com.jgeted.sagadyssey.social.market.QualityGrade;
 import com.jgeted.sagadyssey.worldsim.rights.ItemFingerprint;
 import net.minecraft.nbt.CompoundTag;
@@ -25,8 +28,8 @@ public record GuildQualityStandard(UUID id, UUID institutionId, String craftId,
 
     CompoundTag save() {
         CompoundTag tag = new CompoundTag();
-        tag.putUUID("Id", id);
-        tag.putUUID("Institution", institutionId);
+        tag.store("Id", UUIDUtil.CODEC, id);
+        tag.store("Institution", UUIDUtil.CODEC, institutionId);
         tag.putString("Craft", craftId);
         tag.put("Product", product.save());
         ListTag grades = new ListTag();
@@ -44,13 +47,13 @@ public record GuildQualityStandard(UUID id, UUID institutionId, String craftId,
 
     static GuildQualityStandard load(CompoundTag tag) {
         Set<QualityGrade> grades = new HashSet<>();
-        ListTag values = tag.getList("AcceptedGrades", Tag.TAG_COMPOUND);
+        ListTag values = MinecraftApi.listOfType(tag, "AcceptedGrades", Tag.TAG_COMPOUND);
         for (int index = 0; index < values.size(); index++) {
-            grades.add(QualityGrade.valueOf(values.getCompound(index).getString("Value")));
+            grades.add(QualityGrade.valueOf(values.getCompoundOrEmpty(index).getStringOr("Value", "")));
         }
-        return new GuildQualityStandard(tag.getUUID("Id"), tag.getUUID("Institution"),
-                tag.getString("Craft"), ItemFingerprint.load(tag.getCompound("Product")),
-                grades, tag.getLong("AdoptedAt"), tag.getBoolean("Active"),
-                tag.getString("Description"));
+        return new GuildQualityStandard(tag.read("Id", UUIDUtil.CODEC).orElseThrow(), tag.read("Institution", UUIDUtil.CODEC).orElseThrow(),
+                tag.getStringOr("Craft", ""), ItemFingerprint.load(tag.getCompoundOrEmpty("Product")),
+                grades, tag.getLongOr("AdoptedAt", 0L), tag.getBooleanOr("Active", false),
+                tag.getStringOr("Description", ""));
     }
 }

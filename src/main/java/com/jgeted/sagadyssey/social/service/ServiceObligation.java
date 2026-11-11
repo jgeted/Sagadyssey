@@ -27,9 +27,9 @@ public record ServiceObligation(ObligationParty responsible, String kind, String
     }
 
     public static ServiceObligation load(CompoundTag tag) {
-        return new ServiceObligation(ObligationParty.valueOf(tag.getString("Party")),
-                tag.getString("Kind"), tag.getString("Description"), tag.getInt("Amount"),
-                tag.getString("Unit"), tag.getLong("Due"),
-                ObligationStatus.valueOf(tag.getString("Status")));
+        return new ServiceObligation(ObligationParty.valueOf(tag.getStringOr("Party", "")),
+                tag.getStringOr("Kind", ""), tag.getStringOr("Description", ""), tag.getIntOr("Amount", 0),
+                tag.getStringOr("Unit", ""), tag.getLongOr("Due", 0L),
+                ObligationStatus.valueOf(tag.getStringOr("Status", "")));
     }
 }

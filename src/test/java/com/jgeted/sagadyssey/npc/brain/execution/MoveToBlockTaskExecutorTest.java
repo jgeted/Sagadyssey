@@ -8,7 +8,7 @@ import com.jgeted.sagadyssey.npc.brain.plan.NpcPlanStatus;
 import com.jgeted.sagadyssey.npc.brain.plan.NpcPlanStep;
 import com.jgeted.sagadyssey.npc.brain.plan.NpcPlanStepStatus;
 import net.minecraft.core.BlockPos;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;
@@ -21,9 +21,9 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class MoveToBlockTaskExecutorTest {
-    private static final ResourceLocation OVERWORLD = ResourceLocation.fromNamespaceAndPath(
+    private static final Identifier OVERWORLD = Identifier.fromNamespaceAndPath(
             "minecraft", "overworld");
-    private static final ResourceLocation NETHER = ResourceLocation.fromNamespaceAndPath(
+    private static final Identifier NETHER = Identifier.fromNamespaceAndPath(
             "minecraft", "the_nether");
 
     @Test
@@ -163,7 +163,7 @@ class MoveToBlockTaskExecutorTest {
         assertEquals(2, driver.moveCalls);
     }
 
-    private static Map<String, String> params(ResourceLocation dimension, int x, int y, int z) {
+    private static Map<String, String> params(Identifier dimension, int x, int y, int z) {
         return Map.of(
                 MoveToBlockTaskExecutor.DIMENSION, dimension.toString(),
                 MoveToBlockTaskExecutor.X, Integer.toString(x),
@@ -208,7 +208,7 @@ class MoveToBlockTaskExecutorTest {
     }
 
     private static final class FakeDriver implements MoveToBlockTaskExecutor.MovementDriver {
-        private final ResourceLocation dimension;
+        private final Identifier dimension;
         private boolean alive = true;
         private boolean validHeight = true;
         private boolean chunkLoaded = true;
@@ -219,12 +219,12 @@ class MoveToBlockTaskExecutorTest {
         private int resetCalls;
         private int stopCalls;
 
-        private FakeDriver(ResourceLocation dimension) {
+        private FakeDriver(Identifier dimension) {
             this.dimension = dimension;
         }
 
         @Override
-        public ResourceLocation dimension() {
+        public Identifier dimension() {
             return dimension;
         }
 

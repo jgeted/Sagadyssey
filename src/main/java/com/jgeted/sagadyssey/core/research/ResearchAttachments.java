@@ -23,7 +23,7 @@ public class ResearchAttachments {
     public static final Supplier<AttachmentType<ResearchPointsData>> RESEARCH_POINTS =
             ATTACHMENT_TYPES.register("research_points", () ->
                     AttachmentType.builder(() -> new ResearchPointsData())
-                            .serialize(ResearchPointsData.CODEC)
+                            .serialize(com.mojang.serialization.MapCodec.assumeMapUnsafe(ResearchPointsData.CODEC))
                             .copyOnDeath()
                             .build()
             );
@@ -32,7 +32,7 @@ public class ResearchAttachments {
     public static final Supplier<AttachmentType<PlayerResearchData>> UNLOCKED_RESEARCH =
             ATTACHMENT_TYPES.register("unlocked_research", () ->
                     AttachmentType.builder(() -> new PlayerResearchData())
-                            .serialize(PlayerResearchData.CODEC)
+                            .serialize(com.mojang.serialization.MapCodec.assumeMapUnsafe(PlayerResearchData.CODEC))
                             .copyOnDeath()
                             .build()
             );

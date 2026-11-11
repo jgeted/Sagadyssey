@@ -1,5 +1,8 @@
 package com.jgeted.sagadyssey.social.guild;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+import net.minecraft.core.UUIDUtil;
+
 import com.jgeted.sagadyssey.worldsim.rights.SubjectRef;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
@@ -29,15 +32,15 @@ public record CraftQualification(UUID id, UUID institutionId, SubjectRef artisan
 
     CompoundTag save() {
         CompoundTag tag = new CompoundTag();
-        tag.putUUID("Id", id);
-        tag.putUUID("Institution", institutionId);
+        tag.store("Id", UUIDUtil.CODEC, id);
+        tag.store("Institution", UUIDUtil.CODEC, institutionId);
         tag.put("Artisan", artisan.save());
         tag.putString("Craft", craftId);
         tag.putString("Rank", rank.name());
         ListTag evidence = new ListTag();
         evidenceIds.forEach(id -> {
             CompoundTag value = new CompoundTag();
-            value.putUUID("Id", id);
+            value.store("Id", UUIDUtil.CODEC, id);
             evidence.add(value);
         });
         tag.put("Evidence", evidence);
@@ -51,12 +54,12 @@ public record CraftQualification(UUID id, UUID institutionId, SubjectRef artisan
 
     static CraftQualification load(CompoundTag tag) {
         List<UUID> evidence = new ArrayList<>();
-        ListTag values = tag.getList("Evidence", Tag.TAG_COMPOUND);
-        for (int index = 0; index < values.size(); index++) evidence.add(values.getCompound(index).getUUID("Id"));
-        return new CraftQualification(tag.getUUID("Id"), tag.getUUID("Institution"),
-                SubjectRef.load(tag.getCompound("Artisan")), tag.getString("Craft"),
-                CraftRank.valueOf(tag.getString("Rank")), evidence,
-                SubjectRef.load(tag.getCompound("IssuedBy")), tag.getLong("IssuedAt"),
-                tag.getLong("ExpiresAt"), tag.getBoolean("Revoked"), tag.getString("Note"));
+        ListTag values = MinecraftApi.listOfType(tag, "Evidence", Tag.TAG_COMPOUND);
+        for (int index = 0; index < values.size(); index++) evidence.add(values.getCompoundOrEmpty(index).read("Id", UUIDUtil.CODEC).orElseThrow());
+        return new CraftQualification(tag.read("Id", UUIDUtil.CODEC).orElseThrow(), tag.read("Institution", UUIDUtil.CODEC).orElseThrow(),
+                SubjectRef.load(tag.getCompoundOrEmpty("Artisan")), tag.getStringOr("Craft", ""),
+                CraftRank.valueOf(tag.getStringOr("Rank", "")), evidence,
+                SubjectRef.load(tag.getCompoundOrEmpty("IssuedBy")), tag.getLongOr("IssuedAt", 0L),
+                tag.getLongOr("ExpiresAt", 0L), tag.getBooleanOr("Revoked", false), tag.getStringOr("Note", ""));
     }
 }

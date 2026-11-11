@@ -1,11 +1,13 @@
 package com.jgeted.sagadyssey.worldsim.rights;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.world.level.saveddata.SavedData;
+import com.jgeted.sagadyssey.worldsim.NbtSavedData;
 
 import javax.annotation.Nullable;
 import java.util.ArrayList;
@@ -17,7 +19,7 @@ import java.util.Set;
 import java.util.UUID;
 
 /** Authoritative world-level snapshot of container defaults, grants, and exceptional claims. */
-public final class RightsStateData extends SavedData {
+public final class RightsStateData extends NbtSavedData {
     public static final String DATA_NAME = "sagadyssey_asset_rights_v2";
     public static final int DATA_VERSION = 2;
     public static final Factory<RightsStateData> FACTORY =
@@ -29,7 +31,7 @@ public final class RightsStateData extends SavedData {
     private final Map<UUID, AssetReservation> reservations = new HashMap<>();
 
     public static RightsStateData get(MinecraftServer server) {
-        return server.overworld().getDataStorage().computeIfAbsent(FACTORY, DATA_NAME);
+        return server.overworld().getDataStorage().computeIfAbsent(FACTORY.type(DATA_NAME));
     }
 
     public ContainerContext ensureContext(UUID id, String locator, SubjectRef custodian,
@@ -254,25 +256,25 @@ public final class RightsStateData extends SavedData {
 
     private static RightsStateData load(CompoundTag tag, HolderLookup.Provider registries) {
         RightsStateData data = new RightsStateData();
-        ListTag contexts = tag.getList("Contexts", Tag.TAG_COMPOUND);
+        ListTag contexts = MinecraftApi.listOfType(tag, "Contexts", Tag.TAG_COMPOUND);
         for (int i = 0; i < contexts.size(); i++) {
-            ContainerContext context = ContainerContext.load(contexts.getCompound(i));
+            ContainerContext context = ContainerContext.load(contexts.getCompoundOrEmpty(i));
             data.contexts.put(context.containerId(), context);
         }
-        ListTag grants = tag.getList("Grants", Tag.TAG_COMPOUND);
+        ListTag grants = MinecraftApi.listOfType(tag, "Grants", Tag.TAG_COMPOUND);
         for (int i = 0; i < grants.size(); i++) {
-            RightGrant grant = RightGrant.load(grants.getCompound(i));
+            RightGrant grant = RightGrant.load(grants.getCompoundOrEmpty(i));
             data.grants.put(grant.id(), grant);
         }
-        ListTag claims = tag.getList("Claims", Tag.TAG_COMPOUND);
+        ListTag claims = MinecraftApi.listOfType(tag, "Claims", Tag.TAG_COMPOUND);
         for (int i = 0; i < claims.size(); i++) {
-            AssetClaim claim = AssetClaim.load(claims.getCompound(i));
+            AssetClaim claim = AssetClaim.load(claims.getCompoundOrEmpty(i));
             data.claims.put(claim.claimId(), claim);
         }
-        ListTag reservations = tag.getList("Reservations", Tag.TAG_COMPOUND);
+        ListTag reservations = MinecraftApi.listOfType(tag, "Reservations", Tag.TAG_COMPOUND);
         for (int i = 0; i < reservations.size(); i++) {
             try {
-                AssetReservation reservation = AssetReservation.load(reservations.getCompound(i));
+                AssetReservation reservation = AssetReservation.load(reservations.getCompoundOrEmpty(i));
                 data.reservations.put(reservation.id(), reservation);
             } catch (RuntimeException ignored) { }
         }

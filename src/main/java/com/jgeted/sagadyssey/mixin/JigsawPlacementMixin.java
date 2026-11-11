@@ -3,10 +3,11 @@ package com.jgeted.sagadyssey.mixin;
 import com.jgeted.sagadyssey.Sagadyssey;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.level.levelgen.structure.Structure;
 import net.minecraft.world.level.levelgen.structure.pools.DimensionPadding;
+import net.minecraft.world.level.levelgen.structure.structures.JigsawStructure;
 import net.minecraft.world.level.levelgen.structure.pools.StructureTemplatePool;
 import net.minecraft.world.level.levelgen.structure.pools.alias.PoolAliasLookup;
 import net.minecraft.world.level.levelgen.structure.templatesystem.LiquidSettings;
@@ -31,32 +32,37 @@ public class JigsawPlacementMixin {
      * 在 addPieces 入口记录调用参数。
      */
     @Inject(
-        method = "addPieces",
+        method = "addPieces(Lnet/minecraft/world/level/levelgen/structure/Structure$GenerationContext;"
+                + "Lnet/minecraft/core/Holder;Ljava/util/Optional;ILnet/minecraft/core/BlockPos;ZLjava/util/Optional;"
+                + "Lnet/minecraft/world/level/levelgen/structure/structures/JigsawStructure$MaxDistance;"
+                + "Lnet/minecraft/world/level/levelgen/structure/pools/alias/PoolAliasLookup;"
+                + "Lnet/minecraft/world/level/levelgen/structure/pools/DimensionPadding;"
+                + "Lnet/minecraft/world/level/levelgen/structure/templatesystem/LiquidSettings;)Ljava/util/Optional;",
         at = @At("HEAD")
     )
     private static void onAddPiecesEntry(
             Structure.GenerationContext context,
             Holder<StructureTemplatePool> startPool,
-            Optional<ResourceLocation> startJigsawName,
+            Optional<Identifier> startJigsawName,
             int maxDepth,
             BlockPos pos,
             boolean useExpansionHack,
             Optional<Heightmap.Types> projectStartToHeightmap,
-            int maxDistanceFromCenter,
+            JigsawStructure.MaxDistance maxDistanceFromCenter,
             PoolAliasLookup poolAliasLookup,
             DimensionPadding dimensionPadding,
             LiquidSettings liquidSettings,
             CallbackInfoReturnable<Optional<Structure.GenerationStub>> cir
     ) {
         String poolName = startPool.unwrapKey()
-                .map(k -> k.location().toString())
+                .map(k -> k.identifier().toString())
                 .orElse("inline");
         String heightmapName = projectStartToHeightmap
                 .map(Heightmap.Types::getSerializationKey)
                 .orElse("none");
         Sagadyssey.LOGGER.info("{} addPieces 入口: pool={} pos={} depth={} heightmap={} maxDist={} jigsawName={} dimPad={}",
                 TAG, poolName, pos, maxDepth, heightmapName, maxDistanceFromCenter,
-                startJigsawName.map(ResourceLocation::toString).orElse("none"),
+                startJigsawName.map(Identifier::toString).orElse("none"),
                 dimensionPadding);
     }
 
@@ -64,25 +70,30 @@ public class JigsawPlacementMixin {
      * 在 addPieces 返回时记录结果。
      */
     @Inject(
-        method = "addPieces",
+        method = "addPieces(Lnet/minecraft/world/level/levelgen/structure/Structure$GenerationContext;"
+                + "Lnet/minecraft/core/Holder;Ljava/util/Optional;ILnet/minecraft/core/BlockPos;ZLjava/util/Optional;"
+                + "Lnet/minecraft/world/level/levelgen/structure/structures/JigsawStructure$MaxDistance;"
+                + "Lnet/minecraft/world/level/levelgen/structure/pools/alias/PoolAliasLookup;"
+                + "Lnet/minecraft/world/level/levelgen/structure/pools/DimensionPadding;"
+                + "Lnet/minecraft/world/level/levelgen/structure/templatesystem/LiquidSettings;)Ljava/util/Optional;",
         at = @At("RETURN")
     )
     private static void onAddPiecesReturn(
             Structure.GenerationContext context,
             Holder<StructureTemplatePool> startPool,
-            Optional<ResourceLocation> startJigsawName,
+            Optional<Identifier> startJigsawName,
             int maxDepth,
             BlockPos pos,
             boolean useExpansionHack,
             Optional<Heightmap.Types> projectStartToHeightmap,
-            int maxDistanceFromCenter,
+            JigsawStructure.MaxDistance maxDistanceFromCenter,
             PoolAliasLookup poolAliasLookup,
             DimensionPadding dimensionPadding,
             LiquidSettings liquidSettings,
             CallbackInfoReturnable<Optional<Structure.GenerationStub>> cir
     ) {
         String poolName = startPool.unwrapKey()
-                .map(k -> k.location().toString())
+                .map(k -> k.identifier().toString())
                 .orElse("inline");
         Optional<Structure.GenerationStub> result = cir.getReturnValue();
         if (result.isEmpty()) {

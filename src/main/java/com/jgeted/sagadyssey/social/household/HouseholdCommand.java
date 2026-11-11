@@ -1,5 +1,7 @@
 package com.jgeted.sagadyssey.social.household;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+
 import com.jgeted.sagadyssey.npc.command.CommandGroupAttachments;
 import com.jgeted.sagadyssey.npc.entity.NpcBase;
 import com.jgeted.sagadyssey.social.character.CharacterRecord;
@@ -74,14 +76,14 @@ public final class HouseholdCommand {
             source.sendFailure(Component.literal("你已经属于一个家庭；不能同时登记在两个家庭。"));
             return 0;
         }
-        String dimension = player.serverLevel().dimension().location().toString();
+        String dimension = player.level().dimension().identifier().toString();
         SettlementRecord settlement = SettlementRegistryData.get(source.getServer())
                 .nearest(dimension, player.blockPosition(), 128.0D);
         HouseholdRecord household = data.create(name, dimension,
                 settlement == null ? null : settlement.id(), character.id(),
-                player.blockPosition(), player.serverLevel().getGameTime());
+                player.blockPosition(), player.level().getGameTime());
         if (household == null) return 0;
-        WorldHistoryData.get(source.getServer()).append(player.serverLevel().getGameTime(),
+        WorldHistoryData.get(source.getServer()).append(player.level().getGameTime(),
                 "household_founded", household.id(), household.name(), character.id().toString(), 12);
         source.sendSuccess(() -> Component.literal("§a已创建家庭“" + household.name()
                 + "”。这不会自动创建工作集团或战斗小队。"), false);
@@ -101,7 +103,7 @@ public final class HouseholdCommand {
         int changed = 0;
         for (NpcBase npc : selected) {
             if (!data.addMember(household.id(), npc.getCharacterId(), role,
-                    player.serverLevel().getGameTime())) continue;
+                    player.level().getGameTime())) continue;
             NpcRelationKind relationKind = relationKind(role);
             int strength = relationStrength(role);
             lives.adjustRelationship(npc.getCharacterId(), household.headCharacterId(), relationKind,
@@ -154,7 +156,7 @@ public final class HouseholdCommand {
         }
         NpcBase npc = selected.getFirst();
         if (!HouseholdData.get(source.getServer()).setHead(household.id(), npc.getCharacterId(),
-                player.serverLevel().getGameTime())) return 0;
+                player.level().getGameTime())) return 0;
         source.sendSuccess(() -> Component.literal("§a" + npc.getNpcName()
                 + " 已成为新户主；原户主变为亲属。"), false);
         return 1;
@@ -167,14 +169,14 @@ public final class HouseholdCommand {
         HouseholdRecord household = manageableHousehold(source, character.id());
         if (household == null) return 0;
         BlockPos pos = clear ? null : lookedBlock(player);
-        String dimension = player.serverLevel().dimension().location().toString();
+        String dimension = player.level().dimension().identifier().toString();
         if (!clear && (pos == null
-                || WarehouseContainers.asContainer(player.serverLevel().getBlockEntity(pos)) == null)) {
+                || WarehouseContainers.asContainer(player.level().getBlockEntity(pos)) == null)) {
             source.sendFailure(Component.literal("请看向二十格以内的单箱、木桶或潜影盒。"));
             return 0;
         }
         if (!clear) {
-            var state = player.serverLevel().getBlockState(pos);
+            var state = player.level().getBlockState(pos);
             if (state.hasProperty(ChestBlock.TYPE) && state.getValue(ChestBlock.TYPE) != ChestType.SINGLE) {
                 source.sendFailure(Component.literal("家庭共享储物请使用单箱，避免双箱两半重复登记。"));
                 return 0;
@@ -228,9 +230,9 @@ public final class HouseholdCommand {
                     + "日，主动贡献=" + care.totalContributions() + "次"), false);
         }
         if (household.sharedStorage() != null
-                && household.dimension().equals(player.serverLevel().dimension().location().toString())
-                && player.serverLevel().hasChunkAt(household.sharedStorage())) {
-            Container pantry = WarehouseContainers.asContainer(player.serverLevel()
+                && household.dimension().equals(player.level().dimension().identifier().toString())
+                && player.level().hasChunkAt(household.sharedStorage())) {
+            Container pantry = WarehouseContainers.asContainer(player.level()
                     .getBlockEntity(household.sharedStorage()));
             if (pantry != null) {
                 int food = NpcFoodItems.edibleItems(pantry);
@@ -244,7 +246,7 @@ public final class HouseholdCommand {
                     + member.role().displayName() + "]"), false);
         }
         if (household.sharedStorage() != null
-                && household.dimension().equals(player.serverLevel().dimension().location().toString())) {
+                && household.dimension().equals(player.level().dimension().identifier().toString())) {
             mark(player, household.sharedStorage());
         }
         return 1;
@@ -257,7 +259,7 @@ public final class HouseholdCommand {
         HouseholdRecord household = manageableHousehold(source, character.id());
         if (household == null) return 0;
         if (!HouseholdData.get(source.getServer()).disband(household.id())) return 0;
-        WorldHistoryData.get(source.getServer()).append(player.serverLevel().getGameTime(),
+        WorldHistoryData.get(source.getServer()).append(player.level().getGameTime(),
                 "household_disbanded", household.id(), household.name(), character.id().toString(), 10);
         source.sendSuccess(() -> Component.literal("§e家庭“" + household.name()
                 + "”已解散；人物关系和各自私人财产仍然保留。"), false);
@@ -271,7 +273,7 @@ public final class HouseholdCommand {
             source.sendFailure(Component.literal("你尚未登记家庭。"));
             return null;
         }
-        if (!source.hasPermission(2) && !household.headCharacterId().equals(characterId)
+        if (!MinecraftApi.hasPermission(source, 2) && !household.headCharacterId().equals(characterId)
                 && !controlsNpcHead(source, household.headCharacterId(), characterId)) {
             source.sendFailure(Component.literal("只有户主或管理员可以修改家庭登记。"));
             return null;
@@ -292,7 +294,7 @@ public final class HouseholdCommand {
     private static List<NpcBase> selectedOwned(ServerPlayer player) {
         List<NpcBase> result = new ArrayList<>();
         for (UUID id : CommandGroupAttachments.get(player).selectedMembers()) {
-            Entity entity = player.serverLevel().getEntity(id);
+            Entity entity = player.level().getEntity(id);
             if (entity instanceof NpcBase npc && npc.isAlive() && npc.isOwnedBy(player.getUUID())) result.add(npc);
         }
         return result;
@@ -341,7 +343,7 @@ public final class HouseholdCommand {
     }
 
     private static void mark(ServerPlayer player, BlockPos pos) {
-        player.serverLevel().sendParticles(player, ParticleTypes.HAPPY_VILLAGER, true,
+        player.level().sendParticles(player, ParticleTypes.HAPPY_VILLAGER, true, false,
                 pos.getX() + 0.5D, pos.getY() + 1.0D, pos.getZ() + 0.5D,
                 24, 0.5D, 0.6D, 0.5D, 0.02D);
     }

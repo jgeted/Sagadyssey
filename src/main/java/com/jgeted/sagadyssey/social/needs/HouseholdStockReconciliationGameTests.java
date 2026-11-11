@@ -1,5 +1,7 @@
 package com.jgeted.sagadyssey.social.needs;
 
+import com.jgeted.sagadyssey.gametest.PortedGameTests.*;
+
 import com.jgeted.sagadyssey.npc.brain.execution.NpcBrainRuntime;
 import com.jgeted.sagadyssey.npc.brain.fieldwork.FieldworkStorage;
 import com.jgeted.sagadyssey.npc.brain.persistence.NpcBehaviorMode;
@@ -37,7 +39,7 @@ public final class HouseholdStockReconciliationGameTests {
         npc.setPersistenceRequired(); npc.setCommand(NpcCommand.WORK);
         NpcBrainRuntime.setMode(npc,NpcBehaviorMode.PLANNED);
         var households=HouseholdData.get(server);
-        var home=households.create("stock-test:"+UUID.randomUUID(),level.dimension().location().toString(),
+        var home=households.create("stock-test:"+UUID.randomUUID(),level.dimension().identifier().toString(),
                 null,npc.getCharacterId(),h.absolutePos(new BlockPos(3,1,5)),level.getGameTime());
         h.assertTrue(home!=null,"original character can form a household");
         var relative=new BlockPos(12,1,5); h.setBlock(relative,Blocks.BARREL);
@@ -45,7 +47,7 @@ public final class HouseholdStockReconciliationGameTests {
                 "assign real household pantry");
         households.setProvisionPlan(new HouseholdProvisionPlan(home.id(),food,fuel,0));
         SupplyFlowService.aggregate(server,level.getGameTime());
-        return new Fixture(home.id(),npc,(Container)h.getBlockEntity(relative));
+        return new Fixture(home.id(),npc,(Container)com.jgeted.sagadyssey.gametest.PortedGameTests.blockEntity(h, relative));
     }
     static NeedRequest need(GameTestHelper h,Fixture f,String category) {
         return NeedRequestData.get(h.getLevel().getServer()).requests().stream()
@@ -56,12 +58,12 @@ public final class HouseholdStockReconciliationGameTests {
     static Container source(GameTestHelper h,Fixture f,Item item,int quantity) {
         var level=h.getLevel();var server=level.getServer();var relative=new BlockPos(2,1,5);
         h.setBlock(relative,Blocks.BARREL);var pos=h.absolutePos(relative);
-        var owner=SubjectRef.household(f.household());String dim=level.dimension().location().toString();
+        var owner=SubjectRef.household(f.household());String dim=level.dimension().identifier().toString();
         var id=ProductionContainerIds.resolve(server,dim,pos);
         RightsStateData.get(server).ensureContext(id,dim+":"+pos.asLong(),owner,owner,AccessPolicy.HOUSEHOLD);
         var point=new FieldworkStorage(dim,pos,id,owner,AccessPolicy.HOUSEHOLD,TransferIntent.DELIVERY,"household-stock-test");
         var flows=SupplyFlowData.get(server);flows.register(point);flows.reveal(owner,id);
-        var inventory=(Container)h.getBlockEntity(relative);inventory.setItem(0,new ItemStack(item,quantity));
+        var inventory=(Container)com.jgeted.sagadyssey.gametest.PortedGameTests.blockEntity(h, relative);inventory.setItem(0,new ItemStack(item,quantity));
         return inventory;
     }
 

@@ -1,13 +1,10 @@
 package com.jgeted.sagadyssey.npc.trade;
 
 import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.world.Container;
 import net.minecraft.world.item.Item;
-import net.minecraft.world.item.ArmorItem;
 import net.minecraft.world.item.BowItem;
-import net.minecraft.world.item.DiggerItem;
-import net.minecraft.world.item.SwordItem;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 
@@ -86,13 +83,13 @@ public final class NpcTradeEvaluator {
     }
 
     private static int intrinsicValueMilli(TradeAsset asset) {
-        ResourceLocation id = ResourceLocation.tryParse(asset.fingerprint().itemId());
+        Identifier id = Identifier.tryParse(asset.fingerprint().itemId());
         if (id == null || !BuiltInRegistries.ITEM.containsKey(id)) return 500;
-        Item item = BuiltInRegistries.ITEM.get(id);
+        Item item = BuiltInRegistries.ITEM.getValue(id);
         if (item == Items.EMERALD) return 1_000;
         ItemStack sample = new ItemStack(item);
-        if (item instanceof ArmorItem) return 5_000;
-        if (item instanceof DiggerItem || item instanceof SwordItem || item instanceof BowItem) return 4_000;
+        if (com.jgeted.sagadyssey.core.MinecraftApi.isArmor(new ItemStack(item))) return 5_000;
+        if (com.jgeted.sagadyssey.core.MinecraftApi.isDigger(new ItemStack(item)) || com.jgeted.sagadyssey.core.MinecraftApi.isSword(new ItemStack(item)) || item instanceof BowItem) return 4_000;
         if (item == Items.IRON_INGOT) return 1_500;
         if (item == Items.COAL || item == Items.CHARCOAL) return 750;
         if (sample.has(net.minecraft.core.component.DataComponents.FOOD)) return 600;
@@ -110,9 +107,9 @@ public final class NpcTradeEvaluator {
     }
 
     private static int incomingPressure(TradeAsset asset, int held) {
-        ResourceLocation id = ResourceLocation.tryParse(asset.fingerprint().itemId());
+        Identifier id = Identifier.tryParse(asset.fingerprint().itemId());
         if (id == null || !BuiltInRegistries.ITEM.containsKey(id)) return 100;
-        Item item = BuiltInRegistries.ITEM.get(id);
+        Item item = BuiltInRegistries.ITEM.getValue(id);
         if (item == Items.EMERALD) return 100;
         ItemStack sample = new ItemStack(item);
         if (sample.has(net.minecraft.core.component.DataComponents.FOOD)) return held < 6 ? 150 : 80;
@@ -123,9 +120,9 @@ public final class NpcTradeEvaluator {
     }
 
     private static int outgoingPressure(TradeAsset asset, int held) {
-        ResourceLocation id = ResourceLocation.tryParse(asset.fingerprint().itemId());
+        Identifier id = Identifier.tryParse(asset.fingerprint().itemId());
         if (id == null || !BuiltInRegistries.ITEM.containsKey(id)) return 110;
-        Item item = BuiltInRegistries.ITEM.get(id);
+        Item item = BuiltInRegistries.ITEM.getValue(id);
         if (item == Items.EMERALD) return held <= asset.quantity() + 3 ? 120 : 100;
         ItemStack sample = new ItemStack(item);
         int reserve = sample.has(net.minecraft.core.component.DataComponents.FOOD) ? 3
@@ -134,9 +131,9 @@ public final class NpcTradeEvaluator {
     }
 
     static int usefulness(TradeAsset asset, Container inventory) {
-        ResourceLocation id = ResourceLocation.tryParse(asset.fingerprint().itemId());
+        Identifier id = Identifier.tryParse(asset.fingerprint().itemId());
         if (id == null || !BuiltInRegistries.ITEM.containsKey(id)) return 0;
-        Item item = BuiltInRegistries.ITEM.get(id);
+        Item item = BuiltInRegistries.ITEM.getValue(id);
         if (item == Items.EMERALD) return 8;
         ItemStack sample = new ItemStack(item);
         int held = 0;

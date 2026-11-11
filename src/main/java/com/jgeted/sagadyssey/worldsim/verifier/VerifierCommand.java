@@ -1,5 +1,7 @@
 package com.jgeted.sagadyssey.worldsim.verifier;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import net.minecraft.commands.CommandSourceStack;
@@ -21,7 +23,7 @@ public final class VerifierCommand {
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
         dispatcher.register(Commands.literal("saga")
                 .then(Commands.literal("verifier")
-                        .requires(source -> source.hasPermission(2))
+                        .requires(source -> MinecraftApi.hasPermission(source, 2))
                         .executes(ctx -> list(ctx.getSource()))
                         .then(Commands.literal("list")
                                 .executes(ctx -> list(ctx.getSource())))

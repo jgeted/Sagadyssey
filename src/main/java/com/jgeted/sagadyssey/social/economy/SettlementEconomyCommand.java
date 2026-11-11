@@ -21,7 +21,7 @@ public final class SettlementEconomyCommand {
             throws com.mojang.brigadier.exceptions.CommandSyntaxException {
         ServerPlayer player = source.getPlayerOrException();
         SettlementRecord settlement = SettlementRegistryData.get(source.getServer()).nearest(
-                player.serverLevel().dimension().location().toString(), player.blockPosition(), 2048.0D);
+                player.level().dimension().identifier().toString(), player.blockPosition(), 2048.0D);
         if (settlement == null) {
             source.sendFailure(Component.literal("附近没有已登记聚落。"));
             return 0;

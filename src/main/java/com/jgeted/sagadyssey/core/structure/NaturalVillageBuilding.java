@@ -1,7 +1,7 @@
 package com.jgeted.sagadyssey.core.structure;
 
 import net.minecraft.core.BlockPos;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.world.level.block.Rotation;
 
 import java.nio.charset.StandardCharsets;
@@ -12,10 +12,10 @@ import java.util.UUID;
 public record NaturalVillageBuilding(String dimension, String structureId, BlockPos startChunkOrigin,
                                      BlockPos settlementCenter, String templateId,
                                      BlockPos buildingOrigin, Rotation rotation) {
-    public static final ResourceLocation SUPPORTED = ResourceLocation.parse("sagadyssey:vilg_2");
+    public static final Identifier SUPPORTED = Identifier.parse("sagadyssey:vilg_2");
 
     public NaturalVillageBuilding {
-        ResourceLocation.parse(dimension);
+        Identifier.parse(dimension);
         if (!SUPPORTED.toString().equals(structureId) || !NaturalVillageLayout.supportedTemplate(templateId)) {
             throw new IllegalArgumentException("Only the explicit vilg_2 structure/building mapping is supported");
         }

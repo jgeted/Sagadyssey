@@ -14,7 +14,7 @@ import net.minecraft.client.model.geom.builders.MeshDefinition;
 import net.minecraft.client.model.geom.builders.PartDefinition;
 
 /** 覆盖完整躯干、袖子和下装的身份服装模型。 */
-public final class NpcIdentityClothingModel extends HumanoidModel<NpcBase> {
+public final class NpcIdentityClothingModel extends HumanoidModel<NpcRenderState> {
     private final ModelPart collar;
     private final ModelPart malePanel;
     private final ModelPart femaleSkirtUpper;
@@ -26,8 +26,11 @@ public final class NpcIdentityClothingModel extends HumanoidModel<NpcBase> {
     private final ModelPart mantle;
     private final ModelPart cloak;
 
-    public NpcIdentityClothingModel(ModelPart root) {
+    private final NpcModel parent;
+
+    public NpcIdentityClothingModel(ModelPart root, NpcModel parent) {
         super(root);
+        this.parent = parent;
         this.collar = body.getChild("collar");
         this.malePanel = body.getChild("male_panel");
         this.femaleSkirtUpper = body.getChild("female_skirt_upper");
@@ -45,8 +48,8 @@ public final class NpcIdentityClothingModel extends HumanoidModel<NpcBase> {
         PartDefinition root = mesh.getRoot();
         CubeDeformation cloth = new CubeDeformation(0.32F);
 
-        root.addOrReplaceChild("head", CubeListBuilder.create(), PartPose.ZERO);
-        root.addOrReplaceChild("hat", CubeListBuilder.create(), PartPose.ZERO);
+        PartDefinition head = root.addOrReplaceChild("head", CubeListBuilder.create(), PartPose.ZERO);
+        head.addOrReplaceChild("hat", CubeListBuilder.create(), PartPose.ZERO);
         PartDefinition body = root.addOrReplaceChild("body",
                 CubeListBuilder.create().texOffs(16, 16)
                         .addBox(-4.0F, 0.0F, -2.0F, 8.0F, 12.0F, 4.0F, cloth),
@@ -102,14 +105,22 @@ public final class NpcIdentityClothingModel extends HumanoidModel<NpcBase> {
         return LayerDefinition.create(mesh, 64, 64);
     }
 
-    public void copyAndConfigure(NpcModel parent, NpcBase entity) {
-        parent.copyPropertiesTo(this);
-        NpcSocialStatus status = entity.getSocialStatus();
-        boolean female = entity.getGender() == NpcGender.FEMALE;
+    @Override
+    public void setupAnim(NpcRenderState state) {
+        super.setupAnim(state);
+        parent.setupAnim(state);
+        head.loadPose(parent.head.storePose());
+        body.loadPose(parent.body.storePose());
+        leftArm.loadPose(parent.leftArm.storePose());
+        rightArm.loadPose(parent.rightArm.storePose());
+        leftLeg.loadPose(parent.leftLeg.storePose());
+        rightLeg.loadPose(parent.rightLeg.storePose());
+        NpcSocialStatus status = state.socialStatus;
+        boolean female = state.gender == NpcGender.FEMALE;
         int tier = status.ordinal();
-        boolean militaryCut = entity.getProfession() == NpcProfession.WARRIOR
-                || entity.getProfession() == NpcProfession.ARCHER
-                || entity.getProfession() == NpcProfession.HEAVY;
+        boolean militaryCut = state.profession == NpcProfession.WARRIOR
+                || state.profession == NpcProfession.ARCHER
+                || state.profession == NpcProfession.HEAVY;
         boolean longDress = female && !militaryCut;
 
         collar.visible = tier >= NpcSocialStatus.FREEMAN.ordinal();
@@ -121,7 +132,7 @@ public final class NpcIdentityClothingModel extends HumanoidModel<NpcBase> {
         boolean workDress = longDress && tier <= NpcSocialStatus.FREEMAN.ordinal();
         femaleApronUpper.visible = workDress;
         // 骑乘时下摆分片随腿展开，长围裙下片则视为束起，避免贯穿马背。
-        femaleApronLower.visible = workDress && !entity.isPassenger();
+        femaleApronLower.visible = workDress && !state.mounted;
         mantle.visible = status == NpcSocialStatus.LORD
                 || status == NpcSocialStatus.DUKE || status == NpcSocialStatus.KING;
         cloak.visible = status == NpcSocialStatus.DUKE || status == NpcSocialStatus.KING;
@@ -133,13 +144,13 @@ public final class NpcIdentityClothingModel extends HumanoidModel<NpcBase> {
         cloak.xScale = female ? 0.95F : 1.0F;
 
         if (longDress) {
-            copySkirtTransform(femaleSkirtLeft, leftLeg, entity.isPassenger());
-            copySkirtTransform(femaleSkirtRight, rightLeg, entity.isPassenger());
+            copySkirtTransform(femaleSkirtLeft, leftLeg, state.mounted);
+            copySkirtTransform(femaleSkirtRight, rightLeg, state.mounted);
         }
     }
 
     private static void copySkirtTransform(ModelPart skirt, ModelPart leg, boolean riding) {
-        skirt.copyFrom(leg);
+        skirt.loadPose(leg.storePose());
         float motionScale = riding ? 0.72F : 0.34F;
         skirt.xRot = leg.xRot * motionScale;
         skirt.yRot = leg.yRot * (riding ? 0.82F : 0.35F);

@@ -1,11 +1,13 @@
 package com.jgeted.sagadyssey.social.combat;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.world.level.saveddata.SavedData;
+import com.jgeted.sagadyssey.worldsim.NbtSavedData;
 
 import javax.annotation.Nullable;
 import java.util.HashMap;
@@ -13,14 +15,14 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
-public final class InjuryData extends SavedData {
+public final class InjuryData extends NbtSavedData {
     private static final String DATA_NAME = "sagadyssey_injuries";
     private static final Factory<InjuryData> FACTORY = new Factory<>(InjuryData::new, InjuryData::load);
     private final Map<UUID, WoundRecord> wounds = new HashMap<>();
     private final Map<UUID, TreatmentRecord> treatments = new HashMap<>();
 
     public static InjuryData get(MinecraftServer server) {
-        return server.overworld().getDataStorage().computeIfAbsent(FACTORY, DATA_NAME);
+        return server.overworld().getDataStorage().computeIfAbsent(FACTORY.type(DATA_NAME));
     }
 
     boolean add(WoundRecord wound) {
@@ -97,14 +99,14 @@ public final class InjuryData extends SavedData {
 
     private static InjuryData load(CompoundTag tag, HolderLookup.Provider registries) {
         InjuryData data = new InjuryData();
-        ListTag wounds = tag.getList("Wounds", Tag.TAG_COMPOUND);
+        ListTag wounds = MinecraftApi.listOfType(tag, "Wounds", Tag.TAG_COMPOUND);
         for (int index = 0; index < wounds.size(); index++) {
-            WoundRecord value = WoundRecord.load(wounds.getCompound(index));
+            WoundRecord value = WoundRecord.load(wounds.getCompoundOrEmpty(index));
             data.wounds.put(value.id(), value);
         }
-        ListTag treatments = tag.getList("Treatments", Tag.TAG_COMPOUND);
+        ListTag treatments = MinecraftApi.listOfType(tag, "Treatments", Tag.TAG_COMPOUND);
         for (int index = 0; index < treatments.size(); index++) {
-            TreatmentRecord value = TreatmentRecord.load(treatments.getCompound(index));
+            TreatmentRecord value = TreatmentRecord.load(treatments.getCompoundOrEmpty(index));
             data.treatments.put(value.id(), value);
         }
         return data;

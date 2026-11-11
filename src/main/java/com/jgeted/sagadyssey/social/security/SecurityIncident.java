@@ -1,5 +1,8 @@
 package com.jgeted.sagadyssey.social.security;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+import net.minecraft.core.UUIDUtil;
+
 import com.jgeted.sagadyssey.social.justice.EvidenceRef;
 import com.jgeted.sagadyssey.worldsim.rights.SubjectRef;
 import net.minecraft.core.BlockPos;
@@ -73,8 +76,8 @@ public record SecurityIncident(UUID id, UUID settlementId, IncidentType type,
 
     CompoundTag save() {
         CompoundTag tag = new CompoundTag();
-        tag.putUUID("Id", id);
-        tag.putUUID("Settlement", settlementId);
+        tag.store("Id", UUIDUtil.CODEC, id);
+        tag.store("Settlement", UUIDUtil.CODEC, settlementId);
         tag.putString("Type", type.name());
         tag.putString("Dimension", dimension);
         tag.putLong("Position", position.asLong());
@@ -98,25 +101,25 @@ public record SecurityIncident(UUID id, UUID settlementId, IncidentType type,
 
     static SecurityIncident load(CompoundTag tag) {
         List<WitnessObservation> witnesses = new ArrayList<>();
-        ListTag witnessTags = tag.getList("Witnesses", Tag.TAG_COMPOUND);
+        ListTag witnessTags = MinecraftApi.listOfType(tag, "Witnesses", Tag.TAG_COMPOUND);
         for (int index = 0; index < witnessTags.size(); index++) {
-            witnesses.add(WitnessObservation.load(witnessTags.getCompound(index)));
+            witnesses.add(WitnessObservation.load(witnessTags.getCompoundOrEmpty(index)));
         }
         List<EvidenceRef> evidence = new ArrayList<>();
-        ListTag evidenceTags = tag.getList("Evidence", Tag.TAG_COMPOUND);
+        ListTag evidenceTags = MinecraftApi.listOfType(tag, "Evidence", Tag.TAG_COMPOUND);
         for (int index = 0; index < evidenceTags.size(); index++) {
-            evidence.add(EvidenceRef.load(evidenceTags.getCompound(index)));
+            evidence.add(EvidenceRef.load(evidenceTags.getCompoundOrEmpty(index)));
         }
-        return new SecurityIncident(tag.getUUID("Id"), tag.getUUID("Settlement"),
-                IncidentType.valueOf(tag.getString("Type")), tag.getString("Dimension"),
-                BlockPos.of(tag.getLong("Position")),
-                tag.contains("Victim") ? SubjectRef.load(tag.getCompound("Victim")) : null,
+        return new SecurityIncident(tag.read("Id", UUIDUtil.CODEC).orElseThrow(), tag.read("Settlement", UUIDUtil.CODEC).orElseThrow(),
+                IncidentType.valueOf(tag.getStringOr("Type", "")), tag.getStringOr("Dimension", ""),
+                BlockPos.of(tag.getLongOr("Position", 0L)),
+                tag.contains("Victim") ? SubjectRef.load(tag.getCompoundOrEmpty("Victim")) : null,
                 tag.contains("AllegedOffender")
-                        ? SubjectRef.load(tag.getCompound("AllegedOffender")) : null,
-                tag.getInt("Severity"), SubjectRef.load(tag.getCompound("ReportedBy")),
-                tag.getLong("ReportedAt"), IncidentStatus.valueOf(tag.getString("Status")),
+                        ? SubjectRef.load(tag.getCompoundOrEmpty("AllegedOffender")) : null,
+                tag.getIntOr("Severity", 0), SubjectRef.load(tag.getCompoundOrEmpty("ReportedBy")),
+                tag.getLongOr("ReportedAt", 0L), IncidentStatus.valueOf(tag.getStringOr("Status", "")),
                 witnesses, evidence,
-                tag.contains("VerifiedBy") ? SubjectRef.load(tag.getCompound("VerifiedBy")) : null,
-                tag.getString("Note"), tag.getInt("Revision"));
+                tag.contains("VerifiedBy") ? SubjectRef.load(tag.getCompoundOrEmpty("VerifiedBy")) : null,
+                tag.getStringOr("Note", ""), tag.getIntOr("Revision", 0));
     }
 }

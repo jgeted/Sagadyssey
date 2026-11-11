@@ -1,5 +1,7 @@
 package com.jgeted.sagadyssey.social.logistics;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+
 import com.jgeted.sagadyssey.social.history.WorldHistoryData;
 import com.jgeted.sagadyssey.social.work.NpcWorkContext;
 import com.jgeted.sagadyssey.worldsim.transfer.ContainerIds;
@@ -11,14 +13,14 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.resources.ResourceKey;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.Container;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntity;
-import net.minecraft.world.level.saveddata.SavedData;
+import com.jgeted.sagadyssey.worldsim.NbtSavedData;
 import net.minecraft.core.registries.BuiltInRegistries;
 
 import javax.annotation.Nullable;
@@ -30,7 +32,7 @@ import java.util.Map;
 import java.util.UUID;
 
 /** 仓库索引和运输订单；库存数量永远从实际容器即时读取。 */
-public final class LogisticsData extends SavedData {
+public final class LogisticsData extends NbtSavedData {
     public static final int MAX_ORDER_ITEMS = 1_728;
     public static final int MAX_OPEN_ORDERS_PER_CHARACTER = 64;
     public static final int MAX_WAREHOUSES_PER_SETTLEMENT = 64;
@@ -44,7 +46,7 @@ public final class LogisticsData extends SavedData {
     private final Map<UUID, LogisticsOrderRecord> orders = new HashMap<>();
 
     public static LogisticsData get(MinecraftServer server) {
-        return server.overworld().getDataStorage().computeIfAbsent(FACTORY, DATA_NAME);
+        return server.overworld().getDataStorage().computeIfAbsent(FACTORY.type(DATA_NAME));
     }
 
     public List<WarehouseRecord> warehouses() {
@@ -100,7 +102,7 @@ public final class LogisticsData extends SavedData {
         WarehouseRecord source = warehouses.get(sourceId);
         WarehouseRecord destination = warehouses.get(destinationId);
         if (!source.dimension().equals(destination.dimension())) return null;
-        ResourceLocation item = ResourceLocation.tryParse(itemId);
+        Identifier item = Identifier.tryParse(itemId);
         if (item == null || !BuiltInRegistries.ITEM.containsKey(item)) return null;
         LogisticsOrderRecord record = new LogisticsOrderRecord(UUID.randomUUID(), sourceId, destinationId,
                 item.toString(), count, 0, LogisticsOrderStatus.PLANNED, characterId, gameTime,
@@ -332,7 +334,7 @@ public final class LogisticsData extends SavedData {
 
     @Nullable
     private static ServerLevel level(MinecraftServer server, String dimension) {
-        ResourceLocation id = ResourceLocation.tryParse(dimension);
+        Identifier id = Identifier.tryParse(dimension);
         if (id == null) return null;
         ResourceKey<Level> key = ResourceKey.create(Registries.DIMENSION, id);
         return server.getLevel(key);
@@ -351,14 +353,14 @@ public final class LogisticsData extends SavedData {
 
     private static LogisticsData load(CompoundTag tag, HolderLookup.Provider registries) {
         LogisticsData data = new LogisticsData();
-        ListTag warehouseList = tag.getList("Warehouses", Tag.TAG_COMPOUND);
+        ListTag warehouseList = MinecraftApi.listOfType(tag, "Warehouses", Tag.TAG_COMPOUND);
         for (int i = 0; i < warehouseList.size(); i++) {
-            WarehouseRecord record = WarehouseRecord.load(warehouseList.getCompound(i));
+            WarehouseRecord record = WarehouseRecord.load(warehouseList.getCompoundOrEmpty(i));
             data.warehouses.put(record.id(), record);
         }
-        ListTag orderList = tag.getList("Orders", Tag.TAG_COMPOUND);
+        ListTag orderList = MinecraftApi.listOfType(tag, "Orders", Tag.TAG_COMPOUND);
         for (int i = 0; i < orderList.size(); i++) {
-            LogisticsOrderRecord record = LogisticsOrderRecord.load(orderList.getCompound(i));
+            LogisticsOrderRecord record = LogisticsOrderRecord.load(orderList.getCompoundOrEmpty(i));
             data.orders.put(record.id(), record);
         }
         return data;

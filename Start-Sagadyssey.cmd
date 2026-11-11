@@ -14,7 +14,7 @@ if not exist "%~dp0gradlew.bat" goto wrapper_error
 
 if /i "%~1"=="--check" goto check
 
-echo Starting Minecraft 1.21.1 with Sagadyssey...
+echo Starting Minecraft 1.21.11 with Sagadyssey...
 echo Please wait while Gradle prepares the game.
 echo Keep this window open until you exit Minecraft.
 echo.

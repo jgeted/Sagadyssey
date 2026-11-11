@@ -1,5 +1,8 @@
 package com.jgeted.sagadyssey.social.combat;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+import net.minecraft.core.UUIDUtil;
+
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
@@ -51,8 +54,8 @@ public record CombatEncounter(UUID id, @Nullable UUID settlementId,
 
     CompoundTag save() {
         CompoundTag tag = new CompoundTag();
-        tag.putUUID("Id", id);
-        if (settlementId != null) tag.putUUID("Settlement", settlementId);
+        tag.store("Id", UUIDUtil.CODEC, id);
+        if (settlementId != null) tag.store("Settlement", UUIDUtil.CODEC, settlementId);
         tag.putString("Dimension", dimension);
         tag.putLong("Center", center.asLong());
         tag.putInt("Radius", radius);
@@ -71,16 +74,16 @@ public record CombatEncounter(UUID id, @Nullable UUID settlementId,
 
     static CombatEncounter load(CompoundTag tag) {
         List<CombatSide> sides = new ArrayList<>();
-        ListTag sideTags = tag.getList("Sides", Tag.TAG_COMPOUND);
-        for (int index = 0; index < sideTags.size(); index++) sides.add(CombatSide.load(sideTags.getCompound(index)));
+        ListTag sideTags = MinecraftApi.listOfType(tag, "Sides", Tag.TAG_COMPOUND);
+        for (int index = 0; index < sideTags.size(); index++) sides.add(CombatSide.load(sideTags.getCompoundOrEmpty(index)));
         List<EncounterEvent> events = new ArrayList<>();
-        ListTag eventTags = tag.getList("Events", Tag.TAG_COMPOUND);
-        for (int index = 0; index < eventTags.size(); index++) events.add(EncounterEvent.load(eventTags.getCompound(index)));
-        return new CombatEncounter(tag.getUUID("Id"),
-                tag.hasUUID("Settlement") ? tag.getUUID("Settlement") : null,
-                tag.getString("Dimension"), BlockPos.of(tag.getLong("Center")),
-                tag.getInt("Radius"), tag.getLong("StartedAt"), tag.getLong("EndedAt"),
-                EncounterStatus.valueOf(tag.getString("Status")), sides, events,
-                tag.getInt("Revision"));
+        ListTag eventTags = MinecraftApi.listOfType(tag, "Events", Tag.TAG_COMPOUND);
+        for (int index = 0; index < eventTags.size(); index++) events.add(EncounterEvent.load(eventTags.getCompoundOrEmpty(index)));
+        return new CombatEncounter(tag.read("Id", UUIDUtil.CODEC).orElseThrow(),
+                tag.read("Settlement", UUIDUtil.CODEC).isPresent() ? tag.read("Settlement", UUIDUtil.CODEC).orElseThrow() : null,
+                tag.getStringOr("Dimension", ""), BlockPos.of(tag.getLongOr("Center", 0L)),
+                tag.getIntOr("Radius", 0), tag.getLongOr("StartedAt", 0L), tag.getLongOr("EndedAt", 0L),
+                EncounterStatus.valueOf(tag.getStringOr("Status", "")), sides, events,
+                tag.getIntOr("Revision", 0));
     }
 }

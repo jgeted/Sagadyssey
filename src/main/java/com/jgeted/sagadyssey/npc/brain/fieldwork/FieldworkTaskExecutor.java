@@ -6,17 +6,17 @@ import com.jgeted.sagadyssey.npc.brain.plan.*;
 import com.jgeted.sagadyssey.npc.entity.NpcAction;
 import com.jgeted.sagadyssey.npc.entity.NpcBase;
 import net.minecraft.core.BlockPos;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.world.InteractionHand;
 import java.util.*;
 
 /** 五种职业步骤共用恢复/预留规则。入库使用独立统一转移执行器。 */
 public final class FieldworkTaskExecutor implements NpcTaskExecutor {
-    private final ResourceLocation id;
+    private final Identifier id;
     private final Map<String, Movement> movements = new HashMap<>();
     @Override public void forget(UUID body,UUID plan){movements.keySet().removeIf(k->k.startsWith(plan+":"));}
-    public FieldworkTaskExecutor(ResourceLocation id) { this.id = id; }
-    @Override public ResourceLocation id() { return id; }
+    public FieldworkTaskExecutor(Identifier id) { this.id = id; }
+    @Override public Identifier id() { return id; }
     @Override public TaskTickResult start(NpcExecutionContext c, NpcPlan p, NpcPlanStep s) { return execute(c, p, s); }
     @Override public TaskTickResult tick(NpcExecutionContext c, NpcPlan p, NpcPlanStep s) { return execute(c, p, s); }
     @Override public TaskTickResult recover(NpcExecutionContext c, NpcPlan p, NpcPlanStep s) {
@@ -63,7 +63,7 @@ public final class FieldworkTaskExecutor implements NpcTaskExecutor {
             if (!recorded.action().equals(action)) return TaskTickResult.failed("回执键与当前作业负载冲突，拒绝不安全恢复");
             return TaskTickResult.stepSucceeded("已有单方块提交回执，未重复动作");
         }
-        if (!action.dimension().equals(context.level().dimension().location().toString())) return TaskTickResult.failed("作业维度已变化");
+        if (!action.dimension().equals(context.level().dimension().identifier().toString())) return TaskTickResult.failed("作业维度已变化");
         if (!context.level().hasChunkAt(action.target())) return blocked("CHUNK_UNLOADED", "作业区块暂未加载", now + 100);
         if (action.operation() == FieldworkAction.Operation.RECOVER_SCAFFOLD && context.level().getBlockState(action.target()).isAir()) {
             // 外部破坏没有可回收产物；只关闭义务，绝不能发放一份虚构材料。
@@ -177,7 +177,7 @@ public final class FieldworkTaskExecutor implements NpcTaskExecutor {
         // 记忆真实作业目标，而非恰好失败的导航节点。
         BlockPos target = p.steps().stream().filter(step -> step.params().containsKey("operation"))
                 .findFirst().map(step -> FieldworkTarget.position(step.params())).orElse(pos);
-        data.rememberUnreachable(c.npcId(), c.level().dimension().location().toString(), target, c.gameTime(), c.gameTime() + 600, reason);
+        data.rememberUnreachable(c.npcId(), c.level().dimension().identifier().toString(), target, c.gameTime(), c.gameTime() + 600, reason);
         c.npc().getNavigation().stop();
         return TaskTickResult.failed(reason);
     }

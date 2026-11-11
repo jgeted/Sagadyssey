@@ -116,7 +116,7 @@ public class NpcRecruitScreen extends Screen {
                         ? "招募（花费 " + recruitmentCost + " 绿宝石）"
                         : "该身份不可直接招募"),
                 btn -> {
-                    PacketDistributor.sendToServer(new NpcInteractionPacket(npcId, "recruit"));
+                    net.neoforged.neoforge.client.network.ClientPacketDistributor.sendToServer(new NpcInteractionPacket(npcId, "recruit"));
                     this.onClose();
                 })
                 .bounds(recruitX, recruitY, recruitBtnW, 20)

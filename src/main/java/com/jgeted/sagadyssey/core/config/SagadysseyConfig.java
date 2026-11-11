@@ -13,6 +13,7 @@ public class SagadysseyConfig {
     public static final ModConfigSpec.IntValue CHALLENGE_ADVANCEMENT_POINTS;
     public static final ModConfigSpec.BooleanValue ENABLE_DEBUG_LOG;
     public static final ModConfigSpec.DoubleValue NPC_SPAWN_CHANCE;
+    public static final ModConfigSpec.BooleanValue ENABLE_SETTLEMENT_INDUSTRIES;
 
     /** NPC 出生带坐骑概率（默认 50%） */
     public static final ModConfigSpec.DoubleValue MOUNT_SPAWN_CHANCE;
@@ -74,6 +75,9 @@ public class SagadysseyConfig {
         SOCIETY_DECLINE_TICKS=builder.defineInRange("shortageObservationTicks",48000,24000,960000);
         SOCIETY_RECOVERY_TICKS=builder.defineInRange("recoveryObservationTicks",24000,12000,960000);
         SOCIETY_FOOD_SURPLUS=builder.defineInRange("foodSurplusBeforeDonation",20,20,256);
+        ENABLE_SETTLEMENT_INDUSTRIES = builder
+                .comment("允许已登记且具备合法设施与投入的自然聚落使用内部产业；不建立新的产权或设施")
+                .define("enableSettlementIndustries", false);
         builder.pop();
         SPEC = builder.build();
     }

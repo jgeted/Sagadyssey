@@ -35,7 +35,7 @@ import io.netty.handler.codec.DecoderException;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.neoforge.network.PacketDistributor;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
@@ -56,7 +56,7 @@ public record SubmitTradeProposalPacket(int npcEntityId, UUID sessionId, int exp
     }
 
     public static final Type<SubmitTradeProposalPacket> TYPE = new Type<>(
-            ResourceLocation.fromNamespaceAndPath(Sagadyssey.MOD_ID, "submit_trade_v2"));
+            Identifier.fromNamespaceAndPath(Sagadyssey.MOD_ID, "submit_trade_v2"));
     public static final StreamCodec<ByteBuf, SubmitTradeProposalPacket> STREAM_CODEC = StreamCodec.of(
             SubmitTradeProposalPacket::write, SubmitTradeProposalPacket::read);
     @Override public Type<? extends CustomPacketPayload> type() { return TYPE; }
@@ -116,15 +116,15 @@ public record SubmitTradeProposalPacket(int npcEntityId, UUID sessionId, int exp
         context.enqueueWork(() -> {
             if (!(context.player() instanceof ServerPlayer player)
                     || !NetworkRateLimiter.allow(player, "submit_trade_v2", 4)
-                    || !(player.serverLevel().getEntity(packet.npcEntityId) instanceof NpcBase npc)
+                    || !(player.level().getEntity(packet.npcEntityId) instanceof NpcBase npc)
                     || player.distanceToSqr(npc) > 36.0D) return;
             UUID playerId = CharacterRegistry.currentId(player);
-            TradeSessionData data = TradeSessionData.get(player.server);
+            TradeSessionData data = TradeSessionData.get(player.level().getServer());
             TradeSession before = data.session(packet.sessionId);
             if (playerId == null || before == null || !before.playerId().equals(playerId)
                     || !before.npcId().equals(npc.getCharacterId())) return;
-            long now = player.serverLevel().getGameTime();
-            boolean directServiceParty = ServiceRelationshipData.get(player.server)
+            long now = player.level().getGameTime();
+            boolean directServiceParty = ServiceRelationshipData.get(player.level().getServer())
                     .hasActiveBetween(playerId, npc.getCharacterId(), now);
             NpcTradeAccessPolicy.Decision tradeAccess = NpcTradeAccessPolicy.evaluate(
                     FactionAttachments.getStandings(player), npc.getFaction(), directServiceParty);
@@ -132,7 +132,7 @@ public record SubmitTradeProposalPacket(int npcEntityId, UUID sessionId, int exp
                 TradeSession cancelled = before.finish(TradeSessionStatus.CANCELLED,
                         tradeAccess.explanation());
                 data.put(cancelled);
-                RightsStateData rights = RightsStateData.get(player.server);
+                RightsStateData rights = RightsStateData.get(player.level().getServer());
                 rights.releaseReservations(cancelled.reservationToken());
                 player.displayClientMessage(Component.literal("§c" + tradeAccess.explanation()), true);
                 PacketDistributor.sendToPlayer(player,
@@ -143,9 +143,9 @@ public record SubmitTradeProposalPacket(int npcEntityId, UUID sessionId, int exp
                     before.playerContainerId(), new TransferEndpoint(before.playerContainerId(), player.getInventory()),
                     before.npcContainerId(), new TransferEndpoint(before.npcContainerId(), npc.getEquipmentInventory()));
             try {
-                SettlementRecord localSettlement = SettlementRegistryData.get(player.server).nearest(
-                        player.serverLevel().dimension().location().toString(), npc.blockPosition(), 256.0D);
-                NpcLifeRecord life = NpcLifeData.get(player.server).record(npc.getCharacterId());
+                SettlementRecord localSettlement = SettlementRegistryData.get(player.level().getServer()).nearest(
+                        player.level().dimension().identifier().toString(), npc.blockPosition(), 256.0D);
+                NpcLifeRecord life = NpcLifeData.get(player.level().getServer()).record(npc.getCharacterId());
                 int relationship = life == null ? 0 : life.relations().stream()
                         .filter(value -> value.otherCharacterId().equals(playerId))
                         .mapToInt(value -> value.strength()).findFirst().orElse(0);
@@ -155,29 +155,29 @@ public record SubmitTradeProposalPacket(int npcEntityId, UUID sessionId, int exp
                 int routeRisk = (awayFromHome ? 800 : 0)
                         + Math.max(0, 50 - npc.getMoral()) * 20;
                 MerchantMarketKnowledgeData merchantKnowledge =
-                        MerchantMarketKnowledgeData.get(player.server);
+                        MerchantMarketKnowledgeData.get(player.level().getServer());
                 if (localSettlement != null && npc.getProfession() == NpcProfession.TRADER) {
                     merchantKnowledge.observe(npc.getCharacterId(), localSettlement.id(),
-                            npc.getEquipmentInventory(), LocalMarketData.get(player.server), now);
+                            npc.getEquipmentInventory(), LocalMarketData.get(player.level().getServer()), now);
                 }
                 TradeEvaluationContext evaluationContext = new TradeEvaluationContext(
                         localSettlement == null ? null : localSettlement.id(),
-                        LocalMarketData.get(player.server), now, relationship,
+                        LocalMarketData.get(player.level().getServer()), now, relationship,
                         awayFromHome ? 500 : 0, routeRisk, tradeAccess.priceBasisPoints(),
                         npc.getProfession() == NpcProfession.TRADER ? npc.getCharacterId() : null,
                         npc.getProfession() == NpcProfession.TRADER ? merchantKnowledge : null);
-                RightsStateData rights = RightsStateData.get(player.server);
+                RightsStateData rights = RightsStateData.get(player.level().getServer());
                 TradeSession updated = TradeNegotiationService.propose(data, before.id(),
                         packet.expectedRevision, playerId, TradeIntent.SPOT_PURCHASE,
                         packet.playerOffers, packet.npcOffers,
                         endpoints, now, evaluationContext, rights);
                 if (updated.status() == TradeSessionStatus.ACCEPTED) {
                     var receipt = TradeSettlementService.commit(updated, endpoints,
-                            rights, TransferLedgerData.get(player.server),
+                            rights, TransferLedgerData.get(player.level().getServer()),
                             now);
                     if (receipt.successful() && localSettlement != null) {
                         recordMarketTrade(playerId, npc.getCharacterId(), localSettlement.id(),
-                                updated, now, LocalMarketData.get(player.server));
+                                updated, now, LocalMarketData.get(player.level().getServer()));
                     }
                     updated = updated.finish(receipt.successful() ? TradeSessionStatus.COMMITTED
                             : TradeSessionStatus.FAILED, receipt.successful()

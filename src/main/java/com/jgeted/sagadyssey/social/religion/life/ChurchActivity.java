@@ -1,5 +1,7 @@
 package com.jgeted.sagadyssey.social.religion.life;
 
+import net.minecraft.core.UUIDUtil;
+
 import com.jgeted.sagadyssey.social.institution.OfficeAuthority;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.*;
@@ -48,15 +50,15 @@ public record ChurchActivity(UUID id,UUID temple,Kind kind,BlockPos venue,UUID s
     public ChurchActivity defer(long now,String reason){return copy(host,Stage.ASSEMBLING,work,attempts+1,now+100,now,reason,consent);}
     private ChurchActivity copy(UUID actor,Stage next,int done,int tries,long retry,long now,String why,Set<UUID> accepted){return new ChurchActivity(id,temple,kind,venue,subject,source,invited,accepted,minimum,scheduled,deadline,duration,actor,next,done,tries,retry,now,why);}
     public String token(){return "church-life:"+id;}
-    public CompoundTag save(){var t=new CompoundTag();t.putUUID("Id",id);t.putUUID("Temple",temple);t.putString("Kind",kind.name());t.putLong("Venue",venue.asLong());
-        if(subject!=null)t.putUUID("Subject",subject);if(source!=null)t.putUUID("Source",source);if(host!=null)t.putUUID("Host",host);
+    public CompoundTag save(){var t=new CompoundTag();t.store("Id", UUIDUtil.CODEC,id);t.store("Temple", UUIDUtil.CODEC,temple);t.putString("Kind",kind.name());t.putLong("Venue",venue.asLong());
+        if(subject!=null)t.store("Subject", UUIDUtil.CODEC,subject);if(source!=null)t.store("Source", UUIDUtil.CODEC,source);if(host!=null)t.store("Host", UUIDUtil.CODEC,host);
         t.put("Invited",people(invited));t.put("Consent",people(consent));t.putInt("Minimum",minimum);t.putLong("Scheduled",scheduled);t.putLong("Deadline",deadline);t.putInt("Duration",duration);
         t.putString("Stage",stage.name());t.putInt("Work",work);t.putInt("Attempts",attempts);t.putLong("Retry",retryAt);t.putLong("Updated",updated);t.putString("Detail",detail);return t;}
-    static ListTag people(Collection<UUID> ids){var l=new ListTag();for(var id:ids){var t=new CompoundTag();t.putUUID("Person",id);l.add(t);}return l;}
+    static ListTag people(Collection<UUID> ids){var l=new ListTag();for(var id:ids){var t=new CompoundTag();t.store("Person", UUIDUtil.CODEC,id);l.add(t);}return l;}
     static List<UUID> people(CompoundTag t,String key){var ids=new ArrayList<UUID>();for(var e:ChurchLifeData.list(t,key,16)){ids.add(ChurchLifeData.uuid((CompoundTag)e,"Person"));}if(new HashSet<>(ids).size()!=ids.size())throw new IllegalArgumentException("duplicate person");return ids;}
     public static ChurchActivity load(CompoundTag t){for(var n:List.of("Kind","Stage","Detail"))ChurchLifeData.require(t,n,Tag.TAG_STRING);
         for(var n:List.of("Venue","Scheduled","Deadline","Retry","Updated"))ChurchLifeData.require(t,n,Tag.TAG_LONG);
         for(var n:List.of("Minimum","Duration","Work","Attempts"))ChurchLifeData.require(t,n,Tag.TAG_INT);
-        return new ChurchActivity(ChurchLifeData.uuid(t,"Id"),ChurchLifeData.uuid(t,"Temple"),Kind.valueOf(t.getString("Kind")),BlockPos.of(t.getLong("Venue")),optional(t,"Subject"),optional(t,"Source"),people(t,"Invited"),Set.copyOf(people(t,"Consent")),t.getInt("Minimum"),t.getLong("Scheduled"),t.getLong("Deadline"),t.getInt("Duration"),optional(t,"Host"),Stage.valueOf(t.getString("Stage")),t.getInt("Work"),t.getInt("Attempts"),t.getLong("Retry"),t.getLong("Updated"),t.getString("Detail"));}
+        return new ChurchActivity(ChurchLifeData.uuid(t,"Id"),ChurchLifeData.uuid(t,"Temple"),Kind.valueOf(t.getStringOr("Kind", "")),BlockPos.of(t.getLongOr("Venue", 0L)),optional(t,"Subject"),optional(t,"Source"),people(t,"Invited"),Set.copyOf(people(t,"Consent")),t.getIntOr("Minimum", 0),t.getLongOr("Scheduled", 0L),t.getLongOr("Deadline", 0L),t.getIntOr("Duration", 0),optional(t,"Host"),Stage.valueOf(t.getStringOr("Stage", "")),t.getIntOr("Work", 0),t.getIntOr("Attempts", 0),t.getLongOr("Retry", 0L),t.getLongOr("Updated", 0L),t.getStringOr("Detail", ""));}
     static UUID optional(CompoundTag t,String key){return t.contains(key)?ChurchLifeData.uuid(t,key):null;}
 }

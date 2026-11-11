@@ -4,10 +4,10 @@ import com.jgeted.sagadyssey.social.history.WorldHistoryData;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.world.level.saveddata.SavedData;
+import com.jgeted.sagadyssey.worldsim.NbtSavedData;
 
 /** 世界唯一的开局场景；首次创建后固定，不因重启或数据包重载重新抽取。 */
-public final class WorldScenarioData extends SavedData {
+public final class WorldScenarioData extends NbtSavedData {
     private static final String DATA_NAME = "sagadyssey_world_scenario";
     private static final Factory<WorldScenarioData> FACTORY =
             new Factory<>(WorldScenarioData::new, WorldScenarioData::load);
@@ -17,7 +17,7 @@ public final class WorldScenarioData extends SavedData {
     private long establishedGameTime;
 
     public static WorldScenarioData get(MinecraftServer server) {
-        WorldScenarioData data = server.overworld().getDataStorage().computeIfAbsent(FACTORY, DATA_NAME);
+        WorldScenarioData data = server.overworld().getDataStorage().computeIfAbsent(FACTORY.type(DATA_NAME));
         data.ensureInitialized(server);
         return data;
     }
@@ -45,9 +45,9 @@ public final class WorldScenarioData extends SavedData {
 
     private static WorldScenarioData load(CompoundTag tag, HolderLookup.Provider registries) {
         WorldScenarioData data = new WorldScenarioData();
-        data.initialized = tag.getBoolean("Initialized");
-        data.scenario = WorldScenarioType.byName(tag.getString("Scenario"));
-        data.establishedGameTime = tag.getLong("Established");
+        data.initialized = tag.getBooleanOr("Initialized", false);
+        data.scenario = WorldScenarioType.byName(tag.getStringOr("Scenario", ""));
+        data.establishedGameTime = tag.getLongOr("Established", 0L);
         return data;
     }
 }

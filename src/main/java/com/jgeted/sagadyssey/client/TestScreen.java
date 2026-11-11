@@ -30,7 +30,7 @@ public class TestScreen extends AbstractContainerScreen<TestMenu> {
         int buttonY = (height - 20) / 2;
 
         addRenderableWidget(Button.builder(BUTTON_TEXT, button -> {
-            PacketDistributor.sendToServer(new ChatPayload("你好，世界！"));
+            net.neoforged.neoforge.client.network.ClientPacketDistributor.sendToServer(new ChatPayload("你好，世界！"));
         })
                 .bounds(buttonX, buttonY, 120, 20)
                 .build());

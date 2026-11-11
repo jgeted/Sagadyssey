@@ -1,5 +1,7 @@
 package com.jgeted.sagadyssey.vehicle.command;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+
 import com.jgeted.sagadyssey.npc.entity.NpcBase;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
@@ -8,7 +10,7 @@ import net.minecraft.commands.Commands;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.animal.horse.AbstractHorse;
+import net.minecraft.world.entity.animal.equine.AbstractHorse;
 
 /**
  * 坐骑管理命令。
@@ -24,7 +26,7 @@ public class MountCommand {
         dispatcher.register(
                 Commands.literal("saga")
                         .then(Commands.literal("mount")
-                                .requires(src -> src.hasPermission(2))
+                                .requires(src -> MinecraftApi.hasPermission(src, 2))
                                 // bind <npcId> <horseId>
                                 .then(Commands.literal("bind")
                                         .then(Commands.argument("npcId", IntegerArgumentType.integer())
@@ -127,9 +129,9 @@ public class MountCommand {
         for (AbstractHorse horse : level.getEntitiesOfClass(AbstractHorse.class,
                 npc.getBoundingBox().inflate(20))) {
             if (horse.isTamed() && horse.isSaddled() && horse.isAlive()) {
-                String ownerName = horse.getOwnerUUID() != null
-                        ? level.getPlayerByUUID(horse.getOwnerUUID()) != null
-                                ? level.getPlayerByUUID(horse.getOwnerUUID()).getName().getString()
+                String ownerName = MinecraftApi.ownerId(horse) != null
+                        ? level.getPlayerByUUID(MinecraftApi.ownerId(horse)) != null
+                                ? level.getPlayerByUUID(MinecraftApi.ownerId(horse)).getName().getString()
                                 : "离线玩家"
                         : "无主人";
                 source.sendSuccess(() -> Component.literal(

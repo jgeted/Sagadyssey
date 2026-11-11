@@ -1,9 +1,10 @@
 package com.jgeted.sagadyssey.social.household;
 
+import net.minecraft.core.UUIDUtil;
+
 import com.jgeted.sagadyssey.social.life.NpcFoodItems;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.world.Container;
-import net.minecraft.world.item.DiggerItem;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 
@@ -35,7 +36,7 @@ public record HouseholdProvisionPlan(UUID householdId, int foodItemsTarget,
                 if (NpcFoodItems.canConsumePlanned(stack, false)) food += stack.getCount();
                 if (stack.is(Items.COAL) || stack.is(Items.CHARCOAL)
                         || stack.is(Items.COAL_BLOCK)) fuel += stack.getCount();
-                if (stack.getItem() instanceof DiggerItem && stack.getDamageValue() < stack.getMaxDamage()) {
+                if (com.jgeted.sagadyssey.core.MinecraftApi.isDigger(stack) && stack.getDamageValue() < stack.getMaxDamage()) {
                     tools += stack.getCount();
                 }
             }
@@ -46,7 +47,7 @@ public record HouseholdProvisionPlan(UUID householdId, int foodItemsTarget,
 
     CompoundTag save() {
         CompoundTag tag = new CompoundTag();
-        tag.putUUID("Household", householdId);
+        tag.store("Household", UUIDUtil.CODEC, householdId);
         tag.putInt("FoodTarget", foodItemsTarget);
         tag.putInt("FuelTarget", fuelItemsTarget);
         tag.putInt("ToolTarget", workingToolsTarget);
@@ -54,8 +55,8 @@ public record HouseholdProvisionPlan(UUID householdId, int foodItemsTarget,
     }
 
     static HouseholdProvisionPlan load(CompoundTag tag) {
-        return new HouseholdProvisionPlan(tag.getUUID("Household"), tag.getInt("FoodTarget"),
-                tag.getInt("FuelTarget"), tag.getInt("ToolTarget"));
+        return new HouseholdProvisionPlan(tag.read("Household", UUIDUtil.CODEC).orElseThrow(), tag.getIntOr("FoodTarget", 0),
+                tag.getIntOr("FuelTarget", 0), tag.getIntOr("ToolTarget", 0));
     }
 
     public record Snapshot(int food, int fuel, int workingTools,

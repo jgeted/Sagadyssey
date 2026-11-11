@@ -5,7 +5,7 @@ import com.mojang.serialization.Codec;
 import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import net.minecraft.core.BlockPos;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.world.level.block.Rotation;
 import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.level.levelgen.structure.Structure;
@@ -42,12 +42,12 @@ public class SagadysseyStructure extends Structure {
         return SagadysseyStructures.getConfig(structureId);
     }
 
-    private ResourceLocation nbtLocation() {
+    private Identifier nbtLocation() {
         StructureConfig cfg = config();
         if (cfg != null) {
-            return ResourceLocation.fromNamespaceAndPath(Sagadyssey.MOD_ID, cfg.getNbtFileName());
+            return Identifier.fromNamespaceAndPath(Sagadyssey.MOD_ID, cfg.getNbtFileName());
         }
-        return ResourceLocation.fromNamespaceAndPath(Sagadyssey.MOD_ID, structureId);
+        return Identifier.fromNamespaceAndPath(Sagadyssey.MOD_ID, structureId);
     }
 
     @Override

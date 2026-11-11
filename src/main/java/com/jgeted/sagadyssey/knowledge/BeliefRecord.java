@@ -1,5 +1,8 @@
 package com.jgeted.sagadyssey.knowledge;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+import net.minecraft.core.UUIDUtil;
+
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
@@ -36,8 +39,8 @@ public record BeliefRecord(UUID id, UUID knowerId, FactKey key, String displayVa
 
     public CompoundTag save() {
         CompoundTag tag = new CompoundTag();
-        tag.putUUID("Id", id);
-        tag.putUUID("Knower", knowerId);
+        tag.store("Id", UUIDUtil.CODEC, id);
+        tag.store("Knower", UUIDUtil.CODEC, knowerId);
         tag.put("Key", key.save());
         tag.putString("Value", displayValue);
         tag.putString("Precision", precision.name());
@@ -47,7 +50,7 @@ public record BeliefRecord(UUID id, UUID knowerId, FactKey key, String displayVa
         ListTag chain = new ListTag();
         provenanceChain.forEach(value -> {
             CompoundTag entry = new CompoundTag();
-            entry.putUUID("Id", value);
+            entry.store("Id", UUIDUtil.CODEC, value);
             chain.add(entry);
         });
         tag.put("Provenance", chain);
@@ -61,17 +64,17 @@ public record BeliefRecord(UUID id, UUID knowerId, FactKey key, String displayVa
 
     public static BeliefRecord load(CompoundTag tag) {
         List<UUID> chain = new ArrayList<>();
-        ListTag list = tag.getList("Provenance", Tag.TAG_COMPOUND);
+        ListTag list = MinecraftApi.listOfType(tag, "Provenance", Tag.TAG_COMPOUND);
         for (int index = 0; index < list.size(); index++) {
-            CompoundTag entry = list.getCompound(index);
-            if (entry.hasUUID("Id")) chain.add(entry.getUUID("Id"));
+            CompoundTag entry = list.getCompoundOrEmpty(index);
+            if (entry.read("Id", UUIDUtil.CODEC).isPresent()) chain.add(entry.read("Id", UUIDUtil.CODEC).orElseThrow());
         }
-        return new BeliefRecord(tag.getUUID("Id"), tag.getUUID("Knower"),
-                FactKey.load(tag.getCompound("Key")), tag.getString("Value"),
-                PrecisionBand.valueOf(tag.getString("Precision")), tag.getDouble("Confidence"),
-                KnowledgeSourceKind.valueOf(tag.getString("Source")), tag.getString("SourceLabel"),
-                chain, tag.getLong("Learned"), tag.getLong("Confirmed"),
-                tag.contains("StaleAfter") ? tag.getLong("StaleAfter") : null,
-                DisclosurePolicy.valueOf(tag.getString("Disclosure")), tag.getLong("Revision"));
+        return new BeliefRecord(tag.read("Id", UUIDUtil.CODEC).orElseThrow(), tag.read("Knower", UUIDUtil.CODEC).orElseThrow(),
+                FactKey.load(tag.getCompoundOrEmpty("Key")), tag.getStringOr("Value", ""),
+                PrecisionBand.valueOf(tag.getStringOr("Precision", "")), tag.getDoubleOr("Confidence", 0.0),
+                KnowledgeSourceKind.valueOf(tag.getStringOr("Source", "")), tag.getStringOr("SourceLabel", ""),
+                chain, tag.getLongOr("Learned", 0L), tag.getLongOr("Confirmed", 0L),
+                tag.contains("StaleAfter") ? tag.getLongOr("StaleAfter", 0L) : null,
+                DisclosurePolicy.valueOf(tag.getStringOr("Disclosure", "")), tag.getLongOr("Revision", 0L));
     }
 }

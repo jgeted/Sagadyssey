@@ -1,12 +1,14 @@
 package com.jgeted.sagadyssey.social.guild;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+
 import com.jgeted.sagadyssey.worldsim.rights.SubjectRef;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.world.level.saveddata.SavedData;
+import com.jgeted.sagadyssey.worldsim.NbtSavedData;
 
 import javax.annotation.Nullable;
 import java.util.HashMap;
@@ -14,7 +16,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
-public final class GuildData extends SavedData {
+public final class GuildData extends NbtSavedData {
     private static final String DATA_NAME = "sagadyssey_guild_standards";
     private static final Factory<GuildData> FACTORY = new Factory<>(GuildData::new, GuildData::load);
     private final Map<UUID, CraftQualification> qualifications = new HashMap<>();
@@ -22,7 +24,7 @@ public final class GuildData extends SavedData {
     private final Map<UUID, GuildInspection> inspections = new HashMap<>();
 
     public static GuildData get(MinecraftServer server) {
-        return server.overworld().getDataStorage().computeIfAbsent(FACTORY, DATA_NAME);
+        return server.overworld().getDataStorage().computeIfAbsent(FACTORY.type(DATA_NAME));
     }
 
     boolean addQualification(CraftQualification value) {
@@ -73,19 +75,19 @@ public final class GuildData extends SavedData {
 
     private static GuildData load(CompoundTag tag, HolderLookup.Provider registries) {
         GuildData data = new GuildData();
-        ListTag qualifications = tag.getList("Qualifications", Tag.TAG_COMPOUND);
+        ListTag qualifications = MinecraftApi.listOfType(tag, "Qualifications", Tag.TAG_COMPOUND);
         for (int index = 0; index < qualifications.size(); index++) {
-            CraftQualification value = CraftQualification.load(qualifications.getCompound(index));
+            CraftQualification value = CraftQualification.load(qualifications.getCompoundOrEmpty(index));
             data.qualifications.put(value.id(), value);
         }
-        ListTag standards = tag.getList("Standards", Tag.TAG_COMPOUND);
+        ListTag standards = MinecraftApi.listOfType(tag, "Standards", Tag.TAG_COMPOUND);
         for (int index = 0; index < standards.size(); index++) {
-            GuildQualityStandard value = GuildQualityStandard.load(standards.getCompound(index));
+            GuildQualityStandard value = GuildQualityStandard.load(standards.getCompoundOrEmpty(index));
             data.standards.put(value.id(), value);
         }
-        ListTag inspections = tag.getList("Inspections", Tag.TAG_COMPOUND);
+        ListTag inspections = MinecraftApi.listOfType(tag, "Inspections", Tag.TAG_COMPOUND);
         for (int index = 0; index < inspections.size(); index++) {
-            GuildInspection value = GuildInspection.load(inspections.getCompound(index));
+            GuildInspection value = GuildInspection.load(inspections.getCompoundOrEmpty(index));
             data.inspections.put(value.id(), value);
         }
         return data;

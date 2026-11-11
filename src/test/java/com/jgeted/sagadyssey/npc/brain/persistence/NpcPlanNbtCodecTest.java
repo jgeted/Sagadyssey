@@ -1,5 +1,7 @@
 package com.jgeted.sagadyssey.npc.brain.persistence;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+
 import com.jgeted.sagadyssey.npc.brain.plan.NpcPlan;
 import com.jgeted.sagadyssey.npc.brain.plan.NpcPlanBlocker;
 import com.jgeted.sagadyssey.npc.brain.plan.NpcPlanKind;
@@ -11,7 +13,7 @@ import com.jgeted.sagadyssey.npc.brain.plan.NpcPlanStepStatus;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -26,15 +28,15 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class NpcPlanNbtCodecTest {
-    private static final ResourceLocation PROVIDER = ResourceLocation.fromNamespaceAndPath(
+    private static final Identifier PROVIDER = Identifier.fromNamespaceAndPath(
             "sagadyssey", "blacksmith/provider");
-    private static final ResourceLocation RESERVE_EXECUTOR = ResourceLocation.fromNamespaceAndPath(
+    private static final Identifier RESERVE_EXECUTOR = Identifier.fromNamespaceAndPath(
             "sagadyssey", "reserve_materials");
-    private static final ResourceLocation TRAVEL_EXECUTOR = ResourceLocation.fromNamespaceAndPath(
+    private static final Identifier TRAVEL_EXECUTOR = Identifier.fromNamespaceAndPath(
             "sagadyssey", "travel_to_workstation");
-    private static final ResourceLocation ACT_EXECUTOR = ResourceLocation.fromNamespaceAndPath(
+    private static final Identifier ACT_EXECUTOR = Identifier.fromNamespaceAndPath(
             "sagadyssey", "forge_order");
-    private static final ResourceLocation SETTLE_EXECUTOR = ResourceLocation.fromNamespaceAndPath(
+    private static final Identifier SETTLE_EXECUTOR = Identifier.fromNamespaceAndPath(
             "sagadyssey", "settle_output");
 
     @Test
@@ -93,7 +95,7 @@ class NpcPlanNbtCodecTest {
         assertThrows(IllegalArgumentException.class, () -> NpcPlanNbtCodec.load(providerTag));
 
         CompoundTag executorTag = NpcPlanNbtCodec.save(singleStepPlan());
-        executorTag.getList("Steps", Tag.TAG_COMPOUND).getCompound(0)
+        MinecraftApi.listOfType(executorTag, "Steps", Tag.TAG_COMPOUND).getCompoundOrEmpty(0)
                 .putString("ExecutorId", "Bad:UPPER_CASE");
         assertThrows(IllegalArgumentException.class, () -> NpcPlanNbtCodec.load(executorTag));
     }
@@ -119,8 +121,8 @@ class NpcPlanNbtCodecTest {
         NpcPlan maximum = plan(steps(NpcPlanNbtCodec.MAX_STEPS),
                 NpcPlanStatus.SELECTED, null, 0);
         CompoundTag tag = NpcPlanNbtCodec.save(maximum);
-        ListTag savedSteps = tag.getList("Steps", Tag.TAG_COMPOUND);
-        savedSteps.add(savedSteps.getCompound(savedSteps.size() - 1).copy());
+        ListTag savedSteps = MinecraftApi.listOfType(tag, "Steps", Tag.TAG_COMPOUND);
+        savedSteps.add(savedSteps.getCompoundOrEmpty(savedSteps.size() - 1).copy());
         assertThrows(IllegalArgumentException.class, () -> NpcPlanNbtCodec.load(tag));
     }
 
@@ -136,19 +138,19 @@ class NpcPlanNbtCodecTest {
         assertThrows(IllegalArgumentException.class, () -> NpcPlanNbtCodec.save(oversized));
 
         CompoundTag saved = NpcPlanNbtCodec.save(singleStepPlan());
-        CompoundTag savedStep = saved.getList("Steps", Tag.TAG_COMPOUND).getCompound(0);
-        ListTag params = savedStep.getList("Params", Tag.TAG_COMPOUND);
+        CompoundTag savedStep = MinecraftApi.listOfType(saved, "Steps", Tag.TAG_COMPOUND).getCompoundOrEmpty(0);
+        ListTag params = MinecraftApi.listOfType(savedStep, "Params", Tag.TAG_COMPOUND);
         assertEquals(2, params.size());
-        assertTrue(params.getCompound(0).contains("Key", Tag.TAG_STRING));
-        assertTrue(params.getCompound(0).contains("Value", Tag.TAG_STRING));
+        assertTrue(MinecraftApi.containsTag(params.getCompoundOrEmpty(0), "Key", Tag.TAG_STRING));
+        assertTrue(MinecraftApi.containsTag(params.getCompoundOrEmpty(0), "Value", Tag.TAG_STRING));
         assertFalse(savedStep.contains("unsafe.key"));
         assertFalse(savedStep.contains("slash/key"));
 
         CompoundTag maximumTag = NpcPlanNbtCodec.save(plan(List.of(step(0,
                 NpcPlanPhase.ACTING, ACT_EXECUTOR, params(NpcPlanNbtCodec.MAX_PARAMS_PER_STEP),
                 NpcPlanStepStatus.PENDING, 100L, "")), NpcPlanStatus.SELECTED, null, 0));
-        ListTag savedParams = maximumTag.getList("Steps", Tag.TAG_COMPOUND)
-                .getCompound(0).getList("Params", Tag.TAG_COMPOUND);
+        ListTag savedParams = MinecraftApi.listOfType(MinecraftApi.listOfType(maximumTag, "Steps", Tag.TAG_COMPOUND)
+                .getCompoundOrEmpty(0), "Params", Tag.TAG_COMPOUND);
         CompoundTag duplicate = new CompoundTag();
         duplicate.putString("Key", "overflow");
         duplicate.putString("Value", "overflow");
@@ -220,7 +222,7 @@ class NpcPlanNbtCodecTest {
                 currentStepIndex, 100L, 150L, 200L, 500L, blocker, "test plan");
     }
 
-    private static NpcPlanStep step(int index, NpcPlanPhase phase, ResourceLocation executor,
+    private static NpcPlanStep step(int index, NpcPlanPhase phase, Identifier executor,
                                     Map<String, String> params, NpcPlanStepStatus status,
                                     long updatedAt, String detail) {
         return new NpcPlanStep(index, phase, executor, params, status, updatedAt, detail);

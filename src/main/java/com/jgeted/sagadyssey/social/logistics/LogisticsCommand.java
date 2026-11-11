@@ -1,5 +1,7 @@
 package com.jgeted.sagadyssey.social.logistics;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+
 import com.jgeted.sagadyssey.social.character.CharacterRegistry;
 import com.jgeted.sagadyssey.social.settlement.SettlementRecord;
 import com.jgeted.sagadyssey.social.settlement.SettlementRegistryData;
@@ -68,12 +70,12 @@ public final class LogisticsCommand {
             source.sendFailure(Component.literal("请看向六格以内的箱子、木桶或其他容器。"));
             return 0;
         }
-        var blockEntity = player.serverLevel().getBlockEntity(blockHit.getBlockPos());
+        var blockEntity = player.level().getBlockEntity(blockHit.getBlockPos());
         if (!WarehouseContainers.isSupported(blockEntity)) {
             source.sendFailure(Component.literal("仓库目前只支持箱子、木桶和潜影盒。"));
             return 0;
         }
-        String dimension = player.serverLevel().dimension().location().toString();
+        String dimension = player.level().dimension().identifier().toString();
         SettlementRegistryData settlements = SettlementRegistryData.get(source.getServer());
         SettlementRecord settlement = settlements.nearest(dimension, blockHit.getBlockPos(), 256.0D);
         if (settlement == null) {
@@ -92,7 +94,7 @@ public final class LogisticsCommand {
         }
         WarehouseRecord warehouse = logistics.registerWarehouse(
                 source.getServer(), settlement.id(), name, dimension, blockHit.getBlockPos(),
-                character.id(), player.serverLevel().getGameTime());
+                character.id(), player.level().getGameTime());
         source.sendSuccess(() -> Component.literal("§a已登记仓库 " + warehouse.name()
                 + "，ID=" + warehouse.id() + "，所属聚落=" + settlement.name()), true);
         return 1;
@@ -128,8 +130,8 @@ public final class LogisticsCommand {
         }
         source.sendSuccess(() -> Component.literal("§a" + warehouse.name() + " §7位于 "
                 + warehouse.dimension() + " " + warehouse.position().toShortString()), false);
-        if (!source.getLevel().dimension().location().toString().equals(warehouse.dimension())) return 1;
-        DustParticleOptions particle = new DustParticleOptions(new Vector3f(0.2F, 1.0F, 0.35F), 1.0F);
+        if (!source.getLevel().dimension().identifier().toString().equals(warehouse.dimension())) return 1;
+        DustParticleOptions particle = new DustParticleOptions(MinecraftApi.particleColor(new Vector3f(0.2F, 1.0F, 0.35F)), 1.0F);
         for (int height = 0; height <= 12; height++) {
             source.getLevel().sendParticles(particle, warehouse.position().getX() + 0.5D,
                     warehouse.position().getY() + 0.5D + height, warehouse.position().getZ() + 0.5D,
@@ -141,7 +143,7 @@ public final class LogisticsCommand {
     private static int stock(CommandSourceStack source)
             throws com.mojang.brigadier.exceptions.CommandSyntaxException {
         ServerPlayer player = source.getPlayerOrException();
-        String dimension = player.serverLevel().dimension().location().toString();
+        String dimension = player.level().dimension().identifier().toString();
         SettlementRecord settlement = SettlementRegistryData.get(source.getServer())
                 .nearest(dimension, player.blockPosition(), 2048.0D);
         if (settlement == null) {
@@ -189,7 +191,7 @@ public final class LogisticsCommand {
             return 0;
         }
         LogisticsOrderRecord order = logistics.createOrder(from, to,
-                itemId, count, character.id(), player.serverLevel().getGameTime());
+                itemId, count, character.id(), player.level().getGameTime());
         if (order == null) {
             source.sendFailure(Component.literal("无法创建订单：请检查仓库、物品 ID 和数量。"));
             return 0;
@@ -257,7 +259,7 @@ public final class LogisticsCommand {
         }
         var character = CharacterRegistry.ensureCurrent(player);
         boolean cancelled = LogisticsData.get(source.getServer()).cancelOrder(id, character.id(),
-                player.serverLevel().getGameTime());
+                player.level().getGameTime());
         if (!cancelled) {
             source.sendFailure(Component.literal("无法取消：订单不存在、不属于当前角色，或仍有货物在途。"));
             return 0;
@@ -268,7 +270,7 @@ public final class LogisticsCommand {
 
     private static boolean canManageSettlement(CommandSourceStack source, SettlementRecord settlement,
                                                UUID characterId) {
-        if (source.hasPermission(2) || characterId.equals(settlement.founderCharacterId())) return true;
+        if (MinecraftApi.hasPermission(source, 2) || characterId.equals(settlement.founderCharacterId())) return true;
         PoliticalStateData politics = PoliticalStateData.get(source.getServer());
         return politics.canGrantTitle(settlement.factionId(), settlement.id(), characterId);
     }

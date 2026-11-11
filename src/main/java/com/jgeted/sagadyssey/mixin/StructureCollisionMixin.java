@@ -61,6 +61,7 @@ public class StructureCollisionMixin {
             ChunkAccess chunkAccess,
             ChunkPos chunkPos,
             SectionPos sectionPos,
+            net.minecraft.resources.ResourceKey<net.minecraft.world.level.Level> level,
             CallbackInfoReturnable<Boolean> cir
     ) {
         Structure currentStructure = entry.structure().value();
@@ -74,7 +75,7 @@ public class StructureCollisionMixin {
 
             if (!existing.isEmpty()) {
                 String currentName = entry.structure().unwrapKey()
-                        .map(ResourceKey::location)
+                        .map(ResourceKey::identifier)
                         .map(Object::toString)
                         .orElse("?");
                 Sagadyssey.LOGGER.debug("{} 拦截碰撞: {} at {} - 已有 {} 个其他结构",

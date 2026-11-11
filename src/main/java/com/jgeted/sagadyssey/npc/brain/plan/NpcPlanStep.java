@@ -1,11 +1,11 @@
 package com.jgeted.sagadyssey.npc.brain.plan;
 
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 
 import java.util.Map;
 
 /** 一个由注册执行器处理的不可变步骤。 */
-public record NpcPlanStep(int index, NpcPlanPhase phase, ResourceLocation executorId,
+public record NpcPlanStep(int index, NpcPlanPhase phase, Identifier executorId,
                           Map<String, String> params,
                           NpcPlanStepStatus status, long updatedAt, String detail) {
     public NpcPlanStep {

@@ -1,5 +1,12 @@
 package com.jgeted.sagadyssey.social.needs;
 
+import net.minecraft.world.level.gamerules.GameRules;
+
+import com.jgeted.sagadyssey.gametest.PortedGameTests.*;
+
+import com.jgeted.sagadyssey.core.MinecraftApi;
+import net.minecraft.core.UUIDUtil;
+
 import com.jgeted.sagadyssey.Sagadyssey;
 import com.jgeted.sagadyssey.npc.brain.execution.NpcBrainRuntime;
 import com.jgeted.sagadyssey.npc.brain.fieldwork.*;
@@ -17,7 +24,7 @@ import net.minecraft.core.*;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.gametest.framework.*;
 import net.minecraft.nbt.*;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.*;
 import net.minecraft.world.Container;
 import net.minecraft.world.entity.EquipmentSlot;
@@ -41,7 +48,7 @@ public final class ToolResupplyGameTests {
     private static final BlockPos BASE=new BlockPos(384,80,384), SOURCE=BASE.offset(10,1,9), PANTRY=BASE.offset(22,1,9);
     private static final BlockPos FIRST=BASE.offset(3,1,6), SECOND=BASE.offset(5,1,6);
     private static final ItemFingerprint TOOL=new ItemFingerprint("minecraft:iron_pickaxe",0);
-    private static final ResourceLocation EMPTY=ResourceLocation.parse("sagadyssey_tools:empty");
+    private static final Identifier EMPTY=Identifier.parse("sagadyssey_tools:empty");
     private static final String MARKER="tool-resupply.nbt";
     private static CompoundTag restored;
     private static boolean originalInventoryVerified;
@@ -52,7 +59,7 @@ public final class ToolResupplyGameTests {
         NpcBase carrier(){return (NpcBase)level.getEntity(courier);}
         Container source(){return (Container)level.getBlockEntity(SOURCE);}
         Container pantry(){return (Container)level.getBlockEntity(PANTRY);}
-        UUID pantryId(){return ContainerIds.block("household_storage",level.dimension().location().toString(),PANTRY);}
+        UUID pantryId(){return ContainerIds.block("household_storage",level.dimension().identifier().toString(),PANTRY);}
         List<FieldworkActionReceipt> mines(){return FieldworkData.get(level.getServer()).receiptsFor(miner).stream().filter(r->r.action().operation()==FieldworkAction.Operation.MINE).toList();}
     }
     private static void force(ServerLevel l){for(int x=23;x<=26;x++)for(int z=23;z<=25;z++){l.setChunkForced(x,z,true);l.getChunk(x,z);}}
@@ -60,42 +67,42 @@ public final class ToolResupplyGameTests {
         if(!(e.getServer() instanceof GameTestServer)||phase().equals("disabled"))return;
         var s=e.getServer();var l=s.overworld();restored=null;originalInventoryVerified=false;
         try {
-            l.getStructureManager().getOrCreate(EMPTY).load(l.holderLookup(Registries.BLOCK),TagParser.parseTag("{size:[16,6,16],entities:[],blocks:[],palette:[{Name:\"minecraft:air\"}]}"));
+            l.getStructureManager().getOrCreate(EMPTY).load(l.holderLookup(Registries.BLOCK),TagParser.parseCompoundFully("{size:[16,6,16],entities:[],blocks:[],palette:[{Name:\"minecraft:air\"}]}"));
             if(phase().endsWith("resume")) {
                 restored=NbtIo.readCompressed(s.getWorldPath(LevelResource.ROOT).resolve(MARKER),NbtAccounter.unlimitedHeap());
                 var world=NbtIo.readCompressed(s.getWorldPath(LevelResource.ROOT).resolve("level.dat"),NbtAccounter.unlimitedHeap());
-                s.getWorldData().overworldData().setGameTime(Math.max(restored.getLong("Time"),world.getCompound("Data").getLong("Time"))+1);
+                s.getWorldData().overworldData().setGameTime(Math.max(restored.getLongOr("Time", 0L),world.getCompoundOrEmpty("Data").getLongOr("Time", 0L))+1);
                 var current=ledgers(l);
-                for(String key:current.getAllKeys()){
-                    Tag observed=current.get(key),expected=restored.getCompound("Ledgers").get(key);
+                for(String key:current.keySet()){
+                    Tag observed=current.get(key),expected=restored.getCompoundOrEmpty("Ledgers").get(key);
                     if(key.equals("Transfers")){observed=transferMapOrder((CompoundTag)observed);expected=transferMapOrder((CompoundTag)expected);}
                     if(!observed.equals(expected)){
                         Files.writeString(s.getWorldPath(LevelResource.ROOT).resolve("tool-mismatch-current-"+key+".snbt"),current.get(key).toString());
-                        Files.writeString(s.getWorldPath(LevelResource.ROOT).resolve("tool-mismatch-expected-"+key+".snbt"),restored.getCompound("Ledgers").get(key).toString());
+                        Files.writeString(s.getWorldPath(LevelResource.ROOT).resolve("tool-mismatch-expected-"+key+".snbt"),restored.getCompoundOrEmpty("Ledgers").get(key).toString());
                     }
                     require(observed.equals(expected),"whole-world ledger mismatch: "+key);
                 }
                 var proof=restored.copy();proof.putBoolean("LinkedLedgersVerifiedBeforeTick",true);
                 NbtIo.writeCompressed(proof,s.getWorldPath(LevelResource.ROOT).resolve("tool-restored-proof.nbt"));
             }
-            force(l);l.setDayTime(1000);l.getGameRules().getRule(GameRules.RULE_DAYLIGHT).set(false,s);l.getGameRules().getRule(GameRules.RULE_DOMOBSPAWNING).set(false,s);
-            if(phase().equals("regression"))l.getStructureManager().getOrCreate(ResourceLocation.parse("sagadyssey_tools:fieldwork_empty")).load(l.holderLookup(Registries.BLOCK),TagParser.parseTag("{size:[96,10,16],entities:[],blocks:[],palette:[{Name:\"minecraft:air\"}]}"));
+            force(l);l.setDayTime(1000);l.getGameRules().set(GameRules.ADVANCE_TIME, false,s);l.getGameRules().set(GameRules.SPAWN_MOBS, false,s);
+            if(phase().equals("regression"))l.getStructureManager().getOrCreate(Identifier.parse("sagadyssey_tools:fieldwork_empty")).load(l.holderLookup(Registries.BLOCK),TagParser.parseCompoundFully("{size:[96,10,16],entities:[],blocks:[],palette:[{Name:\"minecraft:air\"}]}"));
         }catch(Exception x){throw new IllegalStateException(x);}
     }
     // TransferReceipt.finalRevisions is a Map; only this list represents an unordered map.
     // Keep receipt chronology, audit order, route stages and every quantity strictly compared.
     private static CompoundTag transferMapOrder(CompoundTag source){
-        var t=source.copy();for(var raw:t.getList("Receipts",Tag.TAG_COMPOUND)){
+        var t=source.copy();for(var raw:MinecraftApi.listOfType(t, "Receipts",Tag.TAG_COMPOUND)){
             var receipt=(CompoundTag)raw;var entries=new ArrayList<CompoundTag>();
-            for(var value:receipt.getList("Revisions",Tag.TAG_COMPOUND))entries.add((CompoundTag)value);
-            entries.sort(Comparator.comparing(v->v.getUUID("Container").toString()));var list=new ListTag();entries.forEach(list::add);receipt.put("Revisions",list);
+            for(var value:MinecraftApi.listOfType(receipt, "Revisions",Tag.TAG_COMPOUND))entries.add((CompoundTag)value);
+            entries.sort(Comparator.comparing(v->v.read("Container", UUIDUtil.CODEC).orElseThrow().toString()));var list=new ListTag();entries.forEach(list::add);receipt.put("Revisions",list);
         }return t;
     }
     @SubscribeEvent public static void originalBodyLoaded(net.neoforged.neoforge.event.entity.EntityJoinLevelEvent e){
-        if(restored==null||!(e.getLevel() instanceof ServerLevel l)||!(e.getEntity() instanceof NpcBase body)||!body.getUUID().equals(restored.getUUID("Miner")))return;
-        var actual=body.saveWithoutId(new CompoundTag());var expected=restored.getCompound("MinerEntity");
+        if(restored==null||!(e.getLevel() instanceof ServerLevel l)||!(e.getEntity() instanceof NpcBase body)||!body.getUUID().equals(restored.read("Miner", UUIDUtil.CODEC).orElseThrow()))return;
+        var actual=MinecraftApi.saveEntity(body);var expected=restored.getCompoundOrEmpty("MinerEntity");
         for(String key:List.of("Items","HandItems","PersonalInventoryRevision","HomeSettlementId"))require(Objects.equals(actual.get(key),expected.get(key)),"original entity checkpoint mismatch: "+key);
-        require(body.getCharacterId().equals(restored.getUUID("Person")),"original person before first entity tick");originalInventoryVerified=true;
+        require(body.getCharacterId().equals(restored.read("Person", UUIDUtil.CODEC).orElseThrow()),"original person before first entity tick");originalInventoryVerified=true;
         var proof=restored.copy();proof.putBoolean("LinkedLedgersVerifiedBeforeTick",true);proof.putBoolean("OriginalEntityInventoryVerifiedBeforeTick",true);
         try{NbtIo.writeCompressed(proof,l.getServer().getWorldPath(LevelResource.ROOT).resolve("tool-restored-proof.nbt"));}catch(Exception x){throw new IllegalStateException(x);}
     }
@@ -119,7 +126,7 @@ public final class ToolResupplyGameTests {
         Sagadyssey.LOGGER.info("TOOLS_REGRESSION_SELECTED count={}",tests.size());return tests;
     }
     private static NpcBase npc(ServerLevel l,BlockPos p,NpcProfession job,UUID settlement){
-        var n=new NpcBase(NpcEntityTypes.NPC_BASE.get(),l);n.moveTo(p.getX()+.5,p.getY(),p.getZ()+.5,0,0);n.setProfession(job);n.setHomeSettlementId(settlement);n.setPersistenceRequired();
+        var n=new NpcBase(NpcEntityTypes.NPC_BASE.get(),l);n.snapTo(p.getX()+.5,p.getY(),p.getZ()+.5,0,0);n.setProfession(job);n.setHomeSettlementId(settlement);n.setPersistenceRequired();
         n.getPersonalInventory().clearContent();n.getTransportInventory().clearContent();n.setItemSlot(EquipmentSlot.MAINHAND,ItemStack.EMPTY);n.setItemSlot(EquipmentSlot.OFFHAND,ItemStack.EMPTY);
         n.setCommand(NpcCommand.WORK);l.addFreshEntity(n);NpcBrainRuntime.setMode(n,NpcBehaviorMode.PLANNED);return n;
     }
@@ -127,14 +134,14 @@ public final class ToolResupplyGameTests {
         var l=h.getLevel();var s=l.getServer();force(l);
         for(var p:BlockPos.betweenClosed(BASE,BASE.offset(25,5,12)))l.setBlockAndUpdate(p,p.getY()==BASE.getY()?Blocks.BEDROCK.defaultBlockState():Blocks.AIR.defaultBlockState());
         l.setBlockAndUpdate(FIRST,Blocks.COAL_ORE.defaultBlockState());l.setBlockAndUpdate(SECOND,Blocks.COAL_ORE.defaultBlockState());
-        var registry=SettlementRegistryData.get(s);var village=registry.create(s,"tool village",SettlementType.VILLAGE,l.dimension().location().toString(),BASE,48,"sagadyssey:wilderness",null,l.getGameTime());
+        var registry=SettlementRegistryData.get(s);var village=registry.create(s,"tool village",SettlementType.VILLAGE,l.dimension().identifier().toString(),BASE,48,"sagadyssey:wilderness",null,l.getGameTime());
         var miner=npc(l,BASE.offset(2,1,6),NpcProfession.WORKER,village.id());var courier=npc(l,BASE.offset(2,1,10),NpcProfession.COURIER,village.id());courier.setNoAi(true);
         miner.setWorkZone(FIRST,SECOND);var worn=new ItemStack(Items.IRON_PICKAXE);worn.setDamageValue(worn.getMaxDamage()-1);miner.setItemSlot(EquipmentSlot.MAINHAND,worn);
         var people=List.of(miner,courier);for(int i=0;i<people.size();i++){
             var bed=BASE.offset(5+i*3,1,2);l.setBlockAndUpdate(bed,Blocks.WHITE_BED.defaultBlockState().setValue(BedBlock.FACING,Direction.SOUTH).setValue(BedBlock.PART,BedPart.FOOT));l.setBlockAndUpdate(bed.south(),Blocks.WHITE_BED.defaultBlockState().setValue(BedBlock.FACING,Direction.SOUTH).setValue(BedBlock.PART,BedPart.HEAD));
-            NpcLifeData.get(s).registerInstitutional(people.get(i),l.dimension().location().toString(),village.id(),BASE,"tool residence",bed,null,NpcWorkShift.DAY,l.getGameTime(),false);
+            NpcLifeData.get(s).registerInstitutional(people.get(i),l.dimension().identifier().toString(),village.id(),BASE,"tool residence",bed,null,NpcWorkShift.DAY,l.getGameTime(),false);
         }
-        var homes=HouseholdData.get(s);var home=homes.create("tool household",l.dimension().location().toString(),village.id(),miner.getCharacterId(),BASE,l.getGameTime());homes.addMember(home.id(),courier.getCharacterId(),HouseholdRole.KIN,l.getGameTime());
+        var homes=HouseholdData.get(s);var home=homes.create("tool household",l.dimension().identifier().toString(),village.id(),miner.getCharacterId(),BASE,l.getGameTime());homes.addMember(home.id(),courier.getCharacterId(),HouseholdRole.KIN,l.getGameTime());
         l.setBlockAndUpdate(SOURCE,Blocks.BARREL.defaultBlockState());l.setBlockAndUpdate(PANTRY,Blocks.BARREL.defaultBlockState());require(homes.assignSharedStorage(home.id(),home.dimension(),BASE,PANTRY),"pantry assigned");homes.setProvisionPlan(new HouseholdProvisionPlan(home.id(),0,0,1));
         registry.registerScenarioBuilding(s,home.dimension(),SOURCE,"sagadyssey:tool_source","warehouse","small",village.id(),l.getGameTime());registry.registerScenarioBuilding(s,home.dimension(),PANTRY,"sagadyssey:tool_pantry","warehouse","small",village.id(),l.getGameTime());
         var family=SubjectRef.household(home.id());var institution=SubjectRef.institution(village.id());var rights=RightsStateData.get(s);
@@ -153,12 +160,12 @@ public final class ToolResupplyGameTests {
     }
     private static CompoundTag describe(Fixture f,long start){
         var t=new CompoundTag();t.putString("Phase",phase());t.putLong("Time",f.level().getGameTime());t.putLong("Started",start);
-        t.putUUID("Settlement",f.settlement());t.putUUID("Household",f.household());t.putUUID("Miner",f.miner());t.putUUID("Person",f.person());t.putUUID("Courier",f.courier());t.putUUID("Source",f.sourceId());t.putUUID("SourceGrant",f.sourceGrant());t.putUUID("PickupGrant",f.pickupGrant());
-        t.put("Ledgers",ledgers(f.level()));t.put("MinerEntity",f.worker().saveWithoutId(new CompoundTag()));t.putInt("Mines",f.mines().size());return t;
+        t.store("Settlement", UUIDUtil.CODEC,f.settlement());t.store("Household", UUIDUtil.CODEC,f.household());t.store("Miner", UUIDUtil.CODEC,f.miner());t.store("Person", UUIDUtil.CODEC,f.person());t.store("Courier", UUIDUtil.CODEC,f.courier());t.store("Source", UUIDUtil.CODEC,f.sourceId());t.store("SourceGrant", UUIDUtil.CODEC,f.sourceGrant());t.store("PickupGrant", UUIDUtil.CODEC,f.pickupGrant());
+        t.put("Ledgers",ledgers(f.level()));t.put("MinerEntity",MinecraftApi.saveEntity(f.worker()));t.putInt("Mines",f.mines().size());return t;
     }
     private static void record(Fixture f,long start,String label){try{NbtIo.writeCompressed(describe(f,start),f.level().getServer().getWorldPath(LevelResource.ROOT).resolve("tool-"+label+".nbt"));}catch(Exception x){throw new IllegalStateException(x);}}
     private static void snapshot(Fixture f,long start){try{
-        var s=f.level().getServer();var root=s.getWorldPath(LevelResource.ROOT).toAbsolutePath().normalize();NbtIo.writeCompressed(describe(f,start),root.resolve(MARKER));s.saveEverything(false,true,false);net.neoforged.neoforge.common.IOUtilities.waitUntilIOWorkerComplete();
+        var s=f.level().getServer();var root=s.getWorldPath(LevelResource.ROOT).toAbsolutePath().normalize();NbtIo.writeCompressed(describe(f,start),root.resolve(MARKER));s.saveEverything(false,true,false);
         var dest=root.resolveSibling(root.getFileName()+"-tool-snapshot");require(!Files.exists(dest),"new snapshot only");Files.createDirectories(dest);
         try(var files=Files.walk(root)){for(var p:files.toList()){if(p.getFileName().toString().equals("session.lock"))continue;var q=dest.resolve(root.relativize(p));if(Files.isDirectory(p))Files.createDirectories(q);else Files.copy(p,q);}}
         Sagadyssey.LOGGER.info("TOOLS_WHOLE_WORLD_SNAPSHOT phase={} mines={} path={}",phase(),f.mines().size(),dest);
@@ -185,8 +192,8 @@ public final class ToolResupplyGameTests {
         record(f,start,"accepted");Sagadyssey.LOGGER.info("TOOLS_ACCEPT phase={} elapsed={} miner={} person={} mines=2 coal=2 source=0 pantry=0 cargo=0 pickups=1 replacementDamage=1",phase(),f.level().getGameTime()-start,f.miner(),f.person());h.succeed();
     }
     private static void run(GameTestHelper h){
-        var t=restored;var f=t==null?fixture(h):new Fixture(h.getLevel(),t.getUUID("Settlement"),t.getUUID("Household"),t.getUUID("Miner"),t.getUUID("Person"),t.getUUID("Courier"),t.getUUID("Source"),t.getUUID("SourceGrant"),t.getUUID("PickupGrant"));
-        long start=t==null?f.level().getGameTime():t.getLong("Started");long[] broken={-1},delivered={-1},complete={-1};boolean[] recovered={false};
+        var t=restored;var f=t==null?fixture(h):new Fixture(h.getLevel(),t.read("Settlement", UUIDUtil.CODEC).orElseThrow(),t.read("Household", UUIDUtil.CODEC).orElseThrow(),t.read("Miner", UUIDUtil.CODEC).orElseThrow(),t.read("Person", UUIDUtil.CODEC).orElseThrow(),t.read("Courier", UUIDUtil.CODEC).orElseThrow(),t.read("Source", UUIDUtil.CODEC).orElseThrow(),t.read("SourceGrant", UUIDUtil.CODEC).orElseThrow(),t.read("PickupGrant", UUIDUtil.CODEC).orElseThrow());
+        long start=t==null?f.level().getGameTime():t.getLongOr("Started", 0L);long[] broken={-1},delivered={-1},complete={-1};boolean[] recovered={false};
         if(t==null){if(phase().equals("source-right"))RightsStateData.get(f.level().getServer()).revoke(f.sourceGrant());if(phase().equals("pickup-right")||phase().equals("pre-save"))RightsStateData.get(f.level().getServer()).revoke(f.pickupGrant());if(phase().equals("no-source"))f.source().clearContent();}
         h.onEachTick(()->{
             if(f.worker()==null||f.carrier()==null)return;long now=f.level().getGameTime();

@@ -1,5 +1,7 @@
 package com.jgeted.sagadyssey.core.structure;
 
+import com.jgeted.sagadyssey.gametest.PortedGameTests.*;
+
 import com.google.gson.Gson;
 import com.jgeted.sagadyssey.Sagadyssey;
 import com.jgeted.sagadyssey.npc.brain.execution.NpcBrainRuntime;
@@ -14,12 +16,11 @@ import com.jgeted.sagadyssey.worldsim.rights.RightsStateData;
 import com.jgeted.sagadyssey.worldsim.transfer.TransferLedgerData;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTestHelper;
-import net.minecraft.gametest.framework.TestFunction;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.Container;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.Items;
-import net.minecraft.world.level.GameRules;
+import net.minecraft.world.level.gamerules.GameRules;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.CropBlock;
 import net.minecraft.world.level.storage.LevelResource;
@@ -51,7 +52,7 @@ public final class NaturalFarmFoodProtectionGameTests {
                     }
                     // All three fixtures share one boundary, so later setup cannot alter a running case's clock.
                     h.getLevel().setDayTime(13000);
-                    h.getLevel().getGameRules().getRule(GameRules.RULE_RANDOMTICKING).set(0, h.getLevel().getServer());
+                    h.getLevel().getGameRules().set(GameRules.RANDOM_TICK_SPEED, 0, h.getLevel().getServer());
                     for (var c : cases) c.prepare();
                     ready[0] = true; save(h.getLevel()); return;
                 }
@@ -90,7 +91,7 @@ public final class NaturalFarmFoodProtectionGameTests {
         }
         boolean ready() {
             var marker = NaturalVillageLifeData.get(level.getServer()).village(b.buildingKey());
-            return marker != null && marker.getBoolean("Ready");
+            return marker != null && marker.getBooleanOr("Ready", false);
         }
         void prepare() {
             long now = level.getGameTime();
@@ -307,7 +308,7 @@ public final class NaturalFarmFoodProtectionGameTests {
         c.setChanged(); return removed;
     }
     private static void save(ServerLevel level) {
-        try { level.getServer().saveEverything(true, true, true); net.neoforged.neoforge.common.IOUtilities.waitUntilIOWorkerComplete(); }
+        try { level.getServer().saveEverything(true, true, true);  }
         catch (Exception e) { throw new IllegalStateException("cannot preserve complete food protection world", e); }
     }
 }

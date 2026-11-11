@@ -36,7 +36,7 @@ public class NpcFactionEvents {
     @SubscribeEvent
     public void onLivingDamage(LivingDamageEvent.Pre event) {
         if (!(event.getSource().getEntity() instanceof ServerPlayer player)) return;
-        if (event.getEntity().level().isClientSide) return;
+        if (event.getEntity().level().isClientSide()) return;
 
         recentDamage.computeIfAbsent(player.getUUID(), k -> new HashMap<>())
                 .put(event.getEntity().getUUID(), event.getNewDamage());
@@ -50,7 +50,7 @@ public class NpcFactionEvents {
     public void onLivingDeath(LivingDeathEvent event) {
         LivingEntity entity = event.getEntity();
         if (!(entity instanceof NpcBase npc)) return;
-        if (entity.level().isClientSide) return;
+        if (entity.level().isClientSide()) return;
 
         var source = event.getSource();
         if (!(source.getEntity() instanceof ServerPlayer player)) return;
@@ -64,7 +64,7 @@ public class NpcFactionEvents {
             String orig = npc.getOriginalFaction();
             effectiveFactionId = orig != null ? orig : "sagadyssey:wilderness";
             Sagadyssey.LOGGER.info("玩家 {} 击杀了玩家阵营 NPC（原阵营: {}），ownerUUID={}",
-                    player.getGameProfile().getName(), effectiveFactionId, npc.getOwnerUUID());
+                    player.getGameProfile().name(), effectiveFactionId, npc.getOwnerUUID());
         } else {
             effectiveFactionId = faction.id();
         }

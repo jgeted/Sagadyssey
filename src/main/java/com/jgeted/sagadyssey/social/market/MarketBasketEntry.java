@@ -17,7 +17,7 @@ public record MarketBasketEntry(ItemFingerprint fingerprint, int quantity) {
     }
 
     static MarketBasketEntry load(CompoundTag tag) {
-        return new MarketBasketEntry(ItemFingerprint.load(tag.getCompound("Fingerprint")),
-                tag.getInt("Quantity"));
+        return new MarketBasketEntry(ItemFingerprint.load(tag.getCompoundOrEmpty("Fingerprint")),
+                tag.getIntOr("Quantity", 0));
     }
 }

@@ -1,5 +1,7 @@
 package com.jgeted.sagadyssey.npc.command;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+
 import com.jgeted.sagadyssey.npc.entity.NpcBase;
 import com.jgeted.sagadyssey.social.character.CharacterRegistry;
 import com.jgeted.sagadyssey.social.character.CharacterRegistryData;
@@ -79,7 +81,7 @@ public final class NpcLifeCommand {
                         .then(Commands.literal("clear").executes(ctx -> clearContract(ctx.getSource()))))
                 .then(Commands.literal("needs")
                         .then(Commands.literal("hunger")
-                                .requires(source -> source.hasPermission(2))
+                                .requires(source -> MinecraftApi.hasPermission(source, 2))
                                 .then(Commands.argument("value", IntegerArgumentType.integer(0, 1000))
                                         .executes(ctx -> setHunger(ctx.getSource(),
                                                 IntegerArgumentType.getInteger(ctx, "value"))))))
@@ -93,21 +95,21 @@ public final class NpcLifeCommand {
         NpcBase npc = oneSelected(player, source);
         if (npc == null) return 0;
         BlockPos pos = lookedBlock(player);
-        if (pos == null || !player.serverLevel().getBlockState(pos).is(BlockTags.BEDS)) {
+        if (pos == null || !player.level().getBlockState(pos).is(BlockTags.BEDS)) {
             source.sendFailure(Component.literal("请看向二十格以内的一张床。"));
             return 0;
         }
-        var bedState = player.serverLevel().getBlockState(pos);
+        var bedState = player.level().getBlockState(pos);
         if (bedState.hasProperty(BedBlock.PART) && bedState.getValue(BedBlock.PART) == BedPart.HEAD) {
             pos = pos.relative(bedState.getValue(BedBlock.FACING).getOpposite());
         }
         BlockPos assignedBed = pos;
-        String dimension = player.serverLevel().dimension().location().toString();
+        String dimension = player.level().dimension().identifier().toString();
         SettlementRecord settlement = SettlementRegistryData.get(source.getServer())
                 .nearest(dimension, pos, 128.0D);
         String name = settlement == null ? "玩家分配住宅" : settlement.name() + "玩家分配住宅";
         if (!NpcLifeData.get(source.getServer()).assignBed(npc.getCharacterId(), dimension, assignedBed,
-                name, player.serverLevel().getGameTime())) {
+                name, player.level().getGameTime())) {
             source.sendFailure(Component.literal("床位已被其他 NPC 使用，或该 NPC 尚无生活档案。"));
             return 0;
         }
@@ -123,12 +125,12 @@ public final class NpcLifeCommand {
         NpcBase npc = oneSelected(player, source);
         if (npc == null) return 0;
         BlockPos pos = lookedBlock(player);
-        String dimension = player.serverLevel().dimension().location().toString();
-        if (pos == null || WarehouseContainers.asContainer(player.serverLevel().getBlockEntity(pos)) == null) {
+        String dimension = player.level().dimension().identifier().toString();
+        if (pos == null || WarehouseContainers.asContainer(player.level().getBlockEntity(pos)) == null) {
             source.sendFailure(Component.literal("请看向二十格以内的箱子或木桶。"));
             return 0;
         }
-        var storageState = player.serverLevel().getBlockState(pos);
+        var storageState = player.level().getBlockState(pos);
         if (storageState.hasProperty(ChestBlock.TYPE)
                 && storageState.getValue(ChestBlock.TYPE) != ChestType.SINGLE) {
             source.sendFailure(Component.literal("私人储物请使用单箱或木桶，避免双箱两半被重复分配。"));
@@ -140,7 +142,7 @@ public final class NpcLifeCommand {
         }
         if (!NpcLifeData.get(source.getServer()).assignPrivateStorage(source.getServer(),
                 npc.getCharacterId(), dimension,
-                pos, player.serverLevel().getGameTime())) {
+                pos, player.level().getGameTime())) {
             source.sendFailure(Component.literal("容器已分配给其他 NPC，或该 NPC 尚无生活档案。"));
             return 0;
         }
@@ -166,14 +168,14 @@ public final class NpcLifeCommand {
         for (NpcBase npc : selected) {
             if (!authorized(player, npc, AuthorityScope.ASSIGN_WORKPLACE)) continue;
             if (!data.assignEmployerWorkplace(npc.getCharacterId(), characterId, pos,
-                    player.serverLevel().getGameTime())) continue;
+                    player.level().getGameTime())) continue;
             if (clear) {
                 data.assignEmployerWorkZone(npc, characterId, null, null);
             } else {
                 switch (npc.getProfession()) {
                     case FARMER -> {
-                        BlockPos ground = player.serverLevel().getBlockState(pos).is(Blocks.FARMLAND)
-                                ? pos : player.serverLevel().getBlockState(pos.below()).is(Blocks.FARMLAND)
+                        BlockPos ground = player.level().getBlockState(pos).is(Blocks.FARMLAND)
+                                ? pos : player.level().getBlockState(pos.below()).is(Blocks.FARMLAND)
                                 ? pos.below() : pos;
                         data.assignEmployerWorkZone(npc, characterId,
                                 ground.offset(-4, 0, -4), ground.offset(4, 1, 4));
@@ -205,7 +207,7 @@ public final class NpcLifeCommand {
         for (NpcBase npc : selected) {
             if (!authorized(player, npc, AuthorityScope.ASSIGN_SCHEDULE)) continue;
             if (data.setShift(npc.getCharacterId(), shift,
-                    player.serverLevel().getGameTime())) changed++;
+                    player.level().getGameTime())) changed++;
         }
         int result = changed;
         source.sendSuccess(() -> Component.literal("§a已把 " + result + " 名 NPC 的排班设为 "
@@ -218,7 +220,7 @@ public final class NpcLifeCommand {
         ServerPlayer player = source.getPlayerOrException();
         List<NpcBase> selected = selectedOwned(player);
         if (selected.isEmpty()) return noSelection(source);
-        String dimension = player.serverLevel().dimension().location().toString();
+        String dimension = player.level().dimension().identifier().toString();
         SettlementRecord settlement = SettlementRegistryData.get(source.getServer())
                 .nearest(dimension, player.blockPosition(), 128.0D);
         if (settlement == null) {
@@ -226,7 +228,7 @@ public final class NpcLifeCommand {
             return 0;
         }
         UUID characterId = CharacterRegistry.ensureCurrent(player).id();
-        boolean authorized = source.hasPermission(2)
+        boolean authorized = MinecraftApi.hasPermission(source, 2)
                 || characterId.equals(settlement.founderCharacterId())
                 || PoliticalStateData.get(source.getServer()).canGrantTitle(
                 settlement.factionId(), settlement.id(), characterId);
@@ -240,7 +242,7 @@ public final class NpcLifeCommand {
         for (NpcBase npc : selected) {
             if (!data.beginContract(npc.getCharacterId(), characterId,
                     settlement.id(), settlement.center(), days, wage,
-                    player.serverLevel().getGameTime())) continue;
+                    player.level().getGameTime())) continue;
             services.beginWageContract(data.contract(npc.getCharacterId()), dimension);
             changed++;
         }
@@ -262,9 +264,9 @@ public final class NpcLifeCommand {
         ServiceRelationshipData services = ServiceRelationshipData.get(source.getServer());
         for (NpcBase npc : selected) {
             if (!data.renewContract(npc.getCharacterId(), characterId,
-                    days, player.serverLevel().getGameTime())) continue;
+                    days, player.level().getGameTime())) continue;
             services.syncContract(data.contract(npc.getCharacterId()),
-                    player.serverLevel().getGameTime());
+                    player.level().getGameTime());
             changed++;
         }
         int result = changed;
@@ -279,7 +281,7 @@ public final class NpcLifeCommand {
         List<NpcBase> selected = selectedOwned(player);
         if (selected.isEmpty()) return noSelection(source);
         NpcLifeData data = NpcLifeData.get(source.getServer());
-        long now = player.serverLevel().getGameTime();
+        long now = player.level().getGameTime();
         int shown = 0;
         for (NpcBase npc : selected) {
             NpcEmploymentContract contract = data.contract(npc.getCharacterId());
@@ -312,9 +314,9 @@ public final class NpcLifeCommand {
         ServiceRelationshipData services = ServiceRelationshipData.get(source.getServer());
         for (NpcBase npc : selected) {
             if (!data.endContract(npc.getCharacterId(), characterId,
-                    player.serverLevel().getGameTime())) continue;
+                    player.level().getGameTime())) continue;
             services.syncContract(data.contract(npc.getCharacterId()),
-                    player.serverLevel().getGameTime());
+                    player.level().getGameTime());
             CommandGroupAttachments.unregisterNpc(player, npc);
             npc.dismiss();
             changed++;
@@ -343,7 +345,7 @@ public final class NpcLifeCommand {
         }
         NpcLifeData data = NpcLifeData.get(source.getServer());
         selected.forEach(npc -> data.setHunger(npc.getCharacterId(), value,
-                player.serverLevel().getGameTime()));
+                player.level().getGameTime()));
         source.sendSuccess(() -> Component.literal("§a已把 " + selected.size()
                 + " 名 NPC 的饥饿值设为 " + value + "/1000。"), false);
         return selected.size();
@@ -360,14 +362,14 @@ public final class NpcLifeCommand {
         }
         NpcLifeData data = NpcLifeData.get(source.getServer());
         var life = data.record(npc.getCharacterId());
-        if (life != null) NpcSchedulePlanner.refresh(npc, data, player.serverLevel());
+        if (life != null) NpcSchedulePlanner.refresh(npc, data, player.level());
         NpcScheduleRecord schedule = NpcSchedulePlanner.current(npc);
         source.sendSuccess(() -> Component.literal("§6[日程] §e" + npc.getNpcName()
                 + " §f" + schedule.activity().displayName()), false);
         source.sendSuccess(() -> Component.literal("§7原因=" + schedule.reason()
                 + "；排班=" + (life == null ? "未登记" : life.shift().name())
                 + "；命令=" + npc.getCommand().name() + "；下次复核≤"
-                + Math.max(0L, schedule.reviewAt() - player.serverLevel().getGameTime())
+                + Math.max(0L, schedule.reviewAt() - player.level().getGameTime())
                 + " tick"), false);
         return 1;
     }
@@ -386,7 +388,7 @@ public final class NpcLifeCommand {
     private static List<NpcBase> selectedOwned(ServerPlayer player) {
         List<NpcBase> result = new ArrayList<>();
         for (UUID id : CommandGroupAttachments.get(player).selectedMembers()) {
-            NpcBase npc = CharacterRegistryData.get(player.server).findLoadedNpc(player.server, id);
+            NpcBase npc = CharacterRegistryData.get(player.level().getServer()).findLoadedNpc(player.level().getServer(), id);
             if (npc != null && npc.isAlive() && npc.isOwnedBy(player.getUUID())) {
                 result.add(npc);
             }
@@ -422,13 +424,13 @@ public final class NpcLifeCommand {
     private static boolean authorized(ServerPlayer player, NpcBase npc, AuthorityScope scope) {
         UUID principal = CharacterRegistry.currentId(player);
         if (!player.isAlive() || principal == null) return false;
-        return ServiceRelationshipData.get(player.server).authorize(principal,
+        return ServiceRelationshipData.get(player.level().getServer()).authorize(principal,
                 npc.getCharacterId(), scope, false,
-                player.serverLevel().getGameTime()).allowed();
+                player.level().getGameTime()).allowed();
     }
 
     private static void mark(ServerPlayer player, BlockPos pos) {
-        player.serverLevel().sendParticles(player, ParticleTypes.END_ROD, true,
+        player.level().sendParticles(player, ParticleTypes.END_ROD, true, false,
                 pos.getX() + 0.5D, pos.getY() + 1.0D, pos.getZ() + 0.5D,
                 18, 0.35D, 0.45D, 0.35D, 0.02D);
     }

@@ -1,5 +1,7 @@
 package com.jgeted.sagadyssey.core.structure;
 
+import com.jgeted.sagadyssey.gametest.PortedGameTests.*;
+
 import com.google.gson.Gson;
 import com.jgeted.sagadyssey.Sagadyssey;
 import com.jgeted.sagadyssey.npc.brain.execution.NpcBrainRuntime;
@@ -15,7 +17,6 @@ import com.jgeted.sagadyssey.worldsim.transfer.ContainerIds;
 import com.jgeted.sagadyssey.worldsim.transfer.TransferLedgerData;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTestHelper;
-import net.minecraft.gametest.framework.TestFunction;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.Container;
 import net.minecraft.world.entity.item.ItemEntity;
@@ -74,7 +75,7 @@ public final class NaturalFarmEmergencyGameTests {
             long now = level.getGameTime();
             if (preparedAt < 0) {
                 var v = NaturalVillageLifeData.get(level.getServer()).village(building.buildingKey());
-                if (v == null || !v.getBoolean("Ready")) {
+                if (v == null || !v.getBooleanOr("Ready", false)) {
                     require(h.getTick() < 1200, "PRECONDITION_FAIL: original natural initializer did not become ready"); return;
                 }
                 prepare(); return;
@@ -199,7 +200,7 @@ public final class NaturalFarmEmergencyGameTests {
             }
             var economy = NaturalVillageEconomyData.existing(level.getServer());
             var region = economy == null ? null : economy.row(building.buildingKey());
-            require(region == null || region.getString("Phase").equals("NEAR"), "emergency remains actual near entities");
+            require(region == null || region.getStringOr("Phase", "").equals("NEAR"), "emergency remains actual near entities");
         }
 
         void observeNeed() {
@@ -334,7 +335,7 @@ public final class NaturalFarmEmergencyGameTests {
         void save() {
             try {
                 level.getServer().saveEverything(true, true, true);
-                net.neoforged.neoforge.common.IOUtilities.waitUntilIOWorkerComplete();
+                
             } catch (Exception error) { throw new IllegalStateException("cannot retain complete emergency world", error); }
         }
         void require(boolean value, String reason) { h.assertTrue(value, reason); }

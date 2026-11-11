@@ -1,5 +1,7 @@
 package com.jgeted.sagadyssey.social.production;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.Tag;
 import org.junit.jupiter.api.Test;
@@ -77,7 +79,7 @@ class ProductionMaterialRequestDataTest {
                 ProductionMaterialRequestTest.material("minecraft:iron_ingot", 0, 3),
                 10L, "有效请求");
         CompoundTag tag = data.save(new CompoundTag(), null);
-        tag.getList("Requests", Tag.TAG_COMPOUND).add(new CompoundTag());
+        MinecraftApi.listOfType(tag, "Requests", Tag.TAG_COMPOUND).add(new CompoundTag());
 
         ProductionMaterialRequestData loaded = ProductionMaterialRequestData.load(tag, null);
 
@@ -119,7 +121,7 @@ class ProductionMaterialRequestDataTest {
 
     private static ProductionMaterialRequestData roundTrip(ProductionMaterialRequestData data) {
         CompoundTag tag = data.save(new CompoundTag(), null);
-        assertEquals(ProductionMaterialRequestData.SCHEMA_VERSION, tag.getInt("Schema"));
+        assertEquals(ProductionMaterialRequestData.SCHEMA_VERSION, tag.getIntOr("Schema", 0));
         return ProductionMaterialRequestData.load(tag, null);
     }
 }

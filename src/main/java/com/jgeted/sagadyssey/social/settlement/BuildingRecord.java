@@ -1,5 +1,7 @@
 package com.jgeted.sagadyssey.social.settlement;
 
+import net.minecraft.core.UUIDUtil;
+
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 
@@ -23,16 +25,16 @@ public record BuildingRecord(String key, String structureId, String category, St
         tag.putString("Size", size);
         tag.putString("Dimension", dimension);
         tag.putLong("Position", position.asLong());
-        if (settlementId != null) tag.putUUID("Settlement", settlementId);
+        if (settlementId != null) tag.store("Settlement", UUIDUtil.CODEC, settlementId);
         tag.putLong("Registered", registeredGameTime);
         return tag;
     }
 
     public static BuildingRecord load(CompoundTag tag) {
-        return new BuildingRecord(tag.getString("Key"), tag.getString("Structure"),
-                tag.getString("Category"), tag.getString("Size"), tag.getString("Dimension"),
-                BlockPos.of(tag.getLong("Position")),
-                tag.hasUUID("Settlement") ? tag.getUUID("Settlement") : null,
-                tag.getLong("Registered"));
+        return new BuildingRecord(tag.getStringOr("Key", ""), tag.getStringOr("Structure", ""),
+                tag.getStringOr("Category", ""), tag.getStringOr("Size", ""), tag.getStringOr("Dimension", ""),
+                BlockPos.of(tag.getLongOr("Position", 0L)),
+                tag.read("Settlement", UUIDUtil.CODEC).isPresent() ? tag.read("Settlement", UUIDUtil.CODEC).orElseThrow() : null,
+                tag.getLongOr("Registered", 0L));
     }
 }

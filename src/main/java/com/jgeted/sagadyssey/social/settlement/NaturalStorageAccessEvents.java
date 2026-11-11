@@ -9,7 +9,7 @@ import net.neoforged.bus.api.SubscribeEvent;
 /** Managed settlement stores use explicit authority; ordinary membership is not a vanilla-menu bypass. */
 public final class NaturalStorageAccessEvents {
  private static boolean denied(ServerLevel level,ServerPlayer player,BlockPos pos){
-  var id=NaturalVillageLifeData.managedStore(level.getServer(),level.dimension().location().toString(),pos);if(id==null)return false;
+  var id=NaturalVillageLifeData.managedStore(level.getServer(),level.dimension().identifier().toString(),pos);if(id==null)return false;
   var principal=CharacterRegistry.currentId(player);if(!player.isAlive()||principal==null)return true;
   var actor=SubjectRef.character(principal);var rights=RightsStateData.get(level.getServer());var resolver=new RightsService(rights);long now=level.getGameTime();
   if(resolver.can(actor,AssetRight.MANAGE,id,-1,new ItemFingerprint("minecraft:carrot",0),now).status()!=RightsVerdict.Status.ALLOW)return true;

@@ -6,7 +6,7 @@ import net.minecraft.core.registries.Registries;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.MobCategory;
 import net.minecraft.world.item.Item;
-import net.neoforged.neoforge.common.DeferredSpawnEggItem;
+import net.minecraft.world.item.SpawnEggItem;
 import net.neoforged.neoforge.event.entity.EntityAttributeCreationEvent;
 import net.neoforged.neoforge.registries.DeferredItem;
 import net.neoforged.neoforge.registries.DeferredRegister;
@@ -23,17 +23,17 @@ public class NpcEntityTypes {
                     .sized(0.6F, 1.8F)
                     .eyeHeight(1.62F)
                     .clientTrackingRange(8)
-                    .build("npc_base")
+                    .build(net.minecraft.resources.ResourceKey.create(Registries.ENTITY_TYPE,
+                            net.minecraft.resources.Identifier.fromNamespaceAndPath(Sagadyssey.MOD_ID, "npc_base")))
     );
 
     /** 生成蛋 */
     public static final DeferredRegister.Items SPAWN_EGGS =
             DeferredRegister.createItems(Sagadyssey.MOD_ID);
 
-    public static final DeferredItem<DeferredSpawnEggItem> NPC_BASE_SPAWN_EGG =
-            SPAWN_EGGS.register("npc_base_spawn_egg",
-                    () -> new DeferredSpawnEggItem(NPC_BASE, 0x8B4513, 0xD2B48C,
-                            new Item.Properties()));
+    public static final DeferredItem<SpawnEggItem> NPC_BASE_SPAWN_EGG =
+            SPAWN_EGGS.registerItem("npc_base_spawn_egg",
+                    properties -> new SpawnEggItem(properties.spawnEgg(NPC_BASE.get())));
 
     /** 注册属性 */
     public static void registerAttributes(EntityAttributeCreationEvent event) {

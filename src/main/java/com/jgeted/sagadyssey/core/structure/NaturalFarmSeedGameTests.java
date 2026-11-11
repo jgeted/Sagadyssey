@@ -1,5 +1,10 @@
 package com.jgeted.sagadyssey.core.structure;
 
+import com.jgeted.sagadyssey.gametest.PortedGameTests.*;
+
+import com.jgeted.sagadyssey.core.MinecraftApi;
+import net.minecraft.core.UUIDUtil;
+
 import com.google.gson.Gson;
 import com.jgeted.sagadyssey.Sagadyssey;
 import com.jgeted.sagadyssey.npc.brain.execution.NpcBrainRuntime;
@@ -14,7 +19,6 @@ import com.jgeted.sagadyssey.worldsim.rights.*;
 import com.jgeted.sagadyssey.worldsim.transfer.*;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTestHelper;
-import net.minecraft.gametest.framework.TestFunction;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.world.Container;
@@ -48,20 +52,20 @@ public final class NaturalFarmSeedGameTests {
         h.onEachTick(() -> {
             var server = h.getLevel().getServer(); var life = NaturalVillageLifeData.get(server);
             var row = life.village(b.buildingKey());
-            if (row == null || !row.getBoolean("Ready")) return;
+            if (row == null || !row.getBooleanOr("Ready", false)) return;
             if (began[0] < 0) {
                 verifyOriginal(h, b);
                 for (int i = 0; i < 3; i++) actor(h, b, i).setCommand(NpcCommand.STAY);
                 check(h, count(actor(h, b, 0).getPersonalInventory()) == 12 && count(store(h, b, NaturalVillageLayout.PANTRY)) == 4,
                         "actual v3 initialization gives twelve personal seed carrots and four household carrots");
                 check(h, total(h, b) == 16, "no extra initialized carrot stock");
-                began[0] = h.getLevel().getGameTime(); initialized[0] = row.getLong("Initialized");
+                began[0] = h.getLevel().getGameTime(); initialized[0] = row.getLongOr("Initialized", 0L);
                 log.write("FORMAL_INITIALIZATION", Map.of("state", snapshot(h, b), "intervention", "all three original residents STAY after initialization; no inventory grant or reset"));
             }
             // A repeated registration intent never repeats physical template placement.
             life.schedule(b);
             verifyOriginal(h, b);
-            check(h, life.village(b.buildingKey()).getLong("Initialized") == initialized[0], "same completed initialization intent");
+            check(h, life.village(b.buildingKey()).getLongOr("Initialized", 0L) == initialized[0], "same completed initialization intent");
             check(h, count(actor(h, b, 0).getPersonalInventory()) == 12 && count(store(h, b, NaturalVillageLayout.PANTRY)) == 4
                     && total(h, b) == 16, "repeated schedule does not give food or seeds again");
             if (h.getLevel().getGameTime() - began[0] >= 600) {
@@ -83,7 +87,7 @@ public final class NaturalFarmSeedGameTests {
         h.onEachTick(() -> {
             var l = h.getLevel(); var server = l.getServer(); long now = l.getGameTime();
             var row = NaturalVillageLifeData.get(server).village(b.buildingKey());
-            if (row == null || !row.getBoolean("Ready")) return;
+            if (row == null || !row.getBooleanOr("Ready", false)) return;
             if (ready[0] < 0) {
                 verifyOriginal(h, b);
                 check(h, total(h, b) == 16 && count(actor(h, b, 0).getPersonalInventory()) == 12
@@ -158,12 +162,12 @@ public final class NaturalFarmSeedGameTests {
             check(h, seedPlan.steps().getFirst().params().get("seed_source").equals(rawId.toString()), "normal plan froze the original RAW source");
             var savedLedger = TransferLedgerData.get(server).save(new CompoundTag(), server.registryAccess());
             CompoundTag savedReceipt = null;
-            for (var entry : savedLedger.getList("Receipts", Tag.TAG_COMPOUND)) if (((CompoundTag) entry).getUUID("Id").equals(transfer)) savedReceipt = (CompoundTag) entry;
+            for (var entry : MinecraftApi.listOfType(savedLedger, "Receipts", Tag.TAG_COMPOUND)) if (((CompoundTag) entry).read("Id", UUIDUtil.CODEC).orElseThrow().equals(transfer)) savedReceipt = (CompoundTag) entry;
             check(h, savedReceipt != null && savedReceipt.contains("RequestIdentity"), "real transfer has durable request identity");
-            var legs = savedReceipt.getCompound("RequestIdentity").getList("Legs", Tag.TAG_COMPOUND);
-            check(h, legs.size() == 1 && legs.getCompound(0).getUUID("Source").equals(rawId)
-                    && legs.getCompound(0).getUUID("Destination").equals(ContainerIds.npcPersonal(farmer.getCharacterId()))
-                    && legs.getCompound(0).getInt("Quantity") == 1 && legs.getCompound(0).getCompound("Item").getString("Item").equals("minecraft:carrot"),
+            var legs = MinecraftApi.listOfType(savedReceipt.getCompoundOrEmpty("RequestIdentity"), "Legs", Tag.TAG_COMPOUND);
+            check(h, legs.size() == 1 && legs.getCompoundOrEmpty(0).read("Source", UUIDUtil.CODEC).orElseThrow().equals(rawId)
+                    && legs.getCompoundOrEmpty(0).read("Destination", UUIDUtil.CODEC).orElseThrow().equals(ContainerIds.npcPersonal(farmer.getCharacterId()))
+                    && legs.getCompoundOrEmpty(0).getIntOr("Quantity", 0) == 1 && legs.getCompoundOrEmpty(0).getCompoundOrEmpty("Item").getStringOr("Item", "").equals("minecraft:carrot"),
                     "receipt proves one carrot from original raw into original farmer inventory");
             log.write("PASS", Map.of("elapsed", elapsed, "state", snapshot(h, b), "transfer", savedReceipt.toString(),
                     "plan", seedPlan.toString(), "plantReceipt", planted.getFirst().toString(), "releasedPriorReservation", released[0]));

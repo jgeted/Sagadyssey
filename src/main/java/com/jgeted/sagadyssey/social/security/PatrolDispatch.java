@@ -1,5 +1,8 @@
 package com.jgeted.sagadyssey.social.security;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+import net.minecraft.core.UUIDUtil;
+
 import com.jgeted.sagadyssey.worldsim.rights.SubjectRef;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
@@ -24,9 +27,9 @@ public record PatrolDispatch(UUID id, UUID incidentId, UUID institutionId,
 
     CompoundTag save() {
         CompoundTag tag = new CompoundTag();
-        tag.putUUID("Id", id);
-        tag.putUUID("Incident", incidentId);
-        tag.putUUID("Institution", institutionId);
+        tag.store("Id", UUIDUtil.CODEC, id);
+        tag.store("Incident", UUIDUtil.CODEC, incidentId);
+        tag.store("Institution", UUIDUtil.CODEC, institutionId);
         tag.put("DispatchedBy", dispatchedBy.save());
         ListTag guardTags = new ListTag();
         guards.forEach(guard -> guardTags.add(guard.save()));
@@ -40,13 +43,13 @@ public record PatrolDispatch(UUID id, UUID incidentId, UUID institutionId,
 
     static PatrolDispatch load(CompoundTag tag) {
         List<SubjectRef> guards = new ArrayList<>();
-        ListTag guardTags = tag.getList("Guards", Tag.TAG_COMPOUND);
+        ListTag guardTags = MinecraftApi.listOfType(tag, "Guards", Tag.TAG_COMPOUND);
         for (int index = 0; index < guardTags.size(); index++) {
-            guards.add(SubjectRef.load(guardTags.getCompound(index)));
+            guards.add(SubjectRef.load(guardTags.getCompoundOrEmpty(index)));
         }
-        return new PatrolDispatch(tag.getUUID("Id"), tag.getUUID("Incident"),
-                tag.getUUID("Institution"), SubjectRef.load(tag.getCompound("DispatchedBy")),
-                guards, tag.getLong("DispatchedAt"), tag.getLong("ExpiresAt"),
-                PatrolDispatchStatus.valueOf(tag.getString("Status")), tag.getString("Orders"));
+        return new PatrolDispatch(tag.read("Id", UUIDUtil.CODEC).orElseThrow(), tag.read("Incident", UUIDUtil.CODEC).orElseThrow(),
+                tag.read("Institution", UUIDUtil.CODEC).orElseThrow(), SubjectRef.load(tag.getCompoundOrEmpty("DispatchedBy")),
+                guards, tag.getLongOr("DispatchedAt", 0L), tag.getLongOr("ExpiresAt", 0L),
+                PatrolDispatchStatus.valueOf(tag.getStringOr("Status", "")), tag.getStringOr("Orders", ""));
     }
 }

@@ -42,7 +42,7 @@ public class MedicWorkGoal extends Goal {
     @Override
     public boolean canUse() {
         if(com.jgeted.sagadyssey.npc.brain.execution.NpcBrainRuntime.isPlanned(npc))return false;
-        if (!npc.isAlive() || npc.level().isClientSide
+        if (!npc.isAlive() || npc.level().isClientSide()
                 || npc.getProfession() != NpcProfession.MEDIC
                 || npc.getCommand() == NpcCommand.STAY
                 || npc.getTarget() != null || npc.isPassenger()) return false;

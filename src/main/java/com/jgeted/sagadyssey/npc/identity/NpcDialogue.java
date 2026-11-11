@@ -8,7 +8,7 @@ import net.minecraft.ChatFormatting;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
@@ -46,9 +46,9 @@ public final class NpcDialogue {
 
         UUID viewerId = CharacterRegistry.currentId(player);
         if (!player.isAlive() || viewerId == null) return "当前没有可用的在生人物；不能进行个人身份对话。";
-        NpcLifeRecord life = NpcLifeData.get(player.server).record(npc.getCharacterId());
+        NpcLifeRecord life = NpcLifeData.get(player.level().getServer()).record(npc.getCharacterId());
         if (life != null) {
-            life.memories().stream().filter(memory -> memory.active(player.serverLevel().getGameTime()))
+            life.memories().stream().filter(memory -> memory.active(player.level().getGameTime()))
                     .filter(memory -> viewerId.equals(memory.subjectCharacterId()))
                     .findFirst().ifPresent(memory -> topics.add("我记得，" + sentence(memory.summary())));
             if (!life.lastDecision().isBlank() && !"尚未决策".equals(life.lastDecision())) {
@@ -88,9 +88,9 @@ public final class NpcDialogue {
     }
 
     private static String itemName(String itemId) {
-        ResourceLocation id = ResourceLocation.tryParse(itemId);
+        Identifier id = Identifier.tryParse(itemId);
         if (id == null || !BuiltInRegistries.ITEM.containsKey(id)) return itemId;
-        Item item = BuiltInRegistries.ITEM.get(id);
+        Item item = BuiltInRegistries.ITEM.getValue(id);
         return new ItemStack(item).getHoverName().getString();
     }
 

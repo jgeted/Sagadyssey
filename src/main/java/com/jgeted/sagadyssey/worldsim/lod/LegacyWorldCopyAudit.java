@@ -1,5 +1,8 @@
 package com.jgeted.sagadyssey.worldsim.lod;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+import net.minecraft.core.UUIDUtil;
+
 import com.jgeted.sagadyssey.Sagadyssey;
 import com.jgeted.sagadyssey.npc.brain.execution.NpcBrainRuntime;
 import com.jgeted.sagadyssey.npc.brain.persistence.NpcBehaviorMode;
@@ -45,16 +48,16 @@ public final class LegacyWorldCopyAudit {
             throw new IllegalStateException("Copy audit requires an isolated full-world normal server, never GameTest or run/saves");
         }
         var input = NbtIo.readCompressed(root.resolve("phase10-copy-manifest.nbt"), NbtAccounter.unlimitedHeap());
-        if (Path.of(input.getString("Source")).toRealPath().equals(root)) throw new IllegalStateException("Cannot audit source in place");
+        if (Path.of(input.getStringOr("Source", "")).toRealPath().equals(root)) throw new IllegalStateException("Cannot audit source in place");
         ORIGINALS.clear(); ADDED_CHUNKS.clear(); finished = false;
-        for (var raw : input.getList("Originals", Tag.TAG_COMPOUND)) {
+        for (var raw : MinecraftApi.listOfType(input, "Originals", Tag.TAG_COMPOUND)) {
             var row = (CompoundTag) raw;
-            if (ORIGINALS.put(row.getUUID("Body"), row) != null) throw new IllegalArgumentException("Duplicate source body");
+            if (ORIGINALS.put(row.read("Body", UUIDUtil.CODEC).orElseThrow(), row) != null) throw new IllegalArgumentException("Duplicate source body");
         }
         if (ORIGINALS.isEmpty() || ORIGINALS.size() > 100) throw new IllegalArgumentException("Require 1..100 actual source originals");
         previous = PHASE.equals("apply") ? null
                 : NbtIo.readCompressed(root.resolve("phase10-copy-audit.nbt"), NbtAccounter.unlimitedHeap());
-        Sagadyssey.LOGGER.info("PHASE10_COPY_AUDIT_START phase={} originals={} source={} copy={}", PHASE, ORIGINALS.size(), input.getString("Source"), root);
+        Sagadyssey.LOGGER.info("PHASE10_COPY_AUDIT_START phase={} originals={} source={} copy={}", PHASE, ORIGINALS.size(), input.getStringOr("Source", ""), root);
     }
 
     @SubscribeEvent(priority = EventPriority.HIGHEST)
@@ -78,14 +81,14 @@ public final class LegacyWorldCopyAudit {
         var server = event.getServer();
         for (var row : ORIGINALS.values()) {
             var level = server.getLevel(ResourceKey.create(net.minecraft.core.registries.Registries.DIMENSION,
-                    ResourceLocation.parse(row.getString("Dimension"))));
+                    net.minecraft.resources.Identifier.parse(row.getStringOr("Dimension", ""))));
             if (level == null) throw new IllegalStateException("Original dimension unavailable");
-            var pos = row.getCompound("SourceEntity").getList("Pos", Tag.TAG_DOUBLE);
-            var center = new ChunkPos(BlockPos.containing(pos.getDouble(0), pos.getDouble(1), pos.getDouble(2)));
+            var pos = MinecraftApi.listOfType(row.getCompoundOrEmpty("SourceEntity"), "Pos", Tag.TAG_DOUBLE);
+            var center = new ChunkPos(BlockPos.containing(pos.getDoubleOr(0, 0.0), pos.getDoubleOr(1, 0.0), pos.getDoubleOr(2, 0.0)));
             var added = ADDED_CHUNKS.computeIfAbsent(level.dimension(), key -> new HashSet<>());
             for (int dx = -1; dx <= 1; dx++) for (int dz = -1; dz <= 1; dz++) {
                 int x = center.x + dx, z = center.z + dz;
-                if (!level.getForcedChunks().contains(ChunkPos.asLong(x, z))) {
+                if (!level.getForceLoadedChunks().contains(ChunkPos.asLong(x, z))) {
                     added.add(ChunkPos.asLong(x, z)); level.setChunkForced(x, z, true);
                 }
                 level.getChunk(x, z);
@@ -101,22 +104,22 @@ public final class LegacyWorldCopyAudit {
             var actors = new ArrayList<NpcBase>();
             for (var row : ORIGINALS.values()) {
                 NpcBase found = null;
-                for (var level : server.getAllLevels()) if (level.getEntity(row.getUUID("Body")) instanceof NpcBase n) found = n;
+                for (var level : server.getAllLevels()) if (level.getEntity(row.read("Body", UUIDUtil.CODEC).orElseThrow()) instanceof NpcBase n) found = n;
                 if (found == null) {
-                    if (System.nanoTime() - started > 90_000_000_000L) throw new IllegalStateException("Original body failed to load: " + row.getUUID("Body"));
+                    if (System.nanoTime() - started > 90_000_000_000L) throw new IllegalStateException("Original body failed to load: " + row.read("Body", UUIDUtil.CODEC).orElseThrow());
                     return;
                 }
-                require(found.getCharacterId().equals(row.getUUID("Person")), "Original person identity changed");
-                require(LodFingerprints.inventory(found).equals(expectedInventory(found, row.getCompound("SourceEntity"))),
+                require(found.getCharacterId().equals(row.read("Person", UUIDUtil.CODEC).orElseThrow()), "Original person identity changed");
+                require(LodFingerprints.inventory(found).equals(expectedInventory(found, row.getCompoundOrEmpty("SourceEntity"))),
                         "Original source inventory/components changed: " + found.getUUID());
                 require(found.isNoAi(), "Explicit paused originals only");
                 if (NpcBrainRuntime.isPlanned(found)) require(NpcLodRuntime.loaded(found), "Original planned checkpoint requires review");
                 actors.add(found);
             }
-            var targets = actors.stream().filter(n -> ORIGINALS.get(n.getUUID()).getBoolean("Selected")).toList();
+            var targets = actors.stream().filter(n -> ORIGINALS.get(n.getUUID()).getBooleanOr("Selected", false)).toList();
             require(targets.size() == 3, "Three original legacy production professions required");
             for (var n : actors) if (!targets.contains(n)) require(NpcBrainRuntime.mode(n).name()
-                    .equals(ORIGINALS.get(n.getUUID()).getString("OriginalMode")), "Unselected compatibility mode changed");
+                    .equals(ORIGINALS.get(n.getUUID()).getStringOr("OriginalMode", "")), "Unselected compatibility mode changed");
             var report = new CompoundTag();
             if (PHASE.equals("apply")) {
                 for (var n : targets) require(NpcBrainRuntime.mode(n) == NpcBehaviorMode.LEGACY, "Do not convert replacement or already migrated targets");
@@ -125,26 +128,26 @@ public final class LegacyWorldCopyAudit {
                 require(revision.equals(LodMigration.dryRun(server, targets)), "Dry-run must be stable and read-only");
                 var receipt = LodMigration.apply(server, targets, revision);
                 var row = LodMigrationData.get(server).find(receipt);
-                require(before.equals(row.getCompound("BeforeCounts")) && before.equals(row.getCompound("AfterCounts")), "Migration counts changed");
-                report.putUUID("Receipt", receipt); report.put("Applied", row);
+                require(before.equals(row.getCompoundOrEmpty("BeforeCounts")) && before.equals(row.getCompoundOrEmpty("AfterCounts")), "Migration counts changed");
+                report.store("Receipt", UUIDUtil.CODEC, receipt); report.put("Applied", row);
                 report.putString("SelectedRevision", LodMigration.dryRun(server, targets));
             } else {
-                UUID receipt = previous.getUUID("Receipt");
+                UUID receipt = previous.read("Receipt", UUIDUtil.CODEC).orElseThrow();
                 var row = LodMigrationData.get(server).find(receipt);
-                require(row != null && row.getString("State").equals("APPLIED"), "Original APPLIED receipt missing after real JVM restart");
+                require(row != null && row.getStringOr("State", "").equals("APPLIED"), "Original APPLIED receipt missing after real JVM restart");
                 for (var n : targets) require(NpcBrainRuntime.isPlanned(n) && NpcBrainRuntime.data(server).active(n.getUUID()).isEmpty(), "Migrated original mode/idle boundary lost");
-                require(row.getCompound("AfterCounts").equals(LodMigration.counts(server, targets)), "Reloaded counts differ");
-                require(previous.getString("SelectedRevision").equals(LodMigration.dryRun(server, targets)), "Reloaded migration revision differs");
+                require(row.getCompoundOrEmpty("AfterCounts").equals(LodMigration.counts(server, targets)), "Reloaded counts differ");
+                require(previous.getStringOr("SelectedRevision", "").equals(LodMigration.dryRun(server, targets)), "Reloaded migration revision differs");
                 report = previous.copy();
                 if (PHASE.equals("rollback")) {
                     LodMigration.rollback(server, receipt);
-                    require(LodMigrationData.get(server).find(receipt).getString("State").equals("ROLLED_BACK"), "Rollback receipt not retained");
+                    require(LodMigrationData.get(server).find(receipt).getStringOr("State", "").equals("ROLLED_BACK"), "Rollback receipt not retained");
                     for (var n : targets) require(NpcBrainRuntime.mode(n) == NpcBehaviorMode.LEGACY, "Original mode not restored");
                     report.put("RolledBack", LodMigrationData.get(server).find(receipt));
                 }
             }
             for (var n : actors) require(LodFingerprints.inventory(n).equals(expectedInventory(n,
-                    ORIGINALS.get(n.getUUID()).getCompound("SourceEntity"))), "Migration altered physical assets");
+                    ORIGINALS.get(n.getUUID()).getCompoundOrEmpty("SourceEntity"))), "Migration altered physical assets");
             report.putInt("OriginalBodies", actors.size()); report.putString("LastVerifiedPhase", PHASE);
             report.put("SelectedCounts", LodMigration.counts(server, targets));
             NbtIo.writeCompressed(report, server.getWorldPath(LevelResource.ROOT).resolve("phase10-copy-audit.nbt"));
@@ -152,11 +155,11 @@ public final class LegacyWorldCopyAudit {
             for (var entry : ADDED_CHUNKS.entrySet()) for (long packed : entry.getValue()) {
                 var chunk = new ChunkPos(packed); server.getLevel(entry.getKey()).setChunkForced(chunk.x, chunk.z, false);
             }
-            if (PHASE.equals("rollback")) for (var n : actors) n.setNoAi(ORIGINALS.get(n.getUUID()).getBoolean("OriginalNoAI"));
+            if (PHASE.equals("rollback")) for (var n : actors) n.setNoAi(ORIGINALS.get(n.getUUID()).getBooleanOr("OriginalNoAI", false));
             server.saveEverything(true, true, true);
-            net.neoforged.neoforge.common.IOUtilities.waitUntilIOWorkerComplete();
+            
             finished = true;
-            Sagadyssey.LOGGER.info("PHASE10_COPY_AUDIT_PASS phase={} originals={} counts={} receipt={}", PHASE, actors.size(), report.getCompound("SelectedCounts"), report.getUUID("Receipt"));
+            Sagadyssey.LOGGER.info("PHASE10_COPY_AUDIT_PASS phase={} originals={} counts={} receipt={}", PHASE, actors.size(), report.getCompoundOrEmpty("SelectedCounts"), report.read("Receipt", UUIDUtil.CODEC).orElseThrow());
             server.halt(false);
         } catch (Exception exception) {
             finished = true;
@@ -173,25 +176,25 @@ public final class LegacyWorldCopyAudit {
         var slots = new ListTag();
         var bag = NonNullList.withSize(36, ItemStack.EMPTY);
         var cargo = NonNullList.withSize(27, ItemStack.EMPTY);
-        ContainerHelper.loadAllItems(source, bag, npc.registryAccess());
-        ContainerHelper.loadAllItems(source.getCompound("TransportCargo"), cargo, npc.registryAccess());
+        MinecraftApi.loadItems(source, bag, npc.registryAccess());
+        MinecraftApi.loadItems(source.getCompoundOrEmpty("TransportCargo"), cargo, npc.registryAccess());
         bag.forEach(stack -> slots.add(saved(npc, stack))); cargo.forEach(stack -> slots.add(saved(npc, stack)));
         for (var slot : EquipmentSlot.values()) {
             Tag raw;
-            if (slot == EquipmentSlot.BODY) raw = source.getCompound("body_armor_item");
+            if (slot == EquipmentSlot.BODY) raw = source.getCompoundOrEmpty("body_armor_item");
             else {
-                var list = source.getList(slot.getType() == EquipmentSlot.Type.HAND ? "HandItems" : "ArmorItems", Tag.TAG_COMPOUND);
-                raw = slot.getIndex() < list.size() ? list.getCompound(slot.getIndex()) : new CompoundTag();
+                var list = MinecraftApi.listOfType(source, slot.getType() == EquipmentSlot.Type.HAND ? "HandItems" : "ArmorItems", Tag.TAG_COMPOUND);
+                raw = slot.getIndex() < list.size() ? list.getCompoundOrEmpty(slot.getIndex()) : new CompoundTag();
             }
             slots.add(saved(npc, raw instanceof CompoundTag compound && compound.isEmpty()
-                    ? ItemStack.EMPTY : ItemStack.parse(npc.registryAccess(), raw).orElse(ItemStack.EMPTY)));
+                    ? ItemStack.EMPTY : MinecraftApi.parseItem(npc.registryAccess(), raw).orElse(ItemStack.EMPTY)));
         }
-        for (var raw : source.getList("InventoryMigrationOverflow", Tag.TAG_COMPOUND))
-            slots.add(saved(npc, ItemStack.parse(npc.registryAccess(), raw).orElse(ItemStack.EMPTY)));
+        for (var raw : MinecraftApi.listOfType(source, "InventoryMigrationOverflow", Tag.TAG_COMPOUND))
+            slots.add(saved(npc, MinecraftApi.parseItem(npc.registryAccess(), raw).orElse(ItemStack.EMPTY)));
         var tag = new CompoundTag(); tag.put("OrderedSlots", slots); return LodFingerprints.of(tag);
     }
 
     private static Tag saved(NpcBase npc, ItemStack stack) {
-        return stack.isEmpty() ? new CompoundTag() : stack.save(npc.registryAccess());
+        return stack.isEmpty() ? new CompoundTag() : MinecraftApi.saveItem(stack, npc.registryAccess());
     }
 }

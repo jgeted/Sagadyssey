@@ -1,5 +1,7 @@
 package com.jgeted.sagadyssey.worldsim;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
@@ -23,7 +25,7 @@ public final class WorldSimulationCommand {
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
         dispatcher.register(Commands.literal("saga")
                 .then(Commands.literal("worldv2")
-                        .requires(source -> source.hasPermission(2))
+                        .requires(source -> MinecraftApi.hasPermission(source, 2))
                         .executes(context -> status(context.getSource()))
                         .then(Commands.literal("status")
                                 .executes(context -> status(context.getSource())))
@@ -45,7 +47,7 @@ public final class WorldSimulationCommand {
                                                 StringArgumentType.getString(context, "feature")))))));
         dispatcher.register(Commands.literal("saga")
                 .then(Commands.literal("assets")
-                        .requires(source -> source.hasPermission(2))
+                        .requires(source -> MinecraftApi.hasPermission(source, 2))
                         .then(Commands.literal("audit")
                                 .executes(context -> auditAssets(context.getSource(), 10))
                                 .then(Commands.argument("limit", IntegerArgumentType.integer(1, 50))
@@ -53,7 +55,7 @@ public final class WorldSimulationCommand {
                                                 IntegerArgumentType.getInteger(context, "limit")))))));
         dispatcher.register(Commands.literal("saga")
                 .then(Commands.literal("service")
-                        .requires(source -> source.hasPermission(2))
+                        .requires(source -> MinecraftApi.hasPermission(source, 2))
                         .then(Commands.literal("audit")
                                 .executes(context -> auditServices(context.getSource(), 10))
                                 .then(Commands.argument("limit", IntegerArgumentType.integer(1, 50))
@@ -61,7 +63,7 @@ public final class WorldSimulationCommand {
                                                 IntegerArgumentType.getInteger(context, "limit")))))));
         dispatcher.register(Commands.literal("saga")
                 .then(Commands.literal("knowledge")
-                        .requires(source -> source.hasPermission(2))
+                        .requires(source -> MinecraftApi.hasPermission(source, 2))
                         .then(Commands.literal("audit")
                                 .then(Commands.argument("knower", StringArgumentType.word())
                                         .then(Commands.argument("subject", StringArgumentType.word())

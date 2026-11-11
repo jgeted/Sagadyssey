@@ -1,5 +1,8 @@
 package com.jgeted.sagadyssey.npc.brain.persistence;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+import net.minecraft.core.UUIDUtil;
+
 import com.jgeted.sagadyssey.npc.brain.plan.NpcPlan;
 import com.jgeted.sagadyssey.npc.brain.plan.NpcPlanKind;
 import com.jgeted.sagadyssey.npc.brain.plan.NpcPlanPhase;
@@ -9,7 +12,7 @@ import com.jgeted.sagadyssey.npc.brain.plan.NpcPlanStep;
 import com.jgeted.sagadyssey.npc.brain.plan.NpcPlanStepStatus;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -22,9 +25,9 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class NpcBrainDataTest {
-    private static final ResourceLocation PROVIDER = ResourceLocation.fromNamespaceAndPath(
+    private static final Identifier PROVIDER = Identifier.fromNamespaceAndPath(
             "sagadyssey", "brain_data_test");
-    private static final ResourceLocation EXECUTOR = ResourceLocation.fromNamespaceAndPath(
+    private static final Identifier EXECUTOR = Identifier.fromNamespaceAndPath(
             "sagadyssey", "wait");
 
     @Test
@@ -78,16 +81,16 @@ class NpcBrainDataTest {
         data.save(selected(UUID.randomUUID(), npcId, 20L));
 
         CompoundTag tag = data.save(new CompoundTag(), null);
-        CompoundTag brain = tag.getList("Brains", CompoundTag.TAG_COMPOUND).getCompound(0);
+        CompoundTag brain = MinecraftApi.listOfType(tag, "Brains", CompoundTag.TAG_COMPOUND).getCompoundOrEmpty(0);
         brain.put("Active", new CompoundTag());
-        brain.getList("History", CompoundTag.TAG_COMPOUND).add(new CompoundTag());
+        MinecraftApi.listOfType(brain, "History", CompoundTag.TAG_COMPOUND).add(new CompoundTag());
 
         var original = tag.copy();
         assertThrows(IllegalArgumentException.class, () -> NpcBrainData.load(tag, null));
         assertEquals(original, tag);
-        assertEquals("PLANNED", brain.getString("Mode"));
-        assertEquals(finishedSource.id(), brain.getList("History", CompoundTag.TAG_COMPOUND)
-                .getCompound(0).getUUID("Id"));
+        assertEquals("PLANNED", brain.getStringOr("Mode", ""));
+        assertEquals(finishedSource.id(), MinecraftApi.listOfType(brain, "History", CompoundTag.TAG_COMPOUND)
+                .getCompoundOrEmpty(0).read("Id", UUIDUtil.CODEC).orElseThrow());
     }
 
     @Test
@@ -126,11 +129,11 @@ class NpcBrainDataTest {
         UUID npc = UUID.randomUUID();
         source.setMode(npc, NpcBehaviorMode.PLANNED);
         var tag = source.save(new CompoundTag(), null);
-        var brains = tag.getList("Brains", CompoundTag.TAG_COMPOUND);
-        brains.getCompound(0).putString("Mode", "FUTURE_MODE");
+        var brains = MinecraftApi.listOfType(tag, "Brains", CompoundTag.TAG_COMPOUND);
+        brains.getCompoundOrEmpty(0).putString("Mode", "FUTURE_MODE");
         assertThrows(IllegalArgumentException.class, () -> NpcBrainData.load(tag, null));
-        brains.getCompound(0).putString("Mode", "PLANNED");
-        brains.add(brains.getCompound(0).copy());
+        brains.getCompoundOrEmpty(0).putString("Mode", "PLANNED");
+        brains.add(brains.getCompoundOrEmpty(0).copy());
         assertThrows(IllegalArgumentException.class, () -> NpcBrainData.load(tag, null));
         assertEquals(2, brains.size());
     }
@@ -149,8 +152,7 @@ class NpcBrainDataTest {
         var source = new NpcBrainData();
         source.setMode(UUID.randomUUID(), NpcBehaviorMode.PLANNED);
         var tag = source.save(new CompoundTag(), null);
-        tag.getList("Brains", CompoundTag.TAG_COMPOUND).getCompound(0)
-                .getList("History", CompoundTag.TAG_COMPOUND).add(new CompoundTag());
+        MinecraftApi.listOfType(MinecraftApi.listOfType(tag, "Brains", CompoundTag.TAG_COMPOUND).getCompoundOrEmpty(0), "History", CompoundTag.TAG_COMPOUND).add(new CompoundTag());
         assertThrows(IllegalArgumentException.class, () -> NpcBrainData.load(tag, null));
     }
 

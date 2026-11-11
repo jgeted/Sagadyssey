@@ -1,5 +1,7 @@
 package com.jgeted.sagadyssey.worldsim.transfer;
 
+import net.minecraft.core.UUIDUtil;
+
 import com.jgeted.sagadyssey.worldsim.rights.SubjectRef;
 import net.minecraft.nbt.CompoundTag;
 
@@ -10,7 +12,7 @@ public record TransferAudit(UUID transferId, SubjectRef actor, TransferIntent in
                             String reason, int legCount, long completedAt) {
     public CompoundTag save() {
         CompoundTag tag = new CompoundTag();
-        tag.putUUID("Id", transferId);
+        tag.store("Id", UUIDUtil.CODEC, transferId);
         tag.put("Actor", actor.save());
         tag.putString("Intent", intent.name());
         tag.putString("Status", status.name());
@@ -23,10 +25,10 @@ public record TransferAudit(UUID transferId, SubjectRef actor, TransferIntent in
     }
 
     public static TransferAudit load(CompoundTag tag) {
-        return new TransferAudit(tag.getUUID("Id"), SubjectRef.load(tag.getCompound("Actor")),
-                TransferIntent.valueOf(tag.getString("Intent")),
-                TransferReceipt.Status.valueOf(tag.getString("Status")),
-                tag.getBoolean("Lawful"), tag.getString("Authority"), tag.getString("Reason"),
-                tag.getInt("Legs"), tag.getLong("CompletedAt"));
+        return new TransferAudit(tag.read("Id", UUIDUtil.CODEC).orElseThrow(), SubjectRef.load(tag.getCompoundOrEmpty("Actor")),
+                TransferIntent.valueOf(tag.getStringOr("Intent", "")),
+                TransferReceipt.Status.valueOf(tag.getStringOr("Status", "")),
+                tag.getBooleanOr("Lawful", false), tag.getStringOr("Authority", ""), tag.getStringOr("Reason", ""),
+                tag.getIntOr("Legs", 0), tag.getLongOr("CompletedAt", 0L));
     }
 }

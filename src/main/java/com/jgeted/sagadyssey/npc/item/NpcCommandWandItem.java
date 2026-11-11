@@ -10,7 +10,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
-import net.minecraft.world.InteractionResultHolder;
+
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
@@ -38,7 +38,7 @@ public class NpcCommandWandItem extends Item {
         if (player == null) return InteractionResult.PASS;
         BlockPos pos = context.getClickedPos();
 
-        if (!context.getLevel().isClientSide && player instanceof ServerPlayer serverPlayer) {
+        if (!context.getLevel().isClientSide() && player instanceof ServerPlayer serverPlayer) {
             PlayerCommandData data = CommandGroupAttachments.get(serverPlayer);
             if (player.isShiftKeyDown()) {
                 data.clearSelection();
@@ -47,7 +47,7 @@ public class NpcCommandWandItem extends Item {
                 data.setCorner1(pos);
                 player.displayClientMessage(Component.literal("§a第一角 " + pos.toShortString()
                         + "；请在对角处再次右键"), true);
-                cornerEffect(serverPlayer.serverLevel(), pos);
+                cornerEffect(serverPlayer.level(), pos);
             } else {
                 BlockPos a = data.corner1();
                 if (Math.abs(a.getX() - pos.getX()) > MAX_SELECTION_SPAN
@@ -64,7 +64,7 @@ public class NpcCommandWandItem extends Item {
                 AABB selection = new AABB(minX, player.getY() - 32, minZ,
                         maxX + 1, player.getY() + 32, maxZ + 1);
                 int count = 0;
-                for (NpcBase npc : serverPlayer.serverLevel().getEntitiesOfClass(NpcBase.class, selection,
+                for (NpcBase npc : serverPlayer.level().getEntitiesOfClass(NpcBase.class, selection,
                         npc -> npc.isAlive() && npc.isOwnedBy(player.getUUID()))) {
             data.registerMember(npc.getCharacterId(), npc.getNpcName());
             if (data.hasMember(npc.getCharacterId())) {
@@ -74,19 +74,19 @@ public class NpcCommandWandItem extends Item {
                 }
                 player.displayClientMessage(Component.literal("§a框选完成：已选中 " + count
                         + " 名 NPC；右键空气打开集团面板"), true);
-                cornerEffect(serverPlayer.serverLevel(), pos);
+                cornerEffect(serverPlayer.level(), pos);
             }
             CommandGroupAttachments.sync(serverPlayer, false);
         }
-        return InteractionResult.sidedSuccess(context.getLevel().isClientSide);
+        return InteractionResult.SUCCESS;
     }
 
     @Override
-    public InteractionResultHolder<ItemStack> use(Level level, Player player, InteractionHand hand) {
-        if (!level.isClientSide && player instanceof ServerPlayer serverPlayer) {
+    public InteractionResult use(Level level, Player player, InteractionHand hand) {
+        if (!level.isClientSide() && player instanceof ServerPlayer serverPlayer) {
             CommandGroupAttachments.sync(serverPlayer, true);
         }
-        return InteractionResultHolder.sidedSuccess(player.getItemInHand(hand), level.isClientSide);
+        return InteractionResult.SUCCESS;
     }
 
     private static void cornerEffect(ServerLevel level, BlockPos pos) {
@@ -97,10 +97,11 @@ public class NpcCommandWandItem extends Item {
 
     @Override
     public void appendHoverText(ItemStack stack, TooltipContext context,
-                                List<Component> tooltip, TooltipFlag flag) {
-        tooltip.add(Component.literal("§b右键 NPC：选择 / 取消选择"));
-        tooltip.add(Component.literal("§b右键地面两次：区域框选"));
-        tooltip.add(Component.literal("§e右键空气：打开集团面板"));
-        tooltip.add(Component.literal("§7蹲下右键地面：清空选择与区域"));
+                                net.minecraft.world.item.component.TooltipDisplay display,
+                                java.util.function.Consumer<Component> tooltip, TooltipFlag flag) {
+        tooltip.accept(Component.literal("§b右键 NPC：选择 / 取消选择"));
+        tooltip.accept(Component.literal("§b右键地面两次：区域框选"));
+        tooltip.accept(Component.literal("§e右键空气：打开集团面板"));
+        tooltip.accept(Component.literal("§7蹲下右键地面：清空选择与区域"));
     }
 }

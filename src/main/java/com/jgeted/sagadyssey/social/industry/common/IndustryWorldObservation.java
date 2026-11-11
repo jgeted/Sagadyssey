@@ -43,7 +43,7 @@ public final class IndustryWorldObservation {
         boolean qualified=farmer ? npc.getProfession()==NpcProfession.FARMER : npc.getProfession()==NpcProfession.WORKER;
         ItemStack tool=npc.getMainHandItem();
         boolean toolPresent=farmer ? tool.getItem() instanceof HoeItem
-                : id.equals("forestry.fell") ? tool.getItem() instanceof AxeItem : tool.getItem() instanceof PickaxeItem;
+                : id.equals("forestry.fell") ? tool.getItem() instanceof AxeItem : tool.is(net.minecraft.tags.ItemTags.PICKAXES);
         var bag=ContainerIds.npcPersonal(npc.getCharacterId());
         var toolClaim=toolPresent?existingRights.claimAt(bag,npc.getPersonalInventory().getContainerSize(),ItemFingerprint.of(tool)):null;
         boolean toolAuthorized=toolPresent && existingRights.context(bag)!=null

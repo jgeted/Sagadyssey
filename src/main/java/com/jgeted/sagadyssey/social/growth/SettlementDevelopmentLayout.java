@@ -4,7 +4,7 @@ import com.jgeted.sagadyssey.core.structure.NaturalVillageBuilding;
 import com.jgeted.sagadyssey.core.structure.NaturalVillageLayout;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.properties.BedPart;
@@ -16,11 +16,13 @@ import java.util.List;
 
 /** Versioned founding land declaration. It grants no rights to unrelated parcels or old v6 worlds. */
 public final class SettlementDevelopmentLayout {
-    public static final ResourceLocation TEMPLATE = ResourceLocation.parse("sagadyssey:vilg_2_development_v8");
-    public static final ResourceLocation LEGACY_TEMPLATE = ResourceLocation.parse("sagadyssey:vilg_2_development_v7");
+    public static final Identifier TEMPLATE = Identifier.parse("sagadyssey:vilg_2_development_v8");
+    public static final Identifier INDUSTRY_TEMPLATE = Identifier.parse("sagadyssey:vilg_2_development_v9");
+    public static final Identifier LEGACY_TEMPLATE = Identifier.parse("sagadyssey:vilg_2_development_v7");
     private SettlementDevelopmentLayout() { }
     public static boolean supports(NaturalVillageBuilding b) { return wide(b)||LEGACY_TEMPLATE.toString().equals(b.templateId()); }
-    public static boolean wide(NaturalVillageBuilding b) { return TEMPLATE.toString().equals(b.templateId()); }
+    public static boolean wide(NaturalVillageBuilding b) { return TEMPLATE.toString().equals(b.templateId()) || industry(b); }
+    public static boolean industry(NaturalVillageBuilding b) { return INDUSTRY_TEMPLATE.toString().equals(b.templateId()); }
     public static int width(NaturalVillageBuilding b) { return wide(b)?6:5; }
     public static int stoneCost(NaturalVillageBuilding b) { return wide(b)?64:55; }
     public static BlockPos localLot(int index) {

@@ -1,5 +1,7 @@
 package com.jgeted.sagadyssey.npc.brain.life;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+
 import com.jgeted.sagadyssey.npc.brain.execution.NpcBrainRuntime;
 import com.jgeted.sagadyssey.npc.brain.fieldwork.FieldworkRoutes;
 import com.jgeted.sagadyssey.npc.brain.plan.NpcPlan;
@@ -16,32 +18,32 @@ public final class LifePlanProvider {
     private LifePlanProvider() { }
     public static boolean eligible(NpcBase npc) {
         return npc.getCommand()==NpcCommand.WORK && npc.getTarget()==null && npc.isAlive()
-                && NpcBrainRuntime.isPlanned(npc) && NpcLifeData.get(npc.getServer()).record(npc.getCharacterId())!=null;
+                && NpcBrainRuntime.isPlanned(npc) && NpcLifeData.get(MinecraftApi.server(npc)).record(npc.getCharacterId())!=null;
     }
     public static Optional<NpcPlan> choose(NpcBase npc,long now,boolean idle) {
         return choose(npc,now,idle,false);
     }
     /** Survival is not gated by an ordinary FOLLOW/STAY/PATROL field; no social invitation bypass. */
     public static Optional<NpcPlan> chooseUrgent(NpcBase npc,long now) {
-        var needs=NpcLifeData.get(npc.getServer()).needs(npc.getCharacterId());
+        var needs=NpcLifeData.get(MinecraftApi.server(npc)).needs(npc.getCharacterId());
         return needs!=null&&needs.hunger()>=800?choose(npc,now,false,true):Optional.empty();
     }
     private static Optional<NpcPlan> choose(NpcBase npc,long now,boolean idle,boolean urgent) {
         if((!urgent&&!eligible(npc) || urgent&&(!npc.isAlive()||npc.getTarget()!=null||!NpcBrainRuntime.isPlanned(npc)))
                 || !npc.onGround() && !npc.isSleeping())return Optional.empty();
-        var data=LifeActivityData.get(npc.getServer()); if(now<data.retryAt(npc.getUUID()))return Optional.empty();
-        var level=(ServerLevel)npc.level(); var life=NpcLifeData.get(npc.getServer());var record=life.record(npc.getCharacterId());
-        String dimension=level.dimension().location().toString();if(record==null||!dimension.equals(record.dimension()))return Optional.empty();
+        var data=LifeActivityData.get(MinecraftApi.server(npc)); if(now<data.retryAt(npc.getUUID()))return Optional.empty();
+        var level=(ServerLevel)npc.level(); var life=NpcLifeData.get(MinecraftApi.server(npc));var record=life.record(npc.getCharacterId());
+        String dimension=level.dimension().identifier().toString();if(record==null||!dimension.equals(record.dimension()))return Optional.empty();
         var needs=life.ensureNeeds(npc.getCharacterId(),now);
         if(needs.hunger()>=350) {
-            var shared=HouseholdData.get(npc.getServer()).forMember(npc.getCharacterId());
+            var shared=HouseholdData.get(MinecraftApi.server(npc)).forMember(npc.getCharacterId());
             if(com.jgeted.sagadyssey.core.structure.NaturalFarmRules.forResident(npc)!=null&&shared!=null&&dimension.equals(shared.dimension())
                     &&hasPlannedFood(npc,shared.sharedStorage(),"HOUSEHOLD",true))
                 return plan(npc,"EAT",shared.sharedStorage(),40,now,Map.of("source","HOUSEHOLD"));
             if(com.jgeted.sagadyssey.core.structure.NaturalFarmRules.foodSlot(npc,npc.getPersonalInventory(),"BAG",npc.blockPosition(),(needs.hunger()>=800||com.jgeted.sagadyssey.core.structure.NaturalVillageLifeData.ordinaryRawDiet(npc)),now)>=0)
                 return plan(npc,"EAT",npc.blockPosition(),40,now,Map.of("source","BAG"));
             if(hasPlannedFood(npc,record.privateStoragePosition(),"PRIVATE",needs.hunger()>=800||com.jgeted.sagadyssey.core.structure.NaturalVillageLifeData.ordinaryRawDiet(npc)))return plan(npc,"EAT",record.privateStoragePosition(),40,now,Map.of("source","PRIVATE"));
-            var home=HouseholdData.get(npc.getServer()).forMember(npc.getCharacterId());
+            var home=HouseholdData.get(MinecraftApi.server(npc)).forMember(npc.getCharacterId());
             if(home!=null && dimension.equals(home.dimension()) && hasPlannedFood(npc,home.sharedStorage(),"HOUSEHOLD",needs.hunger()>=800||com.jgeted.sagadyssey.core.structure.NaturalVillageLifeData.ordinaryRawDiet(npc)))
                 return plan(npc,"EAT",home.sharedStorage(),40,now,Map.of("source","HOUSEHOLD"));
         }
@@ -52,9 +54,9 @@ public final class LifePlanProvider {
         }
         if(!idle)return Optional.empty();
         if(record.bedPosition()==null && record.privateStoragePosition()==null && record.relations().isEmpty()
-                && data.knownPlaces(npc.getUUID()).isEmpty() && HouseholdData.get(npc.getServer()).forMember(npc.getCharacterId())==null)
+                && data.knownPlaces(npc.getUUID()).isEmpty() && HouseholdData.get(MinecraftApi.server(npc)).forMember(npc.getCharacterId())==null)
             return Optional.empty(); // Existing unassigned workers retain their finite professional rest.
-        var household=HouseholdData.get(npc.getServer()).forMember(npc.getCharacterId());
+        var household=HouseholdData.get(MinecraftApi.server(npc)).forMember(npc.getCharacterId());
         // Perception is bounded to 16 blocks and line of sight, never all loaded/global residents.
         var peers=level.getEntitiesOfClass(NpcBase.class,npc.getBoundingBox().inflate(16),other->other!=npc && other.isAlive() && npc.hasLineOfSight(other));
         if(com.jgeted.sagadyssey.core.structure.NaturalFarmRules.forResident(npc)!=null)
@@ -68,7 +70,7 @@ public final class LifePlanProvider {
         }
         for(var other:peers) {
             if(!eligible(other) || now<data.retryAt(other.getUUID()))continue;
-            var peerPlan=NpcBrainRuntime.data(npc.getServer()).active(other.getUUID()).orElse(null);
+            var peerPlan=NpcBrainRuntime.data(MinecraftApi.server(npc)).active(other.getUUID()).orElse(null);
             if(peerPlan!=null && !peerPlan.currentStep().executorId().equals(com.jgeted.sagadyssey.npc.brain.fieldwork.FieldworkPlanFactory.REST)
                     && !(peerPlan.providerId().equals(LifePlanFactory.PROVIDER)&&peerPlan.currentStep().params().getOrDefault("operation","").equals("WAIT")))continue;
             var peerNeeds=life.needs(other.getCharacterId()); if(peerNeeds!=null&&peerNeeds.hunger()>=350)continue;
@@ -80,7 +82,7 @@ public final class LifePlanProvider {
             if(record.bedPosition()!=null && npc.blockPosition().distSqr(record.bedPosition())<=9)host=record;
             boolean visit=host!=null && host.bedPosition()!=null && (host.npcId().equals(npc.getCharacterId())?npc:other).blockPosition().distSqr(host.bedPosition())<=9;
             String operation=visit?"VISIT":"TALK";
-            var definition=VisitActivityRegistry.definitions().get(net.minecraft.resources.ResourceLocation.parse(visit?"sagadyssey:visit":"sagadyssey:talk"));
+            var definition=VisitActivityRegistry.definitions().get(net.minecraft.resources.Identifier.parse(visit?"sagadyssey:visit":"sagadyssey:talk"));
             if(definition==null || !definition.availableAt(level.getDayTime()))continue;
             BlockPos place=visit?host.bedPosition():npc.blockPosition(); UUID id=UUID.randomUUID();
             var params=Map.of("session",id.toString(),"capacity","2","peer",other.getUUID().toString());
@@ -93,7 +95,7 @@ public final class LifePlanProvider {
         }
         for(var place:data.knownPlaces(npc.getUUID())) {
             if(!dimension.equals(place.dimension()) || !knownLoaded(npc,place.position()))continue;
-            var definition=VisitActivityRegistry.definitions().get(net.minecraft.resources.ResourceLocation.parse(place.activity()));
+            var definition=VisitActivityRegistry.definitions().get(net.minecraft.resources.Identifier.parse(place.activity()));
             if(definition==null || !definition.availableAt(level.getDayTime()) || definition.kind()==VisitActivity.Kind.TALK || definition.kind()==VisitActivity.Kind.VISIT)continue;
             var state=level.getBlockState(place.position());
             if(definition.kind()==VisitActivity.Kind.READ && (!state.is(net.minecraft.world.level.block.Blocks.LECTERN)
@@ -108,7 +110,7 @@ public final class LifePlanProvider {
         return plan(npc,"WAIT",npc.blockPosition(),100,now,Map.of());
     }
     private static boolean willingToTalk(NpcBase recipient,NpcBase initiator) {
-        var own=NpcLifeData.get(recipient.getServer()).record(recipient.getCharacterId());
+        var own=NpcLifeData.get(MinecraftApi.server(recipient)).record(recipient.getCharacterId());
         return own!=null && !recipient.isSleeping() && recipient.hasLineOfSight(initiator)
                 && own.relations().stream().anyMatch(r->r.otherCharacterId().equals(initiator.getCharacterId())&&r.strength()>=0);
     }
@@ -122,14 +124,14 @@ public final class LifePlanProvider {
         if(com.jgeted.sagadyssey.core.structure.NaturalFarmRules.forResident(npc)!=null
                 &&npc.blockPosition().distSqr(target)<=12D*12D
                 &&!FieldworkRoutes.closeEnough(npc,target)&&FieldworkRoutes.plan(npc,target,false)==null) {
-            LifeActivityData.get(npc.getServer()).deferPlace(npc.getUUID(),npc.level().dimension().location().toString(),target,npc.level().getGameTime());
+            LifeActivityData.get(MinecraftApi.server(npc)).deferPlace(npc.getUUID(),npc.level().dimension().identifier().toString(),target,npc.level().getGameTime());
             return false;
         }
         return true;
     }
-    private static boolean knownLoaded(NpcBase npc,BlockPos target) { return target!=null && npc.level().hasChunkAt(target) && !com.jgeted.sagadyssey.worldsim.lod.NaturalVillageEconomyData.protects(npc.getServer(),npc.level().dimension().location().toString(),target)
-            && npc.level().getGameTime()>=LifeActivityData.get(npc.getServer()).placeRetryAt(npc.getUUID(),npc.level().dimension().location().toString(),target); }
+    private static boolean knownLoaded(NpcBase npc,BlockPos target) { return target!=null && npc.level().hasChunkAt(target) && !com.jgeted.sagadyssey.worldsim.lod.NaturalVillageEconomyData.protects(MinecraftApi.server(npc),npc.level().dimension().identifier().toString(),target)
+            && npc.level().getGameTime()>=LifeActivityData.get(MinecraftApi.server(npc)).placeRetryAt(npc.getUUID(),npc.level().dimension().identifier().toString(),target); }
     private static Optional<NpcPlan> plan(NpcBase npc,String op,BlockPos target,int duration,long now,Map<String,String> extra) {
-        return Optional.of(LifePlanFactory.create(npc.getUUID(),op,npc.level().dimension().location().toString(),target,duration,now,extra));
+        return Optional.of(LifePlanFactory.create(npc.getUUID(),op,npc.level().dimension().identifier().toString(),target,duration,now,extra));
     }
 }

@@ -1,5 +1,8 @@
 package com.jgeted.sagadyssey.social.credit;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+import net.minecraft.core.UUIDUtil;
+
 import com.jgeted.sagadyssey.worldsim.rights.SubjectRef;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
@@ -60,8 +63,8 @@ public record CreditAgreement(UUID id, UUID settlementId, SubjectRef creditor,
 
     CompoundTag save() {
         CompoundTag tag = new CompoundTag();
-        tag.putUUID("Id", id);
-        tag.putUUID("Settlement", settlementId);
+        tag.store("Id", UUIDUtil.CODEC, id);
+        tag.store("Settlement", UUIDUtil.CODEC, settlementId);
         tag.put("Creditor", creditor.save());
         tag.put("Debtor", debtor.save());
         tag.putString("Purpose", purpose.name());
@@ -84,21 +87,21 @@ public record CreditAgreement(UUID id, UUID settlementId, SubjectRef creditor,
 
     static CreditAgreement load(CompoundTag tag) {
         List<CollateralPledge> collateral = new ArrayList<>();
-        ListTag collateralTags = tag.getList("Collateral", Tag.TAG_COMPOUND);
+        ListTag collateralTags = MinecraftApi.listOfType(tag, "Collateral", Tag.TAG_COMPOUND);
         for (int index = 0; index < collateralTags.size(); index++) {
-            collateral.add(CollateralPledge.load(collateralTags.getCompound(index)));
+            collateral.add(CollateralPledge.load(collateralTags.getCompoundOrEmpty(index)));
         }
         List<CreditGuarantee> guarantees = new ArrayList<>();
-        ListTag guaranteeTags = tag.getList("Guarantees", Tag.TAG_COMPOUND);
+        ListTag guaranteeTags = MinecraftApi.listOfType(tag, "Guarantees", Tag.TAG_COMPOUND);
         for (int index = 0; index < guaranteeTags.size(); index++) {
-            guarantees.add(CreditGuarantee.load(guaranteeTags.getCompound(index)));
+            guarantees.add(CreditGuarantee.load(guaranteeTags.getCompoundOrEmpty(index)));
         }
-        return new CreditAgreement(tag.getUUID("Id"), tag.getUUID("Settlement"),
-                SubjectRef.load(tag.getCompound("Creditor")),
-                SubjectRef.load(tag.getCompound("Debtor")),
-                CreditPurpose.valueOf(tag.getString("Purpose")), tag.getInt("Principal"),
-                tag.getInt("Outstanding"), tag.getLong("IssuedAt"), tag.getLong("DueAt"),
-                tag.getLong("StatusChangedAt"), CreditStatus.valueOf(tag.getString("Status")),
-                collateral, guarantees, tag.getString("Note"), tag.getInt("Revision"));
+        return new CreditAgreement(tag.read("Id", UUIDUtil.CODEC).orElseThrow(), tag.read("Settlement", UUIDUtil.CODEC).orElseThrow(),
+                SubjectRef.load(tag.getCompoundOrEmpty("Creditor")),
+                SubjectRef.load(tag.getCompoundOrEmpty("Debtor")),
+                CreditPurpose.valueOf(tag.getStringOr("Purpose", "")), tag.getIntOr("Principal", 0),
+                tag.getIntOr("Outstanding", 0), tag.getLongOr("IssuedAt", 0L), tag.getLongOr("DueAt", 0L),
+                tag.getLongOr("StatusChangedAt", 0L), CreditStatus.valueOf(tag.getStringOr("Status", "")),
+                collateral, guarantees, tag.getStringOr("Note", ""), tag.getIntOr("Revision", 0));
     }
 }

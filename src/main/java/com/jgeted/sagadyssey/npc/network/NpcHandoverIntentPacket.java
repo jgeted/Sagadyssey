@@ -11,7 +11,7 @@ import io.netty.handler.codec.DecoderException;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.InteractionHand;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
@@ -23,7 +23,7 @@ public record NpcHandoverIntentPacket(UUID transferId, int npcId, InteractionHan
                                       HandoverIntent intent, boolean wholeStack)
         implements CustomPacketPayload {
     public static final Type<NpcHandoverIntentPacket> TYPE = new Type<>(
-            ResourceLocation.fromNamespaceAndPath(Sagadyssey.MOD_ID, "npc_handover_intent"));
+            Identifier.fromNamespaceAndPath(Sagadyssey.MOD_ID, "npc_handover_intent"));
     public static final StreamCodec<ByteBuf, NpcHandoverIntentPacket> STREAM_CODEC = StreamCodec.of(
             (buffer, packet) -> {
                 buffer.writeLong(packet.transferId.getMostSignificantBits());
@@ -50,7 +50,7 @@ public record NpcHandoverIntentPacket(UUID transferId, int npcId, InteractionHan
         context.enqueueWork(() -> {
             if (!(context.player() instanceof ServerPlayer player)
                     || !NetworkRateLimiter.allow(player, "npc_handover", 2)) return;
-            if (!(player.serverLevel().getEntity(packet.npcId) instanceof NpcBase npc)) return;
+            if (!(player.level().getEntity(packet.npcId) instanceof NpcBase npc)) return;
             HandoverDecision decision = NpcHandoverService.offer(player, npc, packet.hand,
                     packet.wholeStack, packet.intent, packet.transferId);
             String color = decision.accepted() ? "§a"

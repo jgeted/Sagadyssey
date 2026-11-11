@@ -1,5 +1,7 @@
 package com.jgeted.sagadyssey.npc.brain.command;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+
 import com.jgeted.sagadyssey.npc.entity.*;
 import com.jgeted.sagadyssey.social.character.CharacterRegistry;
 import com.mojang.brigadier.arguments.*;
@@ -34,22 +36,22 @@ public final class NpcOrderCommand {
         npc.then(Commands.literal("order-status").then(Commands.argument("target",EntityArgument.entity()).executes(c->{
             var player=c.getSource().getPlayerOrException();if(!(EntityArgument.getEntity(c,"target") instanceof NpcBase n))return 0;
             var issuer=CharacterRegistry.ensureCurrent(player).id();
-            var own=NpcCommandData.get(player.server).known(issuer,n.getCharacterId());
+            var own=NpcCommandData.get(player.level().getServer()).known(issuer,n.getCharacterId());
             if(own.isEmpty())c.getSource().sendSuccess(()->Component.literal("没有你本人可确认的命令记录"),false);
             for(var i:own)c.getSource().sendSuccess(()->Component.literal("本人命令 "+i.command()+"："+i.status()+"；到期 "+i.expires()+"；"+i.detail()),false);
             return 1;
         })));
-        npc.then(Commands.literal("brain").requires(s->s.hasPermission(2)).then(Commands.literal("commands")
+        npc.then(Commands.literal("brain").requires(s->MinecraftApi.hasPermission(s, 2)).then(Commands.literal("commands")
                 .then(Commands.argument("target",EntityArgument.entity()).executes(c->{
                     if(!(EntityArgument.getEntity(c,"target") instanceof NpcBase n))return 0;
                     for(var i:NpcCommandData.get(c.getSource().getServer()).all())if(i.character().equals(n.getCharacterId()))
                         c.getSource().sendSuccess(()->Component.literal("命令后台 "+i.id()+" 发令人物="+i.issuer()+" 原授权="+i.evidence()+" 范围="+i.dimension()+"/"+i.anchor()+"/"+i.radius()+" 进度="+i.leg()+" "+i.status()),false);
                     return 1;
                 }))));
-        npc.then(Commands.literal("brain").requires(s->s.hasPermission(2)).then(Commands.literal("duties").then(Commands.argument("target",EntityArgument.entity()).executes(c->{
+        npc.then(Commands.literal("brain").requires(s->MinecraftApi.hasPermission(s, 2)).then(Commands.literal("duties").then(Commands.argument("target",EntityArgument.entity()).executes(c->{
             if(!(EntityArgument.getEntity(c,"target") instanceof NpcBase n))return 0;
-            for(var d:NpcDutyData.get(n.getServer()).all())if(d.character().equals(n.getCharacterId()))c.getSource().sendSuccess(()->Component.literal("职责后台 "+d.kind()+" "+d.id()+" 对象="+d.targetCharacter()+" 来源="+d.source()+" 原证明="+d.proofs()+" 实际="+d.worked()+"/"+d.duration()+" "+d.status()+" "+d.detail()),false);
-            for(var r:NpcInterruptionData.get(n.getServer()).all())if(r.character().equals(n.getCharacterId()))c.getSource().sendSuccess(()->Component.literal("抢占后台 原计划="+r.plan()+" 义务="+r.candidate()+" 原因="+r.reason()+" 续接="+r.continuation()),false);
+            for(var d:NpcDutyData.get(MinecraftApi.server(n)).all())if(d.character().equals(n.getCharacterId()))c.getSource().sendSuccess(()->Component.literal("职责后台 "+d.kind()+" "+d.id()+" 对象="+d.targetCharacter()+" 来源="+d.source()+" 原证明="+d.proofs()+" 实际="+d.worked()+"/"+d.duration()+" "+d.status()+" "+d.detail()),false);
+            for(var r:NpcInterruptionData.get(MinecraftApi.server(n)).all())if(r.character().equals(n.getCharacterId()))c.getSource().sendSuccess(()->Component.literal("抢占后台 原计划="+r.plan()+" 义务="+r.candidate()+" 原因="+r.reason()+" 续接="+r.continuation()),false);
             return 1;
         }))));
         e.getDispatcher().register(Commands.literal("saga").then(npc));

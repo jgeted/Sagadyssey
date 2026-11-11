@@ -2,7 +2,7 @@ package com.jgeted.sagadyssey.npc.brain.execution;
 
 import com.jgeted.sagadyssey.npc.brain.plan.NpcPlan;
 import com.jgeted.sagadyssey.npc.brain.plan.NpcPlanStep;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 
 /**
  * 将一个计划步骤映射为可持续多 tick 的游戏动作。
@@ -10,7 +10,7 @@ import net.minecraft.resources.ResourceLocation;
 public interface NpcTaskExecutor {
     /** Drop transient caches on unload; must not settle, cancel, refund or copy domain assets. */
     default void forget(java.util.UUID body, java.util.UUID plan) {}
-    ResourceLocation id();
+    Identifier id();
 
     TaskTickResult start(NpcExecutionContext context, NpcPlan plan, NpcPlanStep step);
 

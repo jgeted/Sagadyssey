@@ -1,5 +1,7 @@
 package com.jgeted.sagadyssey.npc.brain.debug;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+
 import com.jgeted.sagadyssey.npc.brain.execution.NpcBrainRuntime;
 import com.jgeted.sagadyssey.npc.brain.persistence.NpcBehaviorMode;
 import com.jgeted.sagadyssey.npc.brain.persistence.NpcBrainData;
@@ -45,7 +47,7 @@ public final class NpcBrainCommand {
 
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
         LiteralArgumentBuilder<CommandSourceStack> brain = Commands.literal("brain");
-        brain.requires(source -> source.hasPermission(2));
+        brain.requires(source -> MinecraftApi.hasPermission(source, 2));
         brain.then(Commands.literal("inspect")
                 .then(Commands.argument("target", EntityArgument.entity())
                         .executes(context -> inspect(context.getSource(),
@@ -138,7 +140,7 @@ public final class NpcBrainCommand {
         }
         var container = WarehouseContainers.asContainer(source.getLevel().getBlockEntity(position));
         if (container == null) { source.sendFailure(Component.literal("目标必须是已加载的储物容器")); return 0; }
-        String dimension = source.getLevel().dimension().location().toString();
+        String dimension = source.getLevel().dimension().identifier().toString();
         UUID id = ContainerIds.block("fieldwork_test", dimension, position);
         SubjectRef owner = SubjectRef.character(npc.getCharacterId());
         var rights = RightsStateData.get(source.getServer());
@@ -277,7 +279,7 @@ public final class NpcBrainCommand {
             return 0;
         }
         try {
-            String dimension = level.dimension().location().toString();
+            String dimension = level.dimension().identifier().toString();
             UUID containerId = ProductionContainerIds.resolve(source.getServer(), dimension,
                     containerPosition);
             SubjectRef issuer = SubjectRef.character(npc.getCharacterId());

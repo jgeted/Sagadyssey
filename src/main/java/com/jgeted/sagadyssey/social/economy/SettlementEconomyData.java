@@ -1,11 +1,13 @@
 package com.jgeted.sagadyssey.social.economy;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.world.level.saveddata.SavedData;
+import com.jgeted.sagadyssey.worldsim.NbtSavedData;
 
 import javax.annotation.Nullable;
 import java.util.HashMap;
@@ -13,7 +15,7 @@ import java.util.Map;
 import java.util.UUID;
 
 /** 持久化每日供给结算，避免服务器重启后同一天重复消耗。 */
-public final class SettlementEconomyData extends SavedData {
+public final class SettlementEconomyData extends NbtSavedData {
     private static final String DATA_NAME = "sagadyssey_settlement_economy";
     private static final Factory<SettlementEconomyData> FACTORY =
             new Factory<>(SettlementEconomyData::new, SettlementEconomyData::load);
@@ -26,7 +28,7 @@ public final class SettlementEconomyData extends SavedData {
     }
 
     public static SettlementEconomyData get(MinecraftServer server) {
-        return server.overworld().getDataStorage().computeIfAbsent(FACTORY, DATA_NAME);
+        return server.overworld().getDataStorage().computeIfAbsent(FACTORY.type(DATA_NAME));
     }
 
     /** 每个聚落独立判定；区块未加载时不会提前吞掉其他聚落的当日结算机会。 */
@@ -54,9 +56,9 @@ public final class SettlementEconomyData extends SavedData {
     private static SettlementEconomyData load(CompoundTag tag, HolderLookup.Provider registries) {
         SettlementEconomyData data = new SettlementEconomyData();
         com.jgeted.sagadyssey.social.combat.CombatImpact.load(tag,data.combatImpacts);
-        ListTag list = tag.getList("Records", Tag.TAG_COMPOUND);
+        ListTag list = MinecraftApi.listOfType(tag, "Records", Tag.TAG_COMPOUND);
         for (int i = 0; i < list.size(); i++) {
-            SettlementEconomyRecord record = SettlementEconomyRecord.load(list.getCompound(i));
+            SettlementEconomyRecord record = SettlementEconomyRecord.load(list.getCompoundOrEmpty(i));
             data.records.put(record.settlementId(), record);
         }
         return data;

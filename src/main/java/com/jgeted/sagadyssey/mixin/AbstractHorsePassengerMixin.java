@@ -2,7 +2,7 @@ package com.jgeted.sagadyssey.mixin;
 
 import com.jgeted.sagadyssey.npc.entity.NpcBase;
 import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.animal.horse.AbstractHorse;
+import net.minecraft.world.entity.animal.equine.AbstractHorse;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -23,7 +23,7 @@ public class AbstractHorsePassengerMixin {
     ) {
         if (passenger instanceof NpcBase) {
             AbstractHorse self = (AbstractHorse) (Object) this;
-            passenger.absMoveTo(self.getX(), self.getY() + 0.8, self.getZ());
+            passenger.absSnapTo(self.getX(), self.getY() + 0.8, self.getZ());
             ci.cancel();
         }
     }

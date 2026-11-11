@@ -4,15 +4,15 @@ import com.jgeted.sagadyssey.npc.brain.execution.WaitUntilTaskExecutor;
 import com.jgeted.sagadyssey.npc.brain.plan.*;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.NbtUtils;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.level.block.Blocks;
 
 import java.util.*;
 
 public final class FieldworkPlanFactory {
-    public static final ResourceLocation PROVIDER = id("fieldwork");
-    public static final ResourceLocation RESERVE = id("fieldwork_reserve"), MOVE = id("fieldwork_move"),
+    public static final Identifier PROVIDER = id("fieldwork");
+    public static final Identifier RESERVE = id("fieldwork_reserve"), MOVE = id("fieldwork_move"),
             ACT = id("fieldwork_act"), DEPOSIT = id("fieldwork_deposit"), REST = id("fieldwork_rest"), TOOL = id("fieldwork_tool"), SEED = id("fieldwork_seed");
     private FieldworkPlanFactory() { }
 
@@ -122,7 +122,7 @@ public final class FieldworkPlanFactory {
     private static Map<String, String> stand(BlockPos pos) {
         return Map.of("stand_x", Integer.toString(pos.getX()), "stand_y", Integer.toString(pos.getY()), "stand_z", Integer.toString(pos.getZ()));
     }
-    private static void add(List<NpcPlanStep> steps, NpcPlanPhase phase, ResourceLocation executor,
+    private static void add(List<NpcPlanStep> steps, NpcPlanPhase phase, Identifier executor,
                              Map<String, String> params, long now) {
         steps.add(new NpcPlanStep(steps.size(), phase, executor, params, NpcPlanStepStatus.PENDING, now, "等待执行"));
     }
@@ -130,5 +130,5 @@ public final class FieldworkPlanFactory {
         return new NpcPlan(UUID.randomUUID(), npcId, key, PROVIDER, NpcPlanKind.WORK, NpcPlanPriority.NORMAL,
                 NpcPlanStatus.SELECTED, steps, 0, now, now, now + 200L, now + 12_000L, null, reason);
     }
-    private static ResourceLocation id(String path) { return ResourceLocation.fromNamespaceAndPath("sagadyssey", path); }
+    private static Identifier id(String path) { return Identifier.fromNamespaceAndPath("sagadyssey", path); }
 }

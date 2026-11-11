@@ -32,7 +32,7 @@ public class NpcInteractionScreen extends Screen {
         addRenderableWidget(Button.builder(
                 Component.literal("招募"),
                 btn -> {
-                    PacketDistributor.sendToServer(new NpcInteractionPacket(npcId, "recruit"));
+                    net.neoforged.neoforge.client.network.ClientPacketDistributor.sendToServer(new NpcInteractionPacket(npcId, "recruit"));
                     this.onClose();
                 })
                 .bounds(centerX - 50, buttonY, 100, 20)
@@ -41,7 +41,7 @@ public class NpcInteractionScreen extends Screen {
         addRenderableWidget(Button.builder(
                 Component.literal("转职（开发中）"),
                 btn -> {
-                    PacketDistributor.sendToServer(new NpcInteractionPacket(npcId, "change_profession"));
+                    net.neoforged.neoforge.client.network.ClientPacketDistributor.sendToServer(new NpcInteractionPacket(npcId, "change_profession"));
                     this.onClose();
                 })
                 .bounds(centerX - 60, buttonY + 25, 120, 20)

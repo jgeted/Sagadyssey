@@ -1,5 +1,7 @@
 package com.jgeted.sagadyssey.social.life;
 
+import net.minecraft.core.UUIDUtil;
+
 import net.minecraft.nbt.CompoundTag;
 
 import java.util.UUID;
@@ -119,9 +121,9 @@ public record NpcEmploymentContract(
 
     public CompoundTag save() {
         CompoundTag tag = new CompoundTag();
-        tag.putUUID("Npc", npcId);
-        tag.putUUID("Employer", employerCharacterId);
-        tag.putUUID("Settlement", settlementId);
+        tag.store("Npc", UUIDUtil.CODEC, npcId);
+        tag.store("Employer", UUIDUtil.CODEC, employerCharacterId);
+        tag.store("Settlement", UUIDUtil.CODEC, settlementId);
         tag.putInt("Wage", wageEmeralds);
         tag.putLong("PayPeriod", payPeriodTicks);
         tag.putLong("Started", startedAt);
@@ -136,12 +138,12 @@ public record NpcEmploymentContract(
     }
 
     public static NpcEmploymentContract load(CompoundTag tag) {
-        return new NpcEmploymentContract(tag.getUUID("Npc"), tag.getUUID("Employer"),
-                tag.getUUID("Settlement"), tag.getInt("Wage"),
-                tag.contains("PayPeriod") ? tag.getLong("PayPeriod") : DEFAULT_PAY_PERIOD,
-                tag.getLong("Started"), tag.getLong("Ends"), tag.getLong("NextPayment"),
-                tag.getInt("Unpaid"), tag.getInt("Missed"),
-                NpcContractStatus.parse(tag.getString("Status")), tag.getString("Reason"),
-                tag.getLong("StatusChanged"));
+        return new NpcEmploymentContract(tag.read("Npc", UUIDUtil.CODEC).orElseThrow(), tag.read("Employer", UUIDUtil.CODEC).orElseThrow(),
+                tag.read("Settlement", UUIDUtil.CODEC).orElseThrow(), tag.getIntOr("Wage", 0),
+                tag.contains("PayPeriod") ? tag.getLongOr("PayPeriod", 0L) : DEFAULT_PAY_PERIOD,
+                tag.getLongOr("Started", 0L), tag.getLongOr("Ends", 0L), tag.getLongOr("NextPayment", 0L),
+                tag.getIntOr("Unpaid", 0), tag.getIntOr("Missed", 0),
+                NpcContractStatus.parse(tag.getStringOr("Status", "")), tag.getStringOr("Reason", ""),
+                tag.getLongOr("StatusChanged", 0L));
     }
 }

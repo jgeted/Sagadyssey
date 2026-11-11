@@ -1,5 +1,7 @@
 package com.jgeted.sagadyssey.social.character;
 
+import net.minecraft.core.UUIDUtil;
+
 import com.jgeted.sagadyssey.npc.identity.NpcIdentity;
 import com.jgeted.sagadyssey.npc.identity.NpcOffice;
 import com.jgeted.sagadyssey.npc.identity.NpcSocialClass;
@@ -72,7 +74,7 @@ public final class CharacterRecord {
 
     public CompoundTag save() {
         CompoundTag tag = new CompoundTag();
-        tag.putUUID("Id", id);
+        tag.store("Id", UUIDUtil.CODEC, id);
         tag.putString("Name", name);
         tag.putString("SocialClass", socialClass);
         tag.putString("Office", office);
@@ -89,20 +91,20 @@ public final class CharacterRecord {
 
     @Nullable
     public static CharacterRecord load(CompoundTag tag) {
-        if (!tag.hasUUID("Id")) return null;
+        if (!tag.read("Id", UUIDUtil.CODEC).isPresent()) return null;
         CharacterRecord record = new CharacterRecord(
-                tag.getUUID("Id"),
-                tag.getString("Name"),
-                NpcSocialClass.byName(tag.getString("SocialClass")),
-                NpcOffice.byName(tag.getString("Office")),
-                tag.getString("Faction"),
-                tag.getLong("Born"),
-                tag.getInt("LifeNumber"));
-        record.alive = !tag.contains("Alive") || tag.getBoolean("Alive");
-        record.deathGameTime = tag.contains("Death") ? tag.getLong("Death") : -1L;
-        record.deathCause = tag.getString("DeathCause");
-        record.historicalImportance = tag.getInt("HistoricalImportance");
-        record.rescueCount = tag.getInt("RescueCount");
+                tag.read("Id", UUIDUtil.CODEC).orElseThrow(),
+                tag.getStringOr("Name", ""),
+                NpcSocialClass.byName(tag.getStringOr("SocialClass", "")),
+                NpcOffice.byName(tag.getStringOr("Office", "")),
+                tag.getStringOr("Faction", ""),
+                tag.getLongOr("Born", 0L),
+                tag.getIntOr("LifeNumber", 0));
+        record.alive = !tag.contains("Alive") || tag.getBooleanOr("Alive", false);
+        record.deathGameTime = tag.contains("Death") ? tag.getLongOr("Death", 0L) : -1L;
+        record.deathCause = tag.getStringOr("DeathCause", "");
+        record.historicalImportance = tag.getIntOr("HistoricalImportance", 0);
+        record.rescueCount = tag.getIntOr("RescueCount", 0);
         return record;
     }
 

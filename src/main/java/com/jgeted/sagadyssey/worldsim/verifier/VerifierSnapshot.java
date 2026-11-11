@@ -1,5 +1,7 @@
 package com.jgeted.sagadyssey.worldsim.verifier;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.StringTag;
@@ -107,28 +109,28 @@ public record VerifierSnapshot(
 
     static VerifierSnapshot load(CompoundTag tag) {
         Map<String, ContainerState> containers = new TreeMap<>();
-        ListTag containerList = tag.getList("Containers", Tag.TAG_COMPOUND);
+        ListTag containerList = MinecraftApi.listOfType(tag, "Containers", Tag.TAG_COMPOUND);
         for (int index = 0; index < containerList.size(); index++) {
-            CompoundTag container = containerList.getCompound(index);
-            String id = container.getString("Id");
+            CompoundTag container = containerList.getCompoundOrEmpty(index);
+            String id = container.getStringOr("Id", "");
             if (id.isBlank()) continue;
-            containers.put(id, new ContainerState(container.getString("Kind"),
-                    container.getString("Locator"), container.getLong("Revision"),
-                    container.getInt("Size"), container.getInt("NonEmptySlots"),
-                    loadLongMap(container.getCompound("Assets"))));
+            containers.put(id, new ContainerState(container.getStringOr("Kind", ""),
+                    container.getStringOr("Locator", ""), container.getLongOr("Revision", 0L),
+                    container.getIntOr("Size", 0), container.getIntOr("NonEmptySlots", 0),
+                    loadLongMap(container.getCompoundOrEmpty("Assets"))));
         }
 
         List<String> warnings = new java.util.ArrayList<>();
-        ListTag warningList = tag.getList("CoverageWarnings", Tag.TAG_STRING);
+        ListTag warningList = MinecraftApi.listOfType(tag, "CoverageWarnings", Tag.TAG_STRING);
         for (int index = 0; index < warningList.size(); index++) {
-            warnings.add(warningList.getString(index));
+            warnings.add(warningList.getStringOr(index, ""));
         }
-        return create(tag.getString("Name"), tag.getString("World"), tag.getLong("CapturedAt"),
-                tag.getInt("SchemaVersion"), tag.getString("Dimension"),
-                tag.getString("ScenarioId"), tag.getString("ScenarioProfile"),
-                tag.getInt("ScenarioRevision"), containers,
-                loadLongMap(tag.getCompound("AssetTotals")),
-                loadLongMap(tag.getCompound("DomainCounts")), warnings);
+        return create(tag.getStringOr("Name", ""), tag.getStringOr("World", ""), tag.getLongOr("CapturedAt", 0L),
+                tag.getIntOr("SchemaVersion", 0), tag.getStringOr("Dimension", ""),
+                tag.getStringOr("ScenarioId", ""), tag.getStringOr("ScenarioProfile", ""),
+                tag.getIntOr("ScenarioRevision", 0), containers,
+                loadLongMap(tag.getCompoundOrEmpty("AssetTotals")),
+                loadLongMap(tag.getCompoundOrEmpty("DomainCounts")), warnings);
     }
 
     private static CompoundTag saveLongMap(Map<String, Long> values) {
@@ -139,7 +141,7 @@ public record VerifierSnapshot(
 
     private static Map<String, Long> loadLongMap(CompoundTag tag) {
         Map<String, Long> values = new TreeMap<>();
-        tag.getAllKeys().forEach(key -> values.put(key, tag.getLong(key)));
+        tag.keySet().forEach(key -> values.put(key, tag.getLongOr(key, 0L)));
         return values;
     }
 

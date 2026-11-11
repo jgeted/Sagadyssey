@@ -1,11 +1,13 @@
 package com.jgeted.sagadyssey.social.production;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.world.level.saveddata.SavedData;
+import com.jgeted.sagadyssey.worldsim.NbtSavedData;
 
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -15,7 +17,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 /** 世界级生产订单簿；活动订单绝不会因容量裁剪而被静默删除。 */
-public final class ProductionOrderData extends SavedData {
+public final class ProductionOrderData extends NbtSavedData {
     public static final String DATA_NAME = "sagadyssey_production_orders_v3";
     public static final int SCHEMA_VERSION = 1;
     public static final int MAX_ORDERS = 2_048;
@@ -34,7 +36,7 @@ public final class ProductionOrderData extends SavedData {
 
     public static ProductionOrderData get(MinecraftServer server) {
         if (server == null) throw new IllegalArgumentException("server is required");
-        return server.overworld().getDataStorage().computeIfAbsent(FACTORY, DATA_NAME);
+        return server.overworld().getDataStorage().computeIfAbsent(FACTORY.type(DATA_NAME));
     }
 
     public synchronized List<ProductionOrder> openOrders() {
@@ -89,15 +91,15 @@ public final class ProductionOrderData extends SavedData {
 
     static ProductionOrderData load(CompoundTag tag, HolderLookup.Provider registries) {
         ProductionOrderData data = new ProductionOrderData();
-        if (tag == null || !tag.contains("Schema", Tag.TAG_INT)
-                || tag.getInt("Schema") != SCHEMA_VERSION
-                || !tag.contains("Orders", Tag.TAG_LIST)) {
+        if (tag == null || !MinecraftApi.containsTag(tag, "Schema", Tag.TAG_INT)
+                || tag.getIntOr("Schema", 0) != SCHEMA_VERSION
+                || !MinecraftApi.containsTag(tag, "Orders", Tag.TAG_LIST)) {
             return data;
         }
-        ListTag list = tag.getList("Orders", Tag.TAG_COMPOUND);
+        ListTag list = MinecraftApi.listOfType(tag, "Orders", Tag.TAG_COMPOUND);
         for (int index = 0; index < list.size(); index++) {
             try {
-                ProductionOrder order = ProductionOrder.load(list.getCompound(index));
+                ProductionOrder order = ProductionOrder.load(list.getCompoundOrEmpty(index));
                 if (data.orders.containsKey(order.id())) continue;
                 data.addLoaded(order);
             } catch (RuntimeException ignored) {

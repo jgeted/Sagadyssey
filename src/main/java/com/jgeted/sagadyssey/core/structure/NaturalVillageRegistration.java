@@ -28,7 +28,7 @@ public final class NaturalVillageRegistration {
 
     public static void duringPiece(StructureStart start, StructurePiece piece, WorldGenLevel level,
                                    Runnable vanillaPlacement) {
-        var id = level.registryAccess().registryOrThrow(Registries.STRUCTURE).getKey(start.getStructure());
+        var id = level.registryAccess().lookupOrThrow(Registries.STRUCTURE).getKey(start.getStructure());
         if (!NaturalVillageBuilding.SUPPORTED.equals(id)
                 || !(piece instanceof PoolElementStructurePiece poolPiece)
                 || poolPiece.getElement().getClass() != SinglePoolElement.class) {
@@ -40,14 +40,14 @@ public final class NaturalVillageRegistration {
                 level.registryAccess().createSerializationContext(NbtOps.INSTANCE),
                 (SinglePoolElement) poolPiece.getElement()).result();
         if (encoded.isEmpty() || !(encoded.get() instanceof CompoundTag tag)
-                || !NaturalVillageLayout.supportedTemplate(tag.getString("location"))) {
+                || !NaturalVillageLayout.supportedTemplate(tag.getStringOr("location", ""))) {
             vanillaPlacement.run();
             return;
         }
         var anchor = start.getChunkPos().getWorldPosition();
         var center = new BlockPos(anchor.getX() + 8, start.getPieces().getFirst().getBoundingBox().minY(), anchor.getZ() + 8);
-        var building = new NaturalVillageBuilding(level.getLevel().dimension().location().toString(),
-                id.toString(), anchor, center, tag.getString("location"),
+        var building = new NaturalVillageBuilding(level.getLevel().dimension().identifier().toString(),
+                id.toString(), anchor, center, tag.getStringOr("location", ""),
                 poolPiece.getPosition(), poolPiece.getRotation());
         Placement previous = CURRENT.get();
         CURRENT.set(new Placement(poolPiece, building));

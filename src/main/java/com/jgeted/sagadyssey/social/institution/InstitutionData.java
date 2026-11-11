@@ -1,12 +1,14 @@
 package com.jgeted.sagadyssey.social.institution;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+
 import com.jgeted.sagadyssey.worldsim.rights.SubjectRef;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.world.level.saveddata.SavedData;
+import com.jgeted.sagadyssey.worldsim.NbtSavedData;
 
 import javax.annotation.Nullable;
 import java.util.ArrayList;
@@ -16,7 +18,7 @@ import java.util.Map;
 import java.util.UUID;
 
 /** Durable memberships, offices, treaties, and overlapping jurisdiction claims. */
-public final class InstitutionData extends SavedData {
+public final class InstitutionData extends NbtSavedData {
     private static final String DATA_NAME = "sagadyssey_institutions";
     private static final Factory<InstitutionData> FACTORY =
             new Factory<>(InstitutionData::new, InstitutionData::load);
@@ -27,7 +29,7 @@ public final class InstitutionData extends SavedData {
     private final Map<UUID, JurisdictionClaim> claims = new HashMap<>();
 
     public static InstitutionData get(MinecraftServer server) {
-        return server.overworld().getDataStorage().computeIfAbsent(FACTORY, DATA_NAME);
+        return server.overworld().getDataStorage().computeIfAbsent(FACTORY.type(DATA_NAME));
     }
 
     public boolean addInstitution(InstitutionRecord value) {
@@ -199,9 +201,9 @@ public final class InstitutionData extends SavedData {
     }
 
     private static List<CompoundTag> compounds(CompoundTag root, String key) {
-        ListTag list = root.getList(key, Tag.TAG_COMPOUND);
+        ListTag list = MinecraftApi.listOfType(root, key, Tag.TAG_COMPOUND);
         List<CompoundTag> result = new ArrayList<>();
-        for (int index = 0; index < list.size(); index++) result.add(list.getCompound(index));
+        for (int index = 0; index < list.size(); index++) result.add(list.getCompoundOrEmpty(index));
         return result;
     }
 }

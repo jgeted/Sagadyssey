@@ -1,5 +1,7 @@
 package com.jgeted.sagadyssey.worldsim;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtAccounter;
 import net.minecraft.nbt.NbtIo;
@@ -30,10 +32,10 @@ class LegacySavedDataLoadTest {
                 try (InputStream stream = requireResource("fixtures/v1_9/" + path)) {
                     root = NbtIo.readCompressed(stream, NbtAccounter.unlimitedHeap());
                 }
-                assertTrue(root.contains("data", Tag.TAG_COMPOUND), path + " has no SavedData root");
+                assertTrue(MinecraftApi.containsTag(root, "data", Tag.TAG_COMPOUND), path + " has no SavedData root");
                 MessageDigest digest = worldDigests.computeIfAbsent(world, ignored -> sha256());
                 digest.update(path.getBytes(StandardCharsets.UTF_8));
-                digest.update(root.getCompound("data").toString().getBytes(StandardCharsets.UTF_8));
+                digest.update(root.getCompoundOrEmpty("data").toString().getBytes(StandardCharsets.UTF_8));
             }
         }
         assertEquals(3, worldDigests.size());
@@ -54,7 +56,7 @@ class LegacySavedDataLoadTest {
                 }
                 MessageDigest digest = digests.computeIfAbsent(world, ignored -> sha256());
                 digest.update(path.getBytes(StandardCharsets.UTF_8));
-                digest.update(root.getCompound("data").toString().getBytes(StandardCharsets.UTF_8));
+                digest.update(root.getCompoundOrEmpty("data").toString().getBytes(StandardCharsets.UTF_8));
             }
         }
         return finish(digests);

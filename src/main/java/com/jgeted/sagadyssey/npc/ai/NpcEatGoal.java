@@ -75,7 +75,7 @@ public final class NpcEatGoal extends Goal {
         } else {
             HouseholdRecord household = HouseholdData.get(level.getServer()).forMember(npc.getCharacterId());
             if (household != null && household.dimension().equals(
-                    level.dimension().location().toString())
+                    level.dimension().identifier().toString())
                     && usableFoodStorage(level, household.sharedStorage(), emergency)) {
                 source = Source.HOUSEHOLD;
                 storage = household.sharedStorage();
@@ -201,7 +201,7 @@ public final class NpcEatGoal extends Goal {
             policy = AccessPolicy.PRIVATE;
         } else if (source == Source.PRIVATE) {
             containerId = ContainerIds.block("private_storage",
-                    level.dimension().location().toString(), storage);
+                    level.dimension().identifier().toString(), storage);
             consumingAs = character;
             policy = AccessPolicy.PRIVATE;
         } else {
@@ -212,11 +212,11 @@ public final class NpcEatGoal extends Goal {
                 return;
             }
             containerId = ContainerIds.block("household_storage",
-                    level.dimension().location().toString(), storage);
+                    level.dimension().identifier().toString(), storage);
             consumingAs = SubjectRef.household(household.id());
             policy = AccessPolicy.HOUSEHOLD;
         }
-        rights.ensureContext(containerId, "food:" + level.dimension().location() + ':'
+        rights.ensureContext(containerId, "food:" + level.dimension().identifier() + ':'
                         + (storage == null ? npc.getCharacterId() : storage.asLong()),
                 consumingAs, consumingAs, policy);
         ConsumptionService.Result result = new ConsumptionService(rights).consume(containerId,
@@ -230,7 +230,7 @@ public final class NpcEatGoal extends Goal {
         NpcLifeData.get(level.getServer()).feed(npc.getCharacterId(), restored,
                 sourceName + "的" + foodName, level.getGameTime());
         npc.playAction(NpcAction.EAT, 30);
-        npc.playSound(SoundEvents.GENERIC_EAT, 0.75F, 0.9F + npc.getRandom().nextFloat() * 0.2F);
+        npc.playSound(SoundEvents.GENERIC_EAT.value(), 0.75F, 0.9F + npc.getRandom().nextFloat() * 0.2F);
         npc.reportWorkActivity("进食", storage,
                 "吃下 " + foodName + "，饥饿降低 " + restored + "；来源=" + sourceName);
         finished = true;

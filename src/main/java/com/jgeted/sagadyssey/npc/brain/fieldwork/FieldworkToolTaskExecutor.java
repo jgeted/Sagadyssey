@@ -1,5 +1,7 @@
 package com.jgeted.sagadyssey.npc.brain.fieldwork;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+
 import com.jgeted.sagadyssey.npc.ai.MovementProgress;
 import com.jgeted.sagadyssey.npc.brain.execution.*;
 import com.jgeted.sagadyssey.npc.brain.plan.*;
@@ -10,7 +12,7 @@ import com.jgeted.sagadyssey.social.life.NpcSchedulePlanner;
 import com.jgeted.sagadyssey.social.needs.SupplyFlowService;
 import com.jgeted.sagadyssey.worldsim.rights.*;
 import com.jgeted.sagadyssey.worldsim.transfer.*;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.world.item.*;
 import net.minecraft.world.level.block.state.BlockState;
 import java.util.*;
@@ -18,7 +20,7 @@ import java.util.*;
 /** One explicitly authorized spare pickaxe, from the current household to the original worker. */
 public final class FieldworkToolTaskExecutor implements NpcTaskExecutor {
     private final Map<UUID,MovementProgress> movement=new HashMap<>();
-    @Override public ResourceLocation id(){return FieldworkPlanFactory.TOOL;}
+    @Override public Identifier id(){return FieldworkPlanFactory.TOOL;}
     @Override public void forget(UUID body,UUID plan){movement.remove(plan);}
     @Override public TaskTickResult start(NpcExecutionContext c,NpcPlan p,NpcPlanStep s){return take(c,p,s);}
     @Override public TaskTickResult tick(NpcExecutionContext c,NpcPlan p,NpcPlanStep s){return take(c,p,s);}
@@ -26,10 +28,10 @@ public final class FieldworkToolTaskExecutor implements NpcTaskExecutor {
     @Override public void cancel(NpcExecutionContext c,NpcPlan p,NpcPlanStep s,PlanCancellationReason reason){movement.remove(p.id());if(c instanceof NpcEntityExecutionContext e)e.npc().getNavigation().stop();}
 
     static boolean hasUsablePickaxe(NpcBase npc,BlockState target,long now){
-        var inventory=npc.getPersonalInventory();var rights=RightsStateData.get(npc.getServer());var id=ContainerIds.npcPersonal(npc.getCharacterId());
+        var inventory=npc.getPersonalInventory();var rights=RightsStateData.get(MinecraftApi.server(npc));var id=ContainerIds.npcPersonal(npc.getCharacterId());
         for(int slot=0;slot<=inventory.getContainerSize();slot++){
             var item=slot==inventory.getContainerSize()?npc.getMainHandItem():inventory.getItem(slot);
-            if(item.isEmpty()||!(item.getItem() instanceof PickaxeItem)||target.requiresCorrectToolForDrops()&&!item.isCorrectToolForDrops(target))continue;
+            if(item.isEmpty()||!(item.is(net.minecraft.tags.ItemTags.PICKAXES))||target.requiresCorrectToolForDrops()&&!item.isCorrectToolForDrops(target))continue;
             if(rights.context(id)==null)return true;
             var fp=ItemFingerprint.of(item);var claim=rights.claimAt(id,slot,fp);
             if(claim!=null&&!claim.reservations().isEmpty()||rights.reservedQuantity(id,fp,null,now)>0)continue;
@@ -39,7 +41,7 @@ public final class FieldworkToolTaskExecutor implements NpcTaskExecutor {
     }
     private TaskTickResult take(NpcExecutionContext raw,NpcPlan plan,NpcPlanStep step){
         if(!(raw instanceof NpcEntityExecutionContext c))return TaskTickResult.failed("领取工具需要服务端实体");
-        var npc=c.npc();var server=npc.getServer();long now=c.gameTime();
+        var npc=c.npc();var server=MinecraftApi.server(npc);long now=c.gameTime();
         var ledger=TransferLedgerData.get(server);var previous=ledger.receipt(plan.id());
         if(previous!=null)return previous.successful()?done(npc,plan,"已提交同一工具领取，未重复取物"):stop(npc,plan,"本次领取未提交，稍后重查条件");
         var target=FieldworkTarget.position(step.params());
@@ -49,7 +51,7 @@ public final class FieldworkToolTaskExecutor implements NpcTaskExecutor {
         if(!FieldworkDiscovery.mineTarget(state)||hasUsablePickaxe(npc,state,now))return done(npc,plan,"无需再领铁镐");
         var home=HouseholdData.get(server).forMember(npc.getCharacterId());
         if(home==null||home.sharedStorage()==null||!home.id().toString().equals(step.params().get("household"))
-                ||!home.dimension().equals(c.level().dimension().location().toString()))return stop(npc,plan,"家庭或工具仓关联已变化");
+                ||!home.dimension().equals(c.level().dimension().identifier().toString()))return stop(npc,plan,"家庭或工具仓关联已变化");
         var source=new FieldworkStorage(home.dimension(),home.sharedStorage(),ContainerIds.block("household_storage",home.dimension(),home.sharedStorage()),
                 SubjectRef.household(home.id()),AccessPolicy.HOUSEHOLD,TransferIntent.GIFT,"worker_tool:"+npc.getCharacterId());
         var inventory=SupplyFlowService.container(server,source);

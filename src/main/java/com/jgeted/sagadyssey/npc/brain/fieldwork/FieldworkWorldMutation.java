@@ -11,7 +11,7 @@ import net.minecraft.core.registries.Registries;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.nbt.NbtUtils;
 import net.minecraft.nbt.TagParser;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.item.*;
@@ -42,8 +42,8 @@ public final class FieldworkWorldMutation implements FieldworkCommitService.Muta
         npc = context.npc(); level = context.level(); this.action = action; this.now = now;
         if (!level.getServer().isSameThread()) throw new IllegalStateException("fieldwork must run on server thread");
         try {
-            before = NbtUtils.readBlockState(level.holderLookup(Registries.BLOCK), TagParser.parseTag(action.expectedState()));
-            after = NbtUtils.readBlockState(level.holderLookup(Registries.BLOCK), TagParser.parseTag(params.get("result")));
+            before = NbtUtils.readBlockState(level.holderLookup(Registries.BLOCK), TagParser.parseCompoundFully(action.expectedState()));
+            after = NbtUtils.readBlockState(level.holderLookup(Registries.BLOCK), TagParser.parseCompoundFully(params.get("result")));
         } catch (Exception exception) { throw new IllegalArgumentException("invalid block intent", exception); }
         rights = RightsStateData.get(level.getServer());
         containerId = ContainerIds.npcPersonal(npc.getCharacterId());
@@ -65,7 +65,7 @@ public final class FieldworkWorldMutation implements FieldworkCommitService.Muta
         if (needsTool(action.operation()) && toolSlot < 0) block("MISSING_TOOL", "缺少适用工具或使用权");
         if (before.hasBlockEntity() || after.hasBlockEntity()) block("BLOCK_ENTITY_FORBIDDEN", "不能把储物或功能方块当作普通材料作业");
         if (params.containsKey("input")) {
-            Item input = BuiltInRegistries.ITEM.get(ResourceLocation.parse(params.get("input")));
+            Item input = BuiltInRegistries.ITEM.getValue(Identifier.parse(params.get("input")));
             int slot = consumeSlot(input);
             if (slot < 0) block("MISSING_INPUT", "没有可消耗的投入物品");
             else { deltas.add(delta(working[slot], -1)); working[slot].shrink(1); }
@@ -81,7 +81,7 @@ public final class FieldworkWorldMutation implements FieldworkCommitService.Muta
         if (params.containsKey("replacement")) {
             int quantity = Integer.parseInt(params.getOrDefault("replacement_count", "1"));
             if (quantity < 1 || quantity > 64) throw new IllegalArgumentException("invalid replacement quantity");
-            outputs.add(new ItemStack(BuiltInRegistries.ITEM.get(ResourceLocation.parse(params.get("replacement"))), quantity));
+            outputs.add(new ItemStack(BuiltInRegistries.ITEM.getValue(Identifier.parse(params.get("replacement"))), quantity));
         }
         for (ItemStack output : outputs) {
             if (output.isEmpty()) continue;
@@ -104,7 +104,7 @@ public final class FieldworkWorldMutation implements FieldworkCommitService.Muta
     @Override public Optional<FieldworkCommitService.Blocker> validate() {
         if (blocker != null) return Optional.of(blocker);
         if (!npc.isAlive() || !action.npcId().equals(npc.getUUID())) return denied("NPC_INVALID", "作业实体失效");
-        if (!action.dimension().equals(level.dimension().location().toString())) return denied("WRONG_DIMENSION", "目标维度已变化");
+        if (!action.dimension().equals(level.dimension().identifier().toString())) return denied("WRONG_DIMENSION", "目标维度已变化");
         if (!level.hasChunkAt(action.target())) return denied("CHUNK_UNLOADED", "目标区块未加载");
         boolean recovery = action.operation() == FieldworkAction.Operation.RECOVER_SCAFFOLD;
         if (action.operation() == FieldworkAction.Operation.PLACE_SCAFFOLD
@@ -196,7 +196,7 @@ public final class FieldworkWorldMutation implements FieldworkCommitService.Muta
             ItemStack tool = working[slot];
             boolean suitable = operation == FieldworkAction.Operation.TILL ? tool.getItem() instanceof HoeItem
                     : operation == FieldworkAction.Operation.CHOP ? tool.getItem() instanceof AxeItem || tool.getItem() instanceof ShearsItem
-                    : operation == FieldworkAction.Operation.MINE ? tool.getItem() instanceof PickaxeItem
+                    : operation == FieldworkAction.Operation.MINE ? tool.is(net.minecraft.tags.ItemTags.PICKAXES)
                     || !FieldworkDiscovery.mineTarget(state) && tool.getItem() instanceof ShovelItem : true;
             if (!tool.isEmpty() && suitable && (!state.requiresCorrectToolForDrops() || tool.isCorrectToolForDrops(state))
                     && permitted(slot, AssetRight.USE)) return slot;

@@ -1,5 +1,7 @@
 package com.jgeted.sagadyssey.core.command;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+
 import com.jgeted.sagadyssey.Sagadyssey;
 import com.jgeted.sagadyssey.core.structure.SagadysseyStructures;
 import com.jgeted.sagadyssey.core.structure.StructureConfig;
@@ -12,7 +14,7 @@ import net.minecraft.commands.Commands;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.RandomSource;
@@ -49,14 +51,14 @@ public final class StructurePreviewCommand {
         dispatcher.register(Commands.literal("saga")
                 .then(Commands.literal("structure")
                         .then(Commands.literal("preview")
-                                .requires(source -> source.hasPermission(2))
+                                .requires(source -> MinecraftApi.hasPermission(source, 2))
                                 .then(Commands.argument("structure_id", StringArgumentType.word())
                                         .suggests((ctx, builder) -> suggestStructures(builder))
                                         .executes(ctx -> preview(
                                                 ctx.getSource(),
                                                 StringArgumentType.getString(ctx, "structure_id")))))
                         .then(Commands.literal("gallery")
-                                .requires(source -> source.hasPermission(2))
+                                .requires(source -> MinecraftApi.hasPermission(source, 2))
                                 .executes(ctx -> gallery(ctx.getSource(), GalleryGroup.ALL))
                                 .then(Commands.literal("small")
                                         .executes(ctx -> gallery(ctx.getSource(), GalleryGroup.SMALL)))
@@ -80,7 +82,7 @@ public final class StructurePreviewCommand {
             return 0;
         }
 
-        ServerLevel level = player.serverLevel();
+        ServerLevel level = player.level();
         String baseTemplatePath = config.getNbtFileName();
         List<LoadedTemplate> templates = loadTemplates(level, baseTemplatePath);
         if (templates.isEmpty() || !templates.getFirst().variant().suffix().isEmpty()) {
@@ -141,7 +143,7 @@ public final class StructurePreviewCommand {
     private static int gallery(CommandSourceStack source, GalleryGroup group)
             throws com.mojang.brigadier.exceptions.CommandSyntaxException {
         ServerPlayer player = source.getPlayerOrException();
-        ServerLevel level = player.serverLevel();
+        ServerLevel level = player.level();
         List<GalleryRow> rows = loadGalleryRows(level, group);
         if (rows.isEmpty()) {
             source.sendFailure(Component.literal("没有可用于展示的建筑模板。"));
@@ -227,7 +229,7 @@ public final class StructurePreviewCommand {
     private static List<LoadedTemplate> loadTemplates(ServerLevel level, String baseTemplatePath) {
         List<LoadedTemplate> templates = new ArrayList<>();
         for (Variant variant : VARIANTS) {
-            ResourceLocation location = ResourceLocation.fromNamespaceAndPath(
+            Identifier location = Identifier.fromNamespaceAndPath(
                     Sagadyssey.MOD_ID, baseTemplatePath + variant.suffix());
             Optional<StructureTemplate> template = level.getStructureManager().get(location);
             template.ifPresent(value -> templates.add(new LoadedTemplate(variant, location, value)));
@@ -269,7 +271,7 @@ public final class StructurePreviewCommand {
 
     private record Variant(String displayName, String suffix) { }
 
-    private record LoadedTemplate(Variant variant, ResourceLocation location, StructureTemplate template) { }
+    private record LoadedTemplate(Variant variant, Identifier location, StructureTemplate template) { }
 
     private record GalleryRow(String structureId, List<LoadedTemplate> templates, BoundingBox localBox) { }
 

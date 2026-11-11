@@ -15,7 +15,7 @@ import io.netty.buffer.ByteBuf;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
@@ -31,7 +31,7 @@ import java.util.List;
 public record NpcTradePacket(int npcId, int tradeIndex) implements CustomPacketPayload {
 
     public static final Type<NpcTradePacket> TYPE = new Type<>(
-            ResourceLocation.fromNamespaceAndPath(Sagadyssey.MOD_ID, "npc_trade")
+            Identifier.fromNamespaceAndPath(Sagadyssey.MOD_ID, "npc_trade")
     );
 
     public static final StreamCodec<ByteBuf, NpcTradePacket> STREAM_CODEC = StreamCodec.of(
@@ -46,7 +46,7 @@ public record NpcTradePacket(int npcId, int tradeIndex) implements CustomPacketP
         context.enqueueWork(() -> {
             ServerPlayer player = (ServerPlayer) context.player();
             if (!NetworkRateLimiter.allow(player, "npc_trade", 2)) return;
-            Entity entity = player.serverLevel().getEntity(data.npcId);
+            Entity entity = player.level().getEntity(data.npcId);
 
             if (!(entity instanceof NpcBase npc)) {
                 player.displayClientMessage(Component.literal("§cNPC 不存在"), true);
@@ -128,7 +128,7 @@ public record NpcTradePacket(int npcId, int tradeIndex) implements CustomPacketP
 
     private static boolean hasItems(Player player, ItemStack needed) {
         int remaining = needed.getCount();
-        for (ItemStack stack : player.getInventory().items) {
+        for (ItemStack stack : player.getInventory().getNonEquipmentItems()) {
             if (ItemStack.isSameItemSameComponents(stack, needed)) {
                 remaining -= stack.getCount();
                 if (remaining <= 0) return true;
@@ -139,8 +139,8 @@ public record NpcTradePacket(int npcId, int tradeIndex) implements CustomPacketP
 
     private static void deductItems(Player player, ItemStack needed) {
         int remaining = needed.getCount();
-        for (int i = 0; i < player.getInventory().items.size() && remaining > 0; i++) {
-            ItemStack stack = player.getInventory().items.get(i);
+        for (int i = 0; i < player.getInventory().getNonEquipmentItems().size() && remaining > 0; i++) {
+            ItemStack stack = player.getInventory().getNonEquipmentItems().get(i);
             if (ItemStack.isSameItemSameComponents(stack, needed)) {
                 int toRemove = Math.min(remaining, stack.getCount());
                 stack.shrink(toRemove);

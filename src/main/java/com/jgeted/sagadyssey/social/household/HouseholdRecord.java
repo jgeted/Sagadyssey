@@ -1,5 +1,8 @@
 package com.jgeted.sagadyssey.social.household;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+import net.minecraft.core.UUIDUtil;
+
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
@@ -78,11 +81,11 @@ public record HouseholdRecord(
 
     public CompoundTag save() {
         CompoundTag tag = new CompoundTag();
-        tag.putUUID("Id", id);
+        tag.store("Id", UUIDUtil.CODEC, id);
         tag.putString("Name", name);
         tag.putString("Dimension", dimension);
-        if (settlementId != null) tag.putUUID("Settlement", settlementId);
-        tag.putUUID("Head", headCharacterId);
+        if (settlementId != null) tag.store("Settlement", UUIDUtil.CODEC, settlementId);
+        tag.store("Head", UUIDUtil.CODEC, headCharacterId);
         if (homeAnchor != null) tag.putLong("Home", homeAnchor.asLong());
         if (sharedStorage != null) tag.putLong("SharedStorage", sharedStorage.asLong());
         ListTag memberList = new ListTag();
@@ -94,26 +97,26 @@ public record HouseholdRecord(
 
     @Nullable
     public static HouseholdRecord load(CompoundTag tag) {
-        if (!tag.hasUUID("Id") || !tag.hasUUID("Head")) return null;
+        if (!tag.read("Id", UUIDUtil.CODEC).isPresent() || !tag.read("Head", UUIDUtil.CODEC).isPresent()) return null;
         List<HouseholdMemberRecord> members = new ArrayList<>();
-        ListTag memberList = tag.getList("Members", Tag.TAG_COMPOUND);
+        ListTag memberList = MinecraftApi.listOfType(tag, "Members", Tag.TAG_COMPOUND);
         for (int index = 0; index < memberList.size(); index++) {
-            CompoundTag memberTag = memberList.getCompound(index);
-            if (memberTag.hasUUID("Character")) members.add(HouseholdMemberRecord.load(memberTag));
+            CompoundTag memberTag = memberList.getCompoundOrEmpty(index);
+            if (memberTag.read("Character", UUIDUtil.CODEC).isPresent()) members.add(HouseholdMemberRecord.load(memberTag));
         }
-        UUID head = tag.getUUID("Head");
+        UUID head = tag.read("Head", UUIDUtil.CODEC).orElseThrow();
         if (members.stream().noneMatch(member -> member.characterId().equals(head))) {
-            members.add(new HouseholdMemberRecord(head, HouseholdRole.HEAD, tag.getLong("Created")));
+            members.add(new HouseholdMemberRecord(head, HouseholdRole.HEAD, tag.getLongOr("Created", 0L)));
         }
         members = members.stream().map(member -> new HouseholdMemberRecord(member.characterId(),
                 member.characterId().equals(head) ? HouseholdRole.HEAD
                         : member.role() == HouseholdRole.HEAD ? HouseholdRole.KIN : member.role(),
                 member.joinedAt())).toList();
-        return new HouseholdRecord(tag.getUUID("Id"), tag.getString("Name"),
-                tag.getString("Dimension"), tag.hasUUID("Settlement") ? tag.getUUID("Settlement") : null,
-                head, tag.contains("Home") ? BlockPos.of(tag.getLong("Home")) : null,
-                tag.contains("SharedStorage") ? BlockPos.of(tag.getLong("SharedStorage")) : null,
-                members, tag.getLong("Created"));
+        return new HouseholdRecord(tag.read("Id", UUIDUtil.CODEC).orElseThrow(), tag.getStringOr("Name", ""),
+                tag.getStringOr("Dimension", ""), tag.read("Settlement", UUIDUtil.CODEC).isPresent() ? tag.read("Settlement", UUIDUtil.CODEC).orElseThrow() : null,
+                head, tag.contains("Home") ? BlockPos.of(tag.getLongOr("Home", 0L)) : null,
+                tag.contains("SharedStorage") ? BlockPos.of(tag.getLongOr("SharedStorage", 0L)) : null,
+                members, tag.getLongOr("Created", 0L));
     }
 
     public static String cleanName(String value) {

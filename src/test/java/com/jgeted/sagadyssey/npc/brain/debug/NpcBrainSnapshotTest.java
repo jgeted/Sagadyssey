@@ -11,7 +11,7 @@ import com.jgeted.sagadyssey.npc.brain.plan.NpcPlanStep;
 import com.jgeted.sagadyssey.npc.brain.plan.NpcPlanStepStatus;
 import com.jgeted.sagadyssey.npc.brain.reservation.NpcReservation;
 import com.jgeted.sagadyssey.npc.brain.reservation.NpcReservationKey;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -26,9 +26,9 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class NpcBrainSnapshotTest {
-    private static final ResourceLocation PROVIDER = ResourceLocation.fromNamespaceAndPath(
+    private static final Identifier PROVIDER = Identifier.fromNamespaceAndPath(
             "sagadyssey", "debug_test");
-    private static final ResourceLocation EXECUTOR = ResourceLocation.fromNamespaceAndPath(
+    private static final Identifier EXECUTOR = Identifier.fromNamespaceAndPath(
             "sagadyssey", "debug_executor");
 
     @Test

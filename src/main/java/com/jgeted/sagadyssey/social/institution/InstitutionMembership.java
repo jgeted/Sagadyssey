@@ -1,5 +1,7 @@
 package com.jgeted.sagadyssey.social.institution;
 
+import net.minecraft.core.UUIDUtil;
+
 import com.jgeted.sagadyssey.worldsim.rights.SubjectRef;
 import net.minecraft.nbt.CompoundTag;
 
@@ -29,8 +31,8 @@ public record InstitutionMembership(UUID id, UUID institutionId, SubjectRef memb
 
     CompoundTag save() {
         CompoundTag tag = new CompoundTag();
-        tag.putUUID("Id", id);
-        tag.putUUID("Institution", institutionId);
+        tag.store("Id", UUIDUtil.CODEC, id);
+        tag.store("Institution", UUIDUtil.CODEC, institutionId);
         tag.put("Member", member.save());
         tag.putString("Rank", rank.name());
         tag.putInt("Standing", standing);
@@ -41,9 +43,9 @@ public record InstitutionMembership(UUID id, UUID institutionId, SubjectRef memb
     }
 
     static InstitutionMembership load(CompoundTag tag) {
-        return new InstitutionMembership(tag.getUUID("Id"), tag.getUUID("Institution"),
-                SubjectRef.load(tag.getCompound("Member")),
-                MembershipRank.valueOf(tag.getString("Rank")), tag.getInt("Standing"),
-                tag.getLong("JoinedAt"), tag.getBoolean("Active"), tag.getString("Note"));
+        return new InstitutionMembership(tag.read("Id", UUIDUtil.CODEC).orElseThrow(), tag.read("Institution", UUIDUtil.CODEC).orElseThrow(),
+                SubjectRef.load(tag.getCompoundOrEmpty("Member")),
+                MembershipRank.valueOf(tag.getStringOr("Rank", "")), tag.getIntOr("Standing", 0),
+                tag.getLongOr("JoinedAt", 0L), tag.getBooleanOr("Active", false), tag.getStringOr("Note", ""));
     }
 }

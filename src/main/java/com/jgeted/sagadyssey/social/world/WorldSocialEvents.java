@@ -22,7 +22,7 @@ public final class WorldSocialEvents {
     @SubscribeEvent
     public static void onLogin(PlayerEvent.PlayerLoggedInEvent event) {
         if (!(event.getEntity() instanceof ServerPlayer player)) return;
-        WorldScenarioType scenario = WorldScenarioData.get(player.server).scenario();
+        WorldScenarioType scenario = WorldScenarioData.get(player.level().getServer()).scenario();
         player.sendSystemMessage(Component.literal("§6当前世界局势：§f").append(scenario.displayName()));
         player.sendSystemMessage(scenario.description().copy().withStyle(net.minecraft.ChatFormatting.GRAY));
     }

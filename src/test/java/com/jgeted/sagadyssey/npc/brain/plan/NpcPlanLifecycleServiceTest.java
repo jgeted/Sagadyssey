@@ -6,7 +6,7 @@ import com.jgeted.sagadyssey.npc.brain.context.NpcDecisionContext;
 import com.jgeted.sagadyssey.npc.brain.context.NpcPerceptionSnapshot;
 import com.jgeted.sagadyssey.npc.brain.reservation.NpcReservationKey;
 import com.jgeted.sagadyssey.npc.brain.reservation.NpcReservationService;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import org.junit.jupiter.api.Test;
 
 import java.util.Map;
@@ -51,7 +51,7 @@ class NpcPlanLifecycleServiceTest {
         assertTrue(reservations.snapshot().isEmpty());
     }
 
-    private static ResourceLocation id(String path) {
-        return ResourceLocation.fromNamespaceAndPath("sagadyssey", path);
+    private static Identifier id(String path) {
+        return Identifier.fromNamespaceAndPath("sagadyssey", path);
     }
 }

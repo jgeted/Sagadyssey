@@ -1,11 +1,13 @@
 package com.jgeted.sagadyssey.knowledge;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.world.level.saveddata.SavedData;
+import com.jgeted.sagadyssey.worldsim.NbtSavedData;
 
 import javax.annotation.Nullable;
 import java.nio.charset.StandardCharsets;
@@ -18,7 +20,7 @@ import java.util.Map;
 import java.util.UUID;
 
 /** World-persistent subjective knowledge. Truth remains in its owning domain model. */
-public final class KnowledgeStateData extends SavedData {
+public final class KnowledgeStateData extends NbtSavedData {
     public static final String DATA_NAME = "sagadyssey_knowledge_v2";
     public static final Factory<KnowledgeStateData> FACTORY =
             new Factory<>(KnowledgeStateData::new, KnowledgeStateData::load);
@@ -26,7 +28,7 @@ public final class KnowledgeStateData extends SavedData {
     private final Map<UUID, BeliefRecord> beliefs = new LinkedHashMap<>();
 
     public static KnowledgeStateData get(MinecraftServer server) {
-        return server.overworld().getDataStorage().computeIfAbsent(FACTORY, DATA_NAME);
+        return server.overworld().getDataStorage().computeIfAbsent(FACTORY.type(DATA_NAME));
     }
 
     public Collection<BeliefRecord> beliefs() { return List.copyOf(beliefs.values()); }
@@ -99,10 +101,10 @@ public final class KnowledgeStateData extends SavedData {
 
     private static KnowledgeStateData load(CompoundTag tag, HolderLookup.Provider registries) {
         KnowledgeStateData data = new KnowledgeStateData();
-        ListTag list = tag.getList("Beliefs", Tag.TAG_COMPOUND);
+        ListTag list = MinecraftApi.listOfType(tag, "Beliefs", Tag.TAG_COMPOUND);
         for (int index = 0; index < list.size(); index++) {
             try {
-                BeliefRecord belief = BeliefRecord.load(list.getCompound(index));
+                BeliefRecord belief = BeliefRecord.load(list.getCompoundOrEmpty(index));
                 data.beliefs.put(belief.id(), belief);
             } catch (RuntimeException ignored) { }
         }

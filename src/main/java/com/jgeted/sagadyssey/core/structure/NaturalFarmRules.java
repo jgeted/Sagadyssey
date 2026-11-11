@@ -1,5 +1,7 @@
 package com.jgeted.sagadyssey.core.structure;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+
 import com.jgeted.sagadyssey.npc.brain.execution.NpcBrainRuntime;
 import com.jgeted.sagadyssey.npc.brain.fieldwork.*;
 import com.jgeted.sagadyssey.npc.entity.NpcBase;
@@ -21,12 +23,12 @@ public final class NaturalFarmRules {
     private NaturalFarmRules() {}
 
     public static NaturalVillageBuilding forResident(NpcBase npc){
-        if(npc.getServer()==null)return null;
-        var development=com.jgeted.sagadyssey.social.growth.SettlementDevelopmentData.residentVillage(npc.getServer(),npc.getCharacterId());
+        if(MinecraftApi.server(npc)==null)return null;
+        var development=com.jgeted.sagadyssey.social.growth.SettlementDevelopmentData.residentVillage(MinecraftApi.server(npc),npc.getCharacterId());
         if(development!=null)return development;
-        var data=NaturalVillageLifeData.existing(npc.getServer());if(data==null)return null;
-        var home=HouseholdData.get(npc.getServer()).forMember(npc.getCharacterId());if(home==null)return null;
-        for(var v:data.villages())if(v.getBoolean("Ready")){
+        var data=NaturalVillageLifeData.existing(MinecraftApi.server(npc));if(data==null)return null;
+        var home=HouseholdData.get(MinecraftApi.server(npc)).forMember(npc.getCharacterId());if(home==null)return null;
+        for(var v:data.villages())if(v.getBooleanOr("Ready", false)){
             var b=NaturalVillageLifeData.decode(v);
             if(!NaturalVillageLayout.autonomousFarm(b)||!NaturalVillageLifeData.home(b).equals(home.id()))continue;
             for(int i=0;i<3;i++)if(NaturalVillageLifeData.person(b,i).equals(npc.getCharacterId()))return b;
@@ -57,9 +59,9 @@ public final class NaturalFarmRules {
     }
     public static boolean foodEmergency(NpcBase npc){
         var b=forResident(npc);if(b==null)return false;
-        var home=HouseholdData.get(npc.getServer()).forMember(npc.getCharacterId());
-        if(home==null||!severelyHungry(npc.getServer(),home))return false;
-        var at=home.sharedStorage();if(at==null||!home.dimension().equals(npc.level().dimension().location().toString())||!npc.level().hasChunkAt(at))return true;
+        var home=HouseholdData.get(MinecraftApi.server(npc)).forMember(npc.getCharacterId());
+        if(home==null||!severelyHungry(MinecraftApi.server(npc),home))return false;
+        var at=home.sharedStorage();if(at==null||!home.dimension().equals(npc.level().dimension().identifier().toString())||!npc.level().hasChunkAt(at))return true;
         var block=npc.level().getBlockEntity(at);
         if(!(block instanceof Container box))return true;
         var id=ContainerIds.block("household_storage",home.dimension(),at);
@@ -70,9 +72,9 @@ public final class NaturalFarmRules {
     /** Ordinary meals and care never release the seed reserve merely because a peer is hungry. */
     public static int eatingProtection(NpcBase npc){
         if(!isFarmer(npc))return 0;
-        var needs=NpcLifeData.get(npc.getServer()).needs(npc.getCharacterId());
+        var needs=NpcLifeData.get(MinecraftApi.server(npc)).needs(npc.getCharacterId());
         if(needs==null||needs.hunger()<800||!foodEmergency(npc))return SEEDS;
-        var work=FieldworkData.get(npc.getServer());
+        var work=FieldworkData.get(MinecraftApi.server(npc));
         boolean newHarvest=work.receiptsFor(npc.getUUID()).stream().anyMatch(r->r.action().operation()==FieldworkAction.Operation.HARVEST&&r.committedAt()>needs.lastAteAt()
                 &&r.inventoryDeltas().stream().anyMatch(d->d.fingerprint().equals("minecraft:carrot#0")&&d.quantity()>0));
         if(!newHarvest||work.pendingCargo(npc.getUUID()).getOrDefault("minecraft:carrot#0",0)<1)return SEEDS;
@@ -83,7 +85,7 @@ public final class NaturalFarmRules {
     /** Only starving members able to use the shared meal now take precedence; title is unchanged. */
     public static boolean pantryTurn(NpcBase npc){
         var b=forResident(npc);if(b==null)return true;
-        var home=HouseholdData.get(npc.getServer()).forMember(npc.getCharacterId());var life=NpcLifeData.get(npc.getServer());
+        var home=HouseholdData.get(MinecraftApi.server(npc)).forMember(npc.getCharacterId());var life=NpcLifeData.get(MinecraftApi.server(npc));
         if(home==null)return true;
         var own=life.needs(npc.getCharacterId());int hunger=own==null?0:own.hunger();
         long now=npc.level().getGameTime();
@@ -91,8 +93,8 @@ public final class NaturalFarmRules {
             var person=member.characterId();if(person.equals(npc.getCharacterId()))continue;
             var other=life.needs(person);if(other==null||other.hunger()<800)continue;
             if(!(other.hunger()>hunger||other.hunger()==hunger&&person.compareTo(npc.getCharacterId())<0))continue;
-            var body=CharacterRegistryData.get(npc.getServer()).bodyOf(person);
-            var e=body==null||!body.dimensionId().equals(npc.level().dimension().location().toString())?null:
+            var body=CharacterRegistryData.get(MinecraftApi.server(npc)).bodyOf(person);
+            var e=body==null||!body.dimensionId().equals(npc.level().dimension().identifier().toString())?null:
                     ((net.minecraft.server.level.ServerLevel)npc.level()).getEntity(body.entityId());
             if(e instanceof NpcBase peer&&person.equals(peer.getCharacterId())&&pantryContender(peer,home,now))return false;
         }
@@ -103,19 +105,19 @@ public final class NaturalFarmRules {
     private static boolean pantryContender(NpcBase peer,com.jgeted.sagadyssey.social.household.HouseholdRecord home,long now){
         if(!peer.isAlive()||peer.isRemoved()||peer.isNoAi()||peer.getTarget()!=null||!NpcBrainRuntime.isPlanned(peer)
                 ||!peer.onGround()&&!peer.isSleeping())return false;
-        var dimension=peer.level().dimension().location().toString();var at=home.sharedStorage();
-        var record=NpcLifeData.get(peer.getServer()).record(peer.getCharacterId());
+        var dimension=peer.level().dimension().identifier().toString();var at=home.sharedStorage();
+        var record=NpcLifeData.get(MinecraftApi.server(peer)).record(peer.getCharacterId());
         if(record==null||!dimension.equals(record.dimension())||!dimension.equals(home.dimension())||at==null
                 ||!peer.level().hasChunkAt(at)
-                ||com.jgeted.sagadyssey.worldsim.lod.NaturalVillageEconomyData.protects(peer.getServer(),dimension,at))return false;
-        var activity=com.jgeted.sagadyssey.npc.brain.life.LifeActivityData.get(peer.getServer());
+                ||com.jgeted.sagadyssey.worldsim.lod.NaturalVillageEconomyData.protects(MinecraftApi.server(peer),dimension,at))return false;
+        var activity=com.jgeted.sagadyssey.npc.brain.life.LifeActivityData.get(MinecraftApi.server(peer));
         if(now<activity.retryAt(peer.getUUID())||now<activity.placeRetryAt(peer.getUUID(),dimension,at))return false;
-        var plan=NpcBrainRuntime.data(peer.getServer()).active(peer.getUUID()).orElse(null);
+        var plan=NpcBrainRuntime.data(MinecraftApi.server(peer)).active(peer.getUUID()).orElse(null);
         if(plan!=null&&(plan.currentStep().phase()==com.jgeted.sagadyssey.npc.brain.plan.NpcPlanPhase.SETTLING
                 ||"PENDING".equals(activity.settlement(plan.id()+":"+plan.currentStepIndex()))
                 ||isFarmer(peer)&&plan.providerId().equals(FieldworkPlanFactory.PROVIDER)
                     &&"PLANT".equals(plan.currentStep().params().get("operation"))))return false;
-        if(!FieldworkData.get(peer.getServer()).outstandingScaffolds(peer.getUUID()).isEmpty())return false;
+        if(!FieldworkData.get(MinecraftApi.server(peer)).outstandingScaffolds(peer.getUUID()).isEmpty())return false;
         var box=com.jgeted.sagadyssey.social.logistics.WarehouseContainers.asContainer(peer.level().getBlockEntity(at));
         if(box==null)return false;
         var id=ContainerIds.block("household_storage",dimension,at);var owner=SubjectRef.household(home.id());
@@ -141,11 +143,11 @@ public final class NaturalFarmRules {
         if(kind.equals("BAG"))id=ContainerIds.npcPersonal(npc.getCharacterId());
         else if(kind.equals("HOUSEHOLD")){
             if(!pantryTurn(npc))return -1;
-            var home=HouseholdData.get(npc.getServer()).forMember(npc.getCharacterId());
-            if(home==null||!Objects.equals(position,home.sharedStorage())||!home.dimension().equals(npc.level().dimension().location().toString()))return -1;
+            var home=HouseholdData.get(MinecraftApi.server(npc)).forMember(npc.getCharacterId());
+            if(home==null||!Objects.equals(position,home.sharedStorage())||!home.dimension().equals(npc.level().dimension().identifier().toString()))return -1;
             actor=SubjectRef.household(home.id());id=ContainerIds.block("household_storage",home.dimension(),position);
-        }else id=ContainerIds.block("private_storage",npc.level().dimension().location().toString(),position);
-        var rights=RightsStateData.get(npc.getServer());var context=rights.context(id);var resolver=new RightsService(rights);
+        }else id=ContainerIds.block("private_storage",npc.level().dimension().identifier().toString(),position);
+        var rights=RightsStateData.get(MinecraftApi.server(npc));var context=rights.context(id);var resolver=new RightsService(rights);
         for(int i=0;i<source.getContainerSize();i++){
             var stack=source.getItem(i);if(!NpcFoodItems.canConsumePlanned(stack,rawAllowed))continue;
             var fp=ItemFingerprint.of(stack);
@@ -159,7 +161,7 @@ public final class NaturalFarmRules {
     }
     /** Conservative quantity by beneficial owner; never creates rights, reservations or identities. */
     public static int usable(NpcBase npc,Container source,UUID id,SubjectRef actor,ItemFingerprint item,int protection,long now){
-        var rights=RightsStateData.get(npc.getServer());var context=rights.context(id);
+        var rights=RightsStateData.get(MinecraftApi.server(npc));var context=rights.context(id);
         if(context==null){
             if(!id.equals(ContainerIds.npcPersonal(npc.getCharacterId()))||!actor.equals(SubjectRef.character(npc.getCharacterId())))return 0;
             int physical=0;for(int i=0;i<source.getContainerSize();i++)if(item.matches(source.getItem(i)))physical+=source.getItem(i).getCount();
@@ -186,13 +188,13 @@ public final class NaturalFarmRules {
     }
     private static int verifiedPlantingReservation(NpcBase npc,UUID id,ItemFingerprint item,SubjectRef owner,long now){
         if(!id.equals(ContainerIds.npcPersonal(npc.getCharacterId()))||!owner.equals(SubjectRef.character(npc.getCharacterId()))||!item.equals(new ItemFingerprint("minecraft:carrot",0)))return 0;
-        var p=NpcBrainRuntime.data(npc.getServer()).active(npc.getUUID()).orElse(null);
+        var p=NpcBrainRuntime.data(MinecraftApi.server(npc)).active(npc.getUUID()).orElse(null);
         if(p==null||!p.providerId().equals(FieldworkPlanFactory.PROVIDER))return 0;
         int pending=0;
         for(var step:p.steps())if(step.index()>=p.currentStepIndex()&&"PLANT".equals(step.params().get("operation"))&&"minecraft:carrot".equals(step.params().get("input"))
-                &&FieldworkDiscovery.allowed(npc,FieldworkTarget.position(step.params()))&&FieldworkData.get(npc.getServer()).receipt(p.id()+":"+step.index()).isEmpty())pending++;
+                &&FieldworkDiscovery.allowed(npc,FieldworkTarget.position(step.params()))&&FieldworkData.get(MinecraftApi.server(npc)).receipt(p.id()+":"+step.index()).isEmpty())pending++;
         if(pending==0)return 0;
-        int quantity=RightsStateData.get(npc.getServer()).reservations().stream().filter(r->r.activeAt(now)&&r.containerId().equals(id)&&r.fingerprint().equals(item)&&r.reservedFor().equals(owner)&&r.token().equals("fieldwork:"+p.id())).mapToInt(AssetReservation::quantity).sum();
+        int quantity=RightsStateData.get(MinecraftApi.server(npc)).reservations().stream().filter(r->r.activeAt(now)&&r.containerId().equals(id)&&r.fingerprint().equals(item)&&r.reservedFor().equals(owner)&&r.token().equals("fieldwork:"+p.id())).mapToInt(AssetReservation::quantity).sum();
         return Math.min(pending,quantity);
     }
 }

@@ -1,5 +1,8 @@
 package com.jgeted.sagadyssey.social.character;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+import net.minecraft.core.UUIDUtil;
+
 import com.jgeted.sagadyssey.npc.identity.NpcOffice;
 import com.jgeted.sagadyssey.npc.identity.NpcSocialClass;
 import com.jgeted.sagadyssey.npc.identity.PlayerIdentityData;
@@ -11,7 +14,7 @@ import net.minecraft.nbt.Tag;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.world.level.saveddata.SavedData;
+import com.jgeted.sagadyssey.worldsim.NbtSavedData;
 
 import javax.annotation.Nullable;
 import java.util.HashMap;
@@ -21,7 +24,7 @@ import java.util.List;
 import java.util.Comparator;
 
 /** 全世界唯一的角色注册表；存放当前账号绑定和所有已故人物档案。 */
-public final class CharacterRegistryData extends SavedData {
+public final class CharacterRegistryData extends NbtSavedData {
     public static final String DATA_NAME = "sagadyssey_characters";
     public static final int DATA_VERSION = 2;
     public static final Factory<CharacterRegistryData> FACTORY =
@@ -36,7 +39,7 @@ public final class CharacterRegistryData extends SavedData {
     private final Map<UUID, UUID> legacyOwnerByAccount = new HashMap<>();
 
     public static CharacterRegistryData get(MinecraftServer server) {
-        return server.overworld().getDataStorage().computeIfAbsent(FACTORY, DATA_NAME);
+        return server.overworld().getDataStorage().computeIfAbsent(FACTORY.type(DATA_NAME));
     }
 
     @Nullable
@@ -111,7 +114,7 @@ public final class CharacterRegistryData extends SavedData {
         CharacterBodyRef hint = npcBodies.get(characterId);
         if (hint != null) {
             for (ServerLevel level : server.getAllLevels()) {
-                if (!level.dimension().location().toString().equals(hint.dimensionId())) continue;
+                if (!level.dimension().identifier().toString().equals(hint.dimensionId())) continue;
                 if (level.getEntity(hint.entityId()) instanceof NpcBase npc
                         && characterId.equals(npc.getCharacterId())) return npc;
             }
@@ -120,7 +123,7 @@ public final class CharacterRegistryData extends SavedData {
             for (var entity : level.getAllEntities()) {
                 if (!(entity instanceof NpcBase npc)
                         || !characterId.equals(npc.getCharacterId())) continue;
-                bindNpcBody(characterId, level.dimension().location().toString(),
+                bindNpcBody(characterId, level.dimension().identifier().toString(),
                         npc.getUUID(), level.getGameTime());
                 return npc;
             }
@@ -148,10 +151,10 @@ public final class CharacterRegistryData extends SavedData {
         if (current != null) return current;
         int previousLives = lifeCountByAccount.getOrDefault(player.getUUID(), 0);
         String name = previousLives == 0
-                ? player.getGameProfile().getName()
+                ? player.getGameProfile().name()
                 : generatedName(UUID.randomUUID());
         return createCharacter(player.getUUID(), name, legacyIdentity.socialClass(), legacyIdentity.office(),
-                legacyIdentity.titleFactionId(), player.serverLevel().getGameTime());
+                legacyIdentity.titleFactionId(), player.level().getGameTime());
     }
 
     /** 返回旧版仅存账号 UUID 的 NPC 应绑定到的人物。 */
@@ -169,7 +172,7 @@ public final class CharacterRegistryData extends SavedData {
         UUID idSeed = UUID.randomUUID();
         return createCharacter(player.getUUID(), generatedName(idSeed),
                 NpcSocialClass.COMMONER, NpcOffice.NONE, "sagadyssey:wilderness",
-                player.serverLevel().getGameTime(), idSeed);
+                player.level().getGameTime(), idSeed);
     }
 
     private CharacterRecord createCharacter(UUID accountId, String name, NpcSocialClass socialClass,
@@ -233,8 +236,8 @@ public final class CharacterRegistryData extends SavedData {
         ListTag bindingList = new ListTag();
         currentByAccount.forEach((accountId, characterId) -> {
             CompoundTag entry = new CompoundTag();
-            entry.putUUID("Account", accountId);
-            entry.putUUID("Character", characterId);
+            entry.store("Account", UUIDUtil.CODEC, accountId);
+            entry.store("Character", UUIDUtil.CODEC, characterId);
             bindingList.add(entry);
         });
         tag.put("Bindings", bindingList);
@@ -242,7 +245,7 @@ public final class CharacterRegistryData extends SavedData {
         ListTag lifeList = new ListTag();
         lifeCountByAccount.forEach((accountId, count) -> {
             CompoundTag entry = new CompoundTag();
-            entry.putUUID("Account", accountId);
+            entry.store("Account", UUIDUtil.CODEC, accountId);
             entry.putInt("Count", count);
             lifeList.add(entry);
         });
@@ -251,8 +254,8 @@ public final class CharacterRegistryData extends SavedData {
         ListTag legacyOwners = new ListTag();
         legacyOwnerByAccount.forEach((accountId, characterId) -> {
             CompoundTag entry = new CompoundTag();
-            entry.putUUID("Account", accountId);
-            entry.putUUID("Character", characterId);
+            entry.store("Account", UUIDUtil.CODEC, accountId);
+            entry.store("Character", UUIDUtil.CODEC, characterId);
             legacyOwners.add(entry);
         });
         tag.put("LegacyOwners", legacyOwners);
@@ -260,7 +263,7 @@ public final class CharacterRegistryData extends SavedData {
         ListTag bodyList = new ListTag();
         npcBodies.forEach((characterId, body) -> {
             CompoundTag entry = body.save();
-            entry.putUUID("Character", characterId);
+            entry.store("Character", UUIDUtil.CODEC, characterId);
             bodyList.add(entry);
         });
         tag.put("NpcBodies", bodyList);
@@ -269,41 +272,41 @@ public final class CharacterRegistryData extends SavedData {
 
     private static CharacterRegistryData load(CompoundTag tag, HolderLookup.Provider registries) {
         CharacterRegistryData data = new CharacterRegistryData();
-        ListTag characters = tag.getList("Characters", Tag.TAG_COMPOUND);
+        ListTag characters = MinecraftApi.listOfType(tag, "Characters", Tag.TAG_COMPOUND);
         for (int i = 0; i < characters.size(); i++) {
-            CharacterRecord record = CharacterRecord.load(characters.getCompound(i));
+            CharacterRecord record = CharacterRecord.load(characters.getCompoundOrEmpty(i));
             if (record != null) data.characters.put(record.id(), record);
         }
-        ListTag bindings = tag.getList("Bindings", Tag.TAG_COMPOUND);
+        ListTag bindings = MinecraftApi.listOfType(tag, "Bindings", Tag.TAG_COMPOUND);
         for (int i = 0; i < bindings.size(); i++) {
-            CompoundTag entry = bindings.getCompound(i);
-            if (!entry.hasUUID("Account") || !entry.hasUUID("Character")) continue;
-            UUID characterId = entry.getUUID("Character");
+            CompoundTag entry = bindings.getCompoundOrEmpty(i);
+            if (!entry.read("Account", UUIDUtil.CODEC).isPresent() || !entry.read("Character", UUIDUtil.CODEC).isPresent()) continue;
+            UUID characterId = entry.read("Character", UUIDUtil.CODEC).orElseThrow();
             CharacterRecord record = data.characters.get(characterId);
             if (record != null && record.alive()) {
-                data.currentByAccount.put(entry.getUUID("Account"), characterId);
+                data.currentByAccount.put(entry.read("Account", UUIDUtil.CODEC).orElseThrow(), characterId);
             }
         }
-        ListTag lives = tag.getList("LifeCounts", Tag.TAG_COMPOUND);
+        ListTag lives = MinecraftApi.listOfType(tag, "LifeCounts", Tag.TAG_COMPOUND);
         for (int i = 0; i < lives.size(); i++) {
-            CompoundTag entry = lives.getCompound(i);
-            if (entry.hasUUID("Account")) {
-                data.lifeCountByAccount.put(entry.getUUID("Account"), Math.max(0, entry.getInt("Count")));
+            CompoundTag entry = lives.getCompoundOrEmpty(i);
+            if (entry.read("Account", UUIDUtil.CODEC).isPresent()) {
+                data.lifeCountByAccount.put(entry.read("Account", UUIDUtil.CODEC).orElseThrow(), Math.max(0, entry.getIntOr("Count", 0)));
             }
         }
-        ListTag legacyOwners = tag.getList("LegacyOwners", Tag.TAG_COMPOUND);
+        ListTag legacyOwners = MinecraftApi.listOfType(tag, "LegacyOwners", Tag.TAG_COMPOUND);
         for (int i = 0; i < legacyOwners.size(); i++) {
-            CompoundTag entry = legacyOwners.getCompound(i);
-            if (entry.hasUUID("Account") && entry.hasUUID("Character")
-                    && data.characters.containsKey(entry.getUUID("Character"))) {
-                data.legacyOwnerByAccount.put(entry.getUUID("Account"), entry.getUUID("Character"));
+            CompoundTag entry = legacyOwners.getCompoundOrEmpty(i);
+            if (entry.read("Account", UUIDUtil.CODEC).isPresent() && entry.read("Character", UUIDUtil.CODEC).isPresent()
+                    && data.characters.containsKey(entry.read("Character", UUIDUtil.CODEC).orElseThrow())) {
+                data.legacyOwnerByAccount.put(entry.read("Account", UUIDUtil.CODEC).orElseThrow(), entry.read("Character", UUIDUtil.CODEC).orElseThrow());
             }
         }
-        ListTag bodies = tag.getList("NpcBodies", Tag.TAG_COMPOUND);
+        ListTag bodies = MinecraftApi.listOfType(tag, "NpcBodies", Tag.TAG_COMPOUND);
         for (int i = 0; i < bodies.size(); i++) {
-            CompoundTag entry = bodies.getCompound(i);
-            if (!entry.hasUUID("Character")) continue;
-            UUID characterId = entry.getUUID("Character");
+            CompoundTag entry = bodies.getCompoundOrEmpty(i);
+            if (!entry.read("Character", UUIDUtil.CODEC).isPresent()) continue;
+            UUID characterId = entry.read("Character", UUIDUtil.CODEC).orElseThrow();
             CharacterBodyRef body = CharacterBodyRef.load(entry);
             if (body != null && data.characters.containsKey(characterId)) {
                 data.npcBodies.put(characterId, body);

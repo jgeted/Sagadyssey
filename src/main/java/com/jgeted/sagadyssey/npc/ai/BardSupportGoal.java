@@ -23,7 +23,7 @@ public class BardSupportGoal extends Goal {
 
     @Override
     public boolean canUse() {
-        if (!npc.isAlive() || npc.level().isClientSide
+        if (!npc.isAlive() || npc.level().isClientSide()
                 || com.jgeted.sagadyssey.npc.brain.execution.NpcBrainRuntime.isPlanned(npc)
                 || npc.getProfession() != NpcProfession.BARD
                 || npc.getCommand() == NpcCommand.STAY

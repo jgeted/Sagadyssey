@@ -1,5 +1,7 @@
 package com.jgeted.sagadyssey.social.needs;
 
+import com.jgeted.sagadyssey.gametest.PortedGameTests.*;
+
 import com.jgeted.sagadyssey.npc.brain.fieldwork.FieldworkStorage;
 import com.jgeted.sagadyssey.social.production.ProductionContainerIds;
 import com.jgeted.sagadyssey.worldsim.rights.*;
@@ -21,10 +23,10 @@ public final class StockReconciliationGameTests {
         if (!(event.getServer() instanceof GameTestServer)) return;
         var level = event.getServer().overworld();
         try {
-            level.getStructureManager().getOrCreate(net.minecraft.resources.ResourceLocation
+            level.getStructureManager().getOrCreate(net.minecraft.resources.Identifier
                     .fromNamespaceAndPath("sagadyssey_stock", "fieldwork_empty"))
                     .load(level.holderLookup(net.minecraft.core.registries.Registries.BLOCK),
-                            net.minecraft.nbt.TagParser.parseTag("{size:[16,6,16],entities:[],blocks:[],palette:[{Name:\"minecraft:air\"}]}"));
+                            net.minecraft.nbt.TagParser.parseCompoundFully("{size:[16,6,16],entities:[],blocks:[],palette:[{Name:\"minecraft:air\"}]}"));
         } catch (Exception e) { throw new IllegalStateException("stock test template", e); }
     }
     private record Fixture(SupplyFlowData.Policy policy, Container inventory) {}
@@ -34,7 +36,7 @@ public final class StockReconciliationGameTests {
         var relative = new BlockPos(2, 1, 2);
         h.setBlock(relative, Blocks.BARREL);
         var position = h.absolutePos(relative);
-        String dimension = h.getLevel().dimension().location().toString();
+        String dimension = h.getLevel().dimension().identifier().toString();
         var owner = SubjectRef.character(UUID.randomUUID());
         var id = ProductionContainerIds.resolve(server, dimension, position);
         RightsStateData.get(server).ensureContext(id, dimension + ":" + position.asLong(),
@@ -46,7 +48,7 @@ public final class StockReconciliationGameTests {
         var policy = new SupplyFlowData.Policy("stock-regression:" + UUID.randomUUID(), owner, id,
                 new ItemFingerprint("minecraft:coal", 0), 10, "workshop");
         flow.policy(policy);
-        return new Fixture(policy, (Container) h.getBlockEntity(relative));
+        return new Fixture(policy, (Container) com.jgeted.sagadyssey.gametest.PortedGameTests.blockEntity(h, relative));
     }
 
     private static NeedRequest request(GameTestHelper h, Fixture f) {

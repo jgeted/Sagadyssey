@@ -1,5 +1,11 @@
 package com.jgeted.sagadyssey.social.industry;
 
+import net.minecraft.world.level.gamerules.GameRules;
+
+import com.jgeted.sagadyssey.gametest.PortedGameTests.*;
+
+import net.minecraft.core.UUIDUtil;
+
 import com.jgeted.sagadyssey.npc.brain.execution.NpcBrainRuntime;
 import com.jgeted.sagadyssey.npc.brain.fieldwork.*;
 import com.jgeted.sagadyssey.npc.brain.persistence.NpcBehaviorMode;
@@ -32,7 +38,7 @@ public final class IndustryForestryGameTests {
     private static CompoundTag checkpoint;
     private static final String MARKER="industry-forest-checkpoint.nbt";
     private static String phase(){return System.getProperty("sagadyssey.industries.phase","");}
-    private static final TicketType<ChunkPos> TICKS=TicketType.create("sagadyssey-industry-forest",Comparator.comparingLong(ChunkPos::toLong));
+    private static final com.jgeted.sagadyssey.worldsim.ChunkTickets.Kind TICKS=com.jgeted.sagadyssey.worldsim.ChunkTickets.kind("sagadyssey-industry-forest");
     @GameTestGenerator public static Collection<TestFunction> tests() {
         if(!Boolean.getBoolean("sagadyssey.industries.enabled") || !phase().startsWith("forest"))return List.of();
         return List.of(new TestFunction("industry_forest",phase().equals("forest-start")?"industry.forest_checkpoint":"industry.forest_two_regrowths",
@@ -40,38 +46,38 @@ public final class IndustryForestryGameTests {
     }
     @net.neoforged.bus.api.SubscribeEvent public static void restore(net.neoforged.neoforge.event.server.ServerStartedEvent e){
         checkpoint=null;if(!(e.getServer() instanceof GameTestServer) || !Boolean.getBoolean("sagadyssey.industries.enabled"))return;
-        try{e.getServer().overworld().getStructureManager().getOrCreate(net.minecraft.resources.ResourceLocation.parse("sagadyssey_industries:empty"))
+        try{e.getServer().overworld().getStructureManager().getOrCreate(net.minecraft.resources.Identifier.parse("sagadyssey_industries:empty"))
                 .load(e.getServer().overworld().holderLookup(net.minecraft.core.registries.Registries.BLOCK),
-                        TagParser.parseTag("{size:[96,10,16],entities:[],blocks:[],palette:[{Name:\"minecraft:air\"}]}"));
+                        TagParser.parseCompoundFully("{size:[96,10,16],entities:[],blocks:[],palette:[{Name:\"minecraft:air\"}]}"));
         }catch(Exception x){throw new IllegalStateException("industry template install failed",x);}
         if(!phase().equals("forest-resume"))return;
         try{
             var s=e.getServer();checkpoint=NbtIo.readCompressed(s.getWorldPath(LevelResource.ROOT).resolve(MARKER),NbtAccounter.unlimitedHeap());
-            var world=NbtIo.readCompressed(s.getWorldPath(LevelResource.ROOT).resolve("level.dat"),NbtAccounter.unlimitedHeap()).getCompound("Data");
+            var world=NbtIo.readCompressed(s.getWorldPath(LevelResource.ROOT).resolve("level.dat"),NbtAccounter.unlimitedHeap()).getCompoundOrEmpty("Data");
             // Existing GameTest restart convention: saved game time +1, never real-world offline catch-up.
-            s.getWorldData().overworldData().setGameTime(world.getLong("Time")+1);s.getWorldData().overworldData().setDayTime(world.getLong("DayTime")+1);
-            var rules=world.getCompound("GameRules");
-            if(!rules.getString("randomTickSpeed").equals("3") || !rules.getString("doDaylightCycle").equals("false")
-                    || !rules.getString("doMobSpawning").equals("false"))throw new IllegalStateException("source checkpoint violates frozen rules");
+            s.getWorldData().overworldData().setGameTime(world.getLongOr("Time", 0L)+1);s.getWorldData().overworldData().setDayTime(world.getLongOr("DayTime", 0L)+1);
+            var rules=world.getCompoundOrEmpty("game_rules");
+            if(rules.getIntOr("minecraft:random_tick_speed", -1) != 3 || rules.getBooleanOr("minecraft:advance_time", true)
+                    || rules.getBooleanOr("minecraft:spawn_mobs", true))throw new IllegalStateException("source checkpoint violates frozen rules");
             // GameTestServer deliberately constructs fresh rules (randomTickSpeed=0), even on a saved world.
             // Restore the original frozen scenario, not a larger growth rate or a later completion deadline.
-            s.overworld().getGameRules().getRule(GameRules.RULE_RANDOMTICKING).set(3,s);
-            s.overworld().getGameRules().getRule(GameRules.RULE_DAYLIGHT).set(false,s);
-            s.overworld().getGameRules().getRule(GameRules.RULE_DOMOBSPAWNING).set(false,s);
-            com.jgeted.sagadyssey.Sagadyssey.LOGGER.info("INDUSTRY_FOREST_RULES_RESTORED randomTickSpeed=3 doDaylightCycle=false doMobSpawning=false sourceTime={}",world.getLong("Time"));
-            force(s.overworld(),BlockPos.of(checkpoint.getLong("Root")));
+            s.overworld().getGameRules().set(GameRules.RANDOM_TICK_SPEED, 3,s);
+            s.overworld().getGameRules().set(GameRules.ADVANCE_TIME, false,s);
+            s.overworld().getGameRules().set(GameRules.SPAWN_MOBS, false,s);
+            com.jgeted.sagadyssey.Sagadyssey.LOGGER.info("INDUSTRY_FOREST_RULES_RESTORED randomTickSpeed=3 doDaylightCycle=false doMobSpawning=false sourceTime={}",world.getLongOr("Time", 0L));
+            force(s.overworld(),BlockPos.of(checkpoint.getLongOr("Root", 0L)));
         }catch(Exception x){throw new IllegalStateException("closed complete forest world checkpoint required",x);}
     }
     private static void force(net.minecraft.server.level.ServerLevel l,BlockPos root){
         var cp=new ChunkPos(root);
         for(int x=cp.x-1;x<=cp.x+1;x++)for(int z=cp.z-1;z<=cp.z+1;z++){
-            var chunk=new ChunkPos(x,z);l.setChunkForced(x,z,true);l.getChunk(x,z);l.getChunkSource().addRegionTicket(TICKS,chunk,2,chunk,true);
+            var chunk=new ChunkPos(x,z);l.setChunkForced(x,z,true);l.getChunk(x,z);com.jgeted.sagadyssey.worldsim.ChunkTickets.add(l.getChunkSource(), TICKS,chunk,2,chunk,true);
         }
     }
     private static void run(GameTestHelper h) {
-        var l=h.getLevel();var s=l.getServer();String dim=l.dimension().location().toString();long now=l.getGameTime();
-        l.setDayTime(1000);l.getGameRules().getRule(GameRules.RULE_DAYLIGHT).set(false,s);
-        l.getGameRules().getRule(GameRules.RULE_DOMOBSPAWNING).set(false,s);l.getGameRules().getRule(GameRules.RULE_RANDOMTICKING).set(3,s);
+        var l=h.getLevel();var s=l.getServer();String dim=l.dimension().identifier().toString();long now=l.getGameTime();
+        l.setDayTime(1000);l.getGameRules().set(GameRules.ADVANCE_TIME, false,s);
+        l.getGameRules().set(GameRules.SPAWN_MOBS, false,s);l.getGameRules().set(GameRules.RANDOM_TICK_SPEED, 3,s);
         force(l,h.absolutePos(new BlockPos(8198,1,8198)));
         for(int x=0;x<20;x++)for(int z=0;z<12;z++)h.setBlock(x+8192,0,z+8192,Blocks.STONE);
         var root=h.absolutePos(new BlockPos(8198,1,8198));h.setBlock(8198,0,8198,Blocks.GRASS_BLOCK);h.setBlock(8198,1,8198,Blocks.OAK_LOG);
@@ -92,30 +98,30 @@ public final class IndustryForestryGameTests {
         var id=ProductionContainerIds.resolve(s,dim,storage);rights.ensureContext(id,dim+":"+storage.asLong(),owner,owner,AccessPolicy.PRIVATE);
         var work=FieldworkData.get(s);work.bindTestStorage(n.getUUID(),new FieldworkStorage(dim,storage,id,owner,AccessPolicy.PRIVATE,TransferIntent.DELIVERY,"industry-forest-fixture"));
         NpcBrainRuntime.setMode(n,NpcBehaviorMode.PLANNED);
-        try{s.getCommands().getDispatcher().execute("tick sprint 31000",s.createCommandSourceStack().withPermission(4).withSuppressedOutput());}catch(Exception e){throw new IllegalStateException(e);}
+        try{s.getCommands().getDispatcher().execute("tick sprint 31000",s.createCommandSourceStack().withPermission(net.minecraft.server.permissions.LevelBasedPermissionSet.OWNER).withSuppressedOutput());}catch(Exception e){throw new IllegalStateException(e);}
         h.succeedWhen(()->{
             h.assertTrue(work.receiptsFor(n.getUUID()).stream().anyMatch(r->r.action().operation()==FieldworkAction.Operation.PLANT && r.action().target().equals(root))
                     && l.getBlockState(root).is(Blocks.OAK_SAPLING),"normal scheduler planted original stump before checkpoint");
             try{
-                var mark=new CompoundTag();mark.putUUID("Body",n.getUUID());mark.putUUID("Person",n.getCharacterId());
-                mark.putUUID("Home",home.id());mark.putUUID("Site",site.id());mark.putLong("Root",root.asLong());mark.putLong("Storage",storage.asLong());
-                mark.putLong("StartedAt",now);mark.putLong("CheckpointTime",l.getGameTime());mark.put("ObservedBody",n.saveWithoutId(new CompoundTag()));
+                var mark=new CompoundTag();mark.store("Body", UUIDUtil.CODEC,n.getUUID());mark.store("Person", UUIDUtil.CODEC,n.getCharacterId());
+                mark.store("Home", UUIDUtil.CODEC,home.id());mark.store("Site", UUIDUtil.CODEC,site.id());mark.putLong("Root",root.asLong());mark.putLong("Storage",storage.asLong());
+                mark.putLong("StartedAt",now);mark.putLong("CheckpointTime",l.getGameTime());mark.put("ObservedBody",com.jgeted.sagadyssey.core.MinecraftApi.saveEntity(n));
                 NbtIo.writeCompressed(mark,s.getWorldPath(LevelResource.ROOT).resolve(MARKER));
                 s.saveEverything(true,false,true);
-                net.neoforged.neoforge.common.IOUtilities.waitUntilIOWorkerComplete();
+                
                 com.jgeted.sagadyssey.Sagadyssey.LOGGER.info("INDUSTRY_FOREST_CHECKPOINT time={} person={} body={} initialSeed=1 normalPlant=true",l.getGameTime(),n.getCharacterId(),n.getUUID());
             }catch(Exception x){throw new IllegalStateException(x);}
         });
     }
     private static void resume(GameTestHelper h){
         if(checkpoint==null)throw new IllegalStateException("missing full prior-process world");
-        var l=h.getLevel();var s=l.getServer();var root=BlockPos.of(checkpoint.getLong("Root"));var storage=BlockPos.of(checkpoint.getLong("Storage"));
-        try{s.getCommands().getDispatcher().execute("tick sprint 31000",s.createCommandSourceStack().withPermission(4).withSuppressedOutput());}catch(Exception x){throw new IllegalStateException(x);}
+        var l=h.getLevel();var s=l.getServer();var root=BlockPos.of(checkpoint.getLongOr("Root", 0L));var storage=BlockPos.of(checkpoint.getLongOr("Storage", 0L));
+        try{s.getCommands().getDispatcher().execute("tick sprint 31000",s.createCommandSourceStack().withPermission(net.minecraft.server.permissions.LevelBasedPermissionSet.OWNER).withSuppressedOutput());}catch(Exception x){throw new IllegalStateException(x);}
         h.succeedWhen(()->{
-            h.assertTrue(l.getGameTime()-checkpoint.getLong("StartedAt")<=30000,"original 30000 tick total bound, including before restart");
-            var entity=l.getEntity(checkpoint.getUUID("Body"));h.assertTrue(entity instanceof NpcBase,"original body loaded, never replaced");var n=(NpcBase)entity;
-            h.assertTrue(n.getCharacterId().equals(checkpoint.getUUID("Person")),"same persistent person");
-            var home=HouseholdData.get(s).forMember(n.getCharacterId());h.assertTrue(home!=null && home.id().equals(checkpoint.getUUID("Home")) && home.settlementId().equals(checkpoint.getUUID("Site")),"same household and settlement after full restart");
+            h.assertTrue(l.getGameTime()-checkpoint.getLongOr("StartedAt", 0L)<=30000,"original 30000 tick total bound, including before restart");
+            var entity=l.getEntity(checkpoint.read("Body", UUIDUtil.CODEC).orElseThrow());h.assertTrue(entity instanceof NpcBase,"original body loaded, never replaced");var n=(NpcBase)entity;
+            h.assertTrue(n.getCharacterId().equals(checkpoint.read("Person", UUIDUtil.CODEC).orElseThrow()),"same persistent person");
+            var home=HouseholdData.get(s).forMember(n.getCharacterId());h.assertTrue(home!=null && home.id().equals(checkpoint.read("Home", UUIDUtil.CODEC).orElseThrow()) && home.settlementId().equals(checkpoint.read("Site", UUIDUtil.CODEC).orElseThrow()),"same household and settlement after full restart");
             var work=FieldworkData.get(s);
             var receipts=work.receiptsFor(n.getUUID());
             long planted=receipts.stream().filter(r->r.action().operation()==FieldworkAction.Operation.PLANT && r.action().target().equals(root)).count();

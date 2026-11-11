@@ -92,11 +92,11 @@ public final class NpcContextScreen extends Screen {
 
     private void perform(String actionId) {
         if ("talk".equals(actionId)) {
-            PacketDistributor.sendToServer(new NpcInteractionPacket(view.bodyEntityId(), actionId));
+            net.neoforged.neoforge.client.network.ClientPacketDistributor.sendToServer(new NpcInteractionPacket(view.bodyEntityId(), actionId));
             return;
         }
         if ("trade".equals(actionId)) {
-            PacketDistributor.sendToServer(new OpenNpcTradePacket(view.bodyEntityId()));
+            net.neoforged.neoforge.client.network.ClientPacketDistributor.sendToServer(new OpenNpcTradePacket(view.bodyEntityId()));
             return;
         }
         if ("handover".equals(actionId)) {
@@ -109,7 +109,7 @@ public final class NpcContextScreen extends Screen {
                     view.identity().name(), stack.getHoverName().getString(), stack.getCount()));
             return;
         }
-        PacketDistributor.sendToServer(new NpcInteractionPacket(view.bodyEntityId(), actionId));
+        net.neoforged.neoforge.client.network.ClientPacketDistributor.sendToServer(new NpcInteractionPacket(view.bodyEntityId(), actionId));
         onClose();
     }
 
@@ -135,7 +135,7 @@ public final class NpcContextScreen extends Screen {
 
         for (InfoHitbox box : hitboxes) {
             if (!box.contains(mouseX, mouseY)) continue;
-            graphics.renderTooltip(font, Component.literal(box.tooltip()), mouseX, mouseY);
+            graphics.setTooltipForNextFrame(font, Component.literal(box.tooltip()), mouseX, mouseY);
             break;
         }
     }

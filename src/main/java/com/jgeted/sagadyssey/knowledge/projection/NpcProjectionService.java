@@ -66,11 +66,11 @@ public final class NpcProjectionService {
                     new NpcViewSnapshot.DisplayIdentity("身份不可用", "", "", "", ""),
                     "当前没有可用的在生人物；查看不会创建人物。", "",
                     List.of(), List.of(), List.of(), List.of(), List.of(), List.of(),
-                    viewer.serverLevel().getGameTime() + 20L);
+                    viewer.level().getGameTime() + 20L);
         }
         UUID npcId = npc.getCharacterId();
-        long now = viewer.serverLevel().getGameTime();
-        KnowledgeStateData knowledge = KnowledgeStateData.get(viewer.server);
+        long now = viewer.level().getGameTime();
+        KnowledgeStateData knowledge = KnowledgeStateData.get(viewer.level().getServer());
 
         String health = observedHealth(npc.getHealth(), npc.getMaxHealth());
         String demeanor = observedDemeanor(npc.getMoral());
@@ -86,25 +86,25 @@ public final class NpcProjectionService {
                 PrecisionBand.IMPRESSION, 0.65D, "神态观察", now, 400L,
                 DisclosurePolicy.SHAREABLE);
 
-        ServiceRelationshipData services = ServiceRelationshipData.get(viewer.server);
+        ServiceRelationshipData services = ServiceRelationshipData.get(viewer.level().getServer());
         List<ServiceRelationship> activeForNpc = services.activeForAgent(npcId, now);
         List<ServiceRelationship> viewerServices = activeForNpc.stream()
                 .filter(value -> value.principalId().equals(viewerId)).toList();
         Set<AuthorityScope> scopes = new HashSet<>();
         viewerServices.forEach(value -> scopes.addAll(value.scopes()));
 
-        HouseholdData households = HouseholdData.get(viewer.server);
+        HouseholdData households = HouseholdData.get(viewer.level().getServer());
         HouseholdRecord targetHousehold = households.forMember(npcId);
         HouseholdRecord viewerHousehold = households.forMember(viewerId);
         boolean sameHousehold = targetHousehold != null && viewerHousehold != null
                 && targetHousehold.id().equals(viewerHousehold.id());
-        NpcLifeData lifeData = NpcLifeData.get(viewer.server);
+        NpcLifeData lifeData = NpcLifeData.get(viewer.level().getServer());
         NpcLifeRecord lifeRecord = lifeData.record(npcId);
         SettlementRecord workplace = lifeRecord == null || lifeRecord.activeWorkplaceSettlementId() == null
-                ? null : SettlementRegistryData.get(viewer.server)
+                ? null : SettlementRegistryData.get(viewer.level().getServer())
                 .byId(lifeRecord.activeWorkplaceSettlementId());
         boolean warehouseSteward = workplace != null && (viewerId.equals(workplace.founderCharacterId())
-                || PoliticalStateData.get(viewer.server).canGrantTitle(
+                || PoliticalStateData.get(viewer.level().getServer()).canGrantTitle(
                 workplace.factionId(), workplace.id(), viewerId));
         ObserverClass observerClass = observerClass(!viewerServices.isEmpty(), sameHousehold,
                 warehouseSteward, false);
@@ -144,7 +144,7 @@ public final class NpcProjectionService {
                 viewerId, observerClass, sameHousehold, viewerServices, targetHousehold,
                 lifeData, now);
         boolean hasHeldItem = !viewer.getMainHandItem().isEmpty() || !viewer.getOffhandItem().isEmpty();
-        boolean fixedLabNpc = ScenarioLabController.isLabNpc(viewer.server, npc.getUUID());
+        boolean fixedLabNpc = ScenarioLabController.isLabNpc(viewer.level().getServer(), npc.getUUID());
         NpcTradeAccessPolicy.Decision tradeAccess = NpcTradeAccessPolicy.evaluate(
                 FactionAttachments.getStandings(viewer), npc.getFaction(), !viewerServices.isEmpty());
         List<NpcViewSnapshot.AvailableInteraction> actions = actions(npc, activeForNpc,
@@ -179,7 +179,7 @@ public final class NpcProjectionService {
                 || observerClass == ObserverClass.WAREHOUSE_STEWARD
                 || observerClass == ObserverClass.ADMIN;
 
-        InstitutionData institutions = InstitutionData.get(viewer.server);
+        InstitutionData institutions = InstitutionData.get(viewer.level().getServer());
         var publicOffice = institutions.officesHeldBy(npcSubject, now).stream().findFirst().orElse(null);
         if (publicOffice != null) {
             var institution = institutions.institution(publicOffice.institutionId());
@@ -218,7 +218,7 @@ public final class NpcProjectionService {
                         "信用只针对你们双方与具体用途，不是全世界共享的分数。", 1,
                         PrecisionBand.EXACT, "当事人信用账本"));
             } else if (privileged) {
-                var obligations = GovernanceLedgerData.get(viewer.server)
+                var obligations = GovernanceLedgerData.get(viewer.level().getServer())
                         .obligationsOf(npcSubject, now).stream()
                         .filter(value -> value.status() == LevyStatus.ASSESSED
                                 || value.status() == LevyStatus.PARTIALLY_PAID
@@ -236,9 +236,9 @@ public final class NpcProjectionService {
             }
         }
 
-        var triage = InjuryData.get(viewer.server).triage(npcId, now);
-        var encounter = CombatEncounterData.get(viewer.server).activeFor(npcId, now);
-        var relatedIncidents = SecurityData.get(viewer.server).incidentsAbout(npcSubject).stream()
+        var triage = InjuryData.get(viewer.level().getServer()).triage(npcId, now);
+        var encounter = CombatEncounterData.get(viewer.level().getServer()).activeFor(npcId, now);
+        var relatedIncidents = SecurityData.get(viewer.level().getServer()).incidentsAbout(npcSubject).stream()
                 .filter(value -> value.reportedBy().equals(viewerSubject)
                         || viewerSubject.equals(value.victim())
                         || viewerSubject.equals(value.allegedOffender())).toList();
@@ -272,7 +272,7 @@ public final class NpcProjectionService {
 
     private static String directDebtSummary(ServerPlayer viewer, SubjectRef npc,
                                             SubjectRef viewerSubject, long now) {
-        CreditLedgerData credits = CreditLedgerData.get(viewer.server);
+        CreditLedgerData credits = CreditLedgerData.get(viewer.level().getServer());
         int viewerOwes = 0;
         int npcOwes = 0;
         for (CreditPurpose purpose : CreditPurpose.values()) {

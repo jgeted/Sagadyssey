@@ -49,7 +49,7 @@ public final class NpcWorkCommuteGoal extends Goal {
         if (npc.hasWorkZone() && npc.isWorkAllowedAt(npc.blockPosition())) return false;
         NpcLifeRecord life = NpcLifeData.get(level.getServer()).record(npc.getCharacterId());
         if (life == null || life.activeWorkplace() == null
-                || !life.dimension().equals(level.dimension().location().toString())) return false;
+                || !life.dimension().equals(level.dimension().identifier().toString())) return false;
         workplace = life.activeWorkplace().immutable();
         if (!level.hasChunkAt(workplace)
                 || workplace.distManhattan(npc.blockPosition()) <= CLOSE_ENOUGH_DISTANCE) return false;

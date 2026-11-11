@@ -1,5 +1,8 @@
 package com.jgeted.sagadyssey.npc.trade;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+import net.minecraft.core.UUIDUtil;
+
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
@@ -25,10 +28,10 @@ public record TradeProposal(UUID id, UUID sessionId, int version, UUID proposedB
 
     CompoundTag save() {
         CompoundTag tag = new CompoundTag();
-        tag.putUUID("Id", id);
-        tag.putUUID("SessionId", sessionId);
+        tag.store("Id", UUIDUtil.CODEC, id);
+        tag.store("SessionId", UUIDUtil.CODEC, sessionId);
         tag.putInt("Version", version);
-        tag.putUUID("ProposedBy", proposedBy);
+        tag.store("ProposedBy", UUIDUtil.CODEC, proposedBy);
         tag.putString("Intent", intent.name());
         tag.put("PlayerOffers", saveAssets(playerOffers));
         tag.put("NpcOffers", saveAssets(npcOffers));
@@ -38,12 +41,12 @@ public record TradeProposal(UUID id, UUID sessionId, int version, UUID proposedB
     }
 
     static TradeProposal load(CompoundTag tag) {
-        return new TradeProposal(tag.getUUID("Id"), tag.getUUID("SessionId"),
-                tag.getInt("Version"), tag.getUUID("ProposedBy"),
-                TradeIntent.valueOf(tag.getString("Intent")),
-                loadAssets(tag.getList("PlayerOffers", Tag.TAG_COMPOUND)),
-                loadAssets(tag.getList("NpcOffers", Tag.TAG_COMPOUND)),
-                tag.getLong("ProposedAt"), tag.getLong("ExpiresAt"));
+        return new TradeProposal(tag.read("Id", UUIDUtil.CODEC).orElseThrow(), tag.read("SessionId", UUIDUtil.CODEC).orElseThrow(),
+                tag.getIntOr("Version", 0), tag.read("ProposedBy", UUIDUtil.CODEC).orElseThrow(),
+                TradeIntent.valueOf(tag.getStringOr("Intent", "")),
+                loadAssets(MinecraftApi.listOfType(tag, "PlayerOffers", Tag.TAG_COMPOUND)),
+                loadAssets(MinecraftApi.listOfType(tag, "NpcOffers", Tag.TAG_COMPOUND)),
+                tag.getLongOr("ProposedAt", 0L), tag.getLongOr("ExpiresAt", 0L));
     }
 
     private static ListTag saveAssets(List<TradeAsset> assets) {
@@ -55,7 +58,7 @@ public record TradeProposal(UUID id, UUID sessionId, int version, UUID proposedB
     private static List<TradeAsset> loadAssets(ListTag tags) {
         List<TradeAsset> assets = new ArrayList<>();
         for (int index = 0; index < tags.size(); index++) {
-            assets.add(TradeAsset.load(tags.getCompound(index)));
+            assets.add(TradeAsset.load(tags.getCompoundOrEmpty(index)));
         }
         return assets;
     }

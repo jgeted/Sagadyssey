@@ -1,18 +1,21 @@
 package com.jgeted.sagadyssey.social.needs;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+import net.minecraft.core.UUIDUtil;
+
 import com.jgeted.sagadyssey.npc.brain.fieldwork.FieldworkStorage;
 import com.jgeted.sagadyssey.worldsim.rights.*;
 import com.jgeted.sagadyssey.worldsim.transfer.*;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.*;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.world.level.saveddata.SavedData;
+import com.jgeted.sagadyssey.worldsim.NbtSavedData;
 import net.minecraft.world.level.storage.LevelResource;
 import java.nio.file.Files;
 import java.util.*;
 
 /** Scoped known supply network and durable transport intent. No remote inventory snapshots. */
-public final class SupplyFlowData extends SavedData {
+public final class SupplyFlowData extends NbtSavedData {
     public static final String NAME = "sagadyssey_supply_flow_v3";
     public static final Factory<SupplyFlowData> FACTORY = new Factory<>(SupplyFlowData::new, SupplyFlowData::load);
     public static final int MAX_ENTRIES = 4096;
@@ -63,10 +66,10 @@ public final class SupplyFlowData extends SavedData {
         }
     }
     public static SupplyFlowData get(MinecraftServer server) {
-        var storage=server.overworld().getDataStorage(); var data=storage.get(FACTORY,NAME);if(data!=null)return data;
+        var storage=server.overworld().getDataStorage(); var data=storage.get(FACTORY.type(NAME));if(data!=null)return data;
         if(Files.exists(server.getWorldPath(LevelResource.ROOT).resolve("data").resolve(NAME+".dat")))
             throw new IllegalStateException("unreadable supply ledger; recovery required");
-        data=new SupplyFlowData();storage.set(NAME,data);return data;
+        data=new SupplyFlowData();storage.set(FACTORY.type(NAME),data);return data;
     }
     public void register(FieldworkStorage point) {
         var previous=points.get(point.containerId());
@@ -83,6 +86,7 @@ public final class SupplyFlowData extends SavedData {
     }
     public Set<UUID> known(SubjectRef actor){return Set.copyOf(known.getOrDefault(actor,Set.of()));}
     public FieldworkStorage point(UUID id){var p=points.get(id);if(p==null)throw new NoSuchElementException("unknown supply site "+id);return p;}
+    public FieldworkStorage pointOrNull(UUID id){return points.get(id);}
     public void demand(UUID id,SubjectRef principal,UUID destination) {
         point(destination);var value=new Demand(principal,destination);var previous=demands.get(id);
         if(previous!=null&&!previous.equals(value))throw new IllegalStateException("demand scope changed");
@@ -123,32 +127,32 @@ public final class SupplyFlowData extends SavedData {
 
     @Override public CompoundTag save(CompoundTag tag,HolderLookup.Provider lookup){
         tag.putInt("Schema",1);var locations=new ListTag();points.values().forEach(p->locations.add(p.save()));tag.put("Points",locations);
-        var knowledge=new ListTag();known.forEach((actor,ids)->ids.forEach(id->{var t=new CompoundTag();t.put("Actor",actor.save());t.putUUID("Point",id);knowledge.add(t);}));tag.put("Known",knowledge);
-        var demandList=new ListTag();demands.forEach((id,d)->{var t=new CompoundTag();t.putUUID("Id",id);t.put("Principal",d.principal().save());t.putUUID("Destination",d.destination());demandList.add(t);});tag.put("Demands",demandList);
-        var policyList=new ListTag();policies.values().forEach(p->{var t=new CompoundTag();t.putString("Id",p.id());t.put("Principal",p.principal().save());t.putUUID("Destination",p.destination());t.put("Item",p.item().save());t.putInt("Target",p.target());t.putString("Category",p.category());policyList.add(t);});tag.put("Policies",policyList);
-        var routeList=new ListTag();routes.values().forEach(r->{var t=new CompoundTag();t.putUUID("Id",r.id());t.putUUID("Need",r.need());t.putUUID("Source",r.source());t.putUUID("Destination",r.destination());t.put("Principal",r.principal().save());t.putInt("Quantity",r.quantity());t.putString("Stage",r.stage().name());t.putLong("RetryAt",r.retryAt());t.putInt("Failures",r.failures());t.putString("Detail",r.detail());
-            if(r.carrierEntity()!=null){t.putUUID("CarrierEntity",r.carrierEntity());t.putUUID("CarrierCharacter",r.carrierCharacter());}
-            if(r.pending()!=null){var p=r.pending();var x=new CompoundTag();x.putUUID("Id",p.id());x.putUUID("Bag",p.bag());x.putBoolean("Pickup",p.pickup());x.putInt("Quantity",p.quantity());x.put("Item",p.item().save());x.putLong("SourceRevision",p.sourceRevision());x.putLong("TargetRevision",p.targetRevision());x.putLong("Time",p.time());t.put("Pending",x);}routeList.add(t);});tag.put("Routes",routeList);
-        var links=new ListTag();production.forEach((need,order)->{var t=new CompoundTag();t.putUUID("Need",need);t.putUUID("Order",order);links.add(t);});tag.put("Production",links);return tag;
+        var knowledge=new ListTag();known.forEach((actor,ids)->ids.forEach(id->{var t=new CompoundTag();t.put("Actor",actor.save());t.store("Point", UUIDUtil.CODEC,id);knowledge.add(t);}));tag.put("Known",knowledge);
+        var demandList=new ListTag();demands.forEach((id,d)->{var t=new CompoundTag();t.store("Id", UUIDUtil.CODEC,id);t.put("Principal",d.principal().save());t.store("Destination", UUIDUtil.CODEC,d.destination());demandList.add(t);});tag.put("Demands",demandList);
+        var policyList=new ListTag();policies.values().forEach(p->{var t=new CompoundTag();t.putString("Id",p.id());t.put("Principal",p.principal().save());t.store("Destination", UUIDUtil.CODEC,p.destination());t.put("Item",p.item().save());t.putInt("Target",p.target());t.putString("Category",p.category());policyList.add(t);});tag.put("Policies",policyList);
+        var routeList=new ListTag();routes.values().forEach(r->{var t=new CompoundTag();t.store("Id", UUIDUtil.CODEC,r.id());t.store("Need", UUIDUtil.CODEC,r.need());t.store("Source", UUIDUtil.CODEC,r.source());t.store("Destination", UUIDUtil.CODEC,r.destination());t.put("Principal",r.principal().save());t.putInt("Quantity",r.quantity());t.putString("Stage",r.stage().name());t.putLong("RetryAt",r.retryAt());t.putInt("Failures",r.failures());t.putString("Detail",r.detail());
+            if(r.carrierEntity()!=null){t.store("CarrierEntity", UUIDUtil.CODEC,r.carrierEntity());t.store("CarrierCharacter", UUIDUtil.CODEC,r.carrierCharacter());}
+            if(r.pending()!=null){var p=r.pending();var x=new CompoundTag();x.store("Id", UUIDUtil.CODEC,p.id());x.store("Bag", UUIDUtil.CODEC,p.bag());x.putBoolean("Pickup",p.pickup());x.putInt("Quantity",p.quantity());x.put("Item",p.item().save());x.putLong("SourceRevision",p.sourceRevision());x.putLong("TargetRevision",p.targetRevision());x.putLong("Time",p.time());t.put("Pending",x);}routeList.add(t);});tag.put("Routes",routeList);
+        var links=new ListTag();production.forEach((need,order)->{var t=new CompoundTag();t.store("Need", UUIDUtil.CODEC,need);t.store("Order", UUIDUtil.CODEC,order);links.add(t);});tag.put("Production",links);return tag;
     }
     public static SupplyFlowData load(CompoundTag tag,HolderLookup.Provider lookup){
-        if(!tag.contains("Schema",Tag.TAG_INT)||tag.getInt("Schema")!=1)throw new IllegalArgumentException("unknown supply schema");
+        if(!MinecraftApi.containsTag(tag, "Schema",Tag.TAG_INT)||tag.getIntOr("Schema", 0)!=1)throw new IllegalArgumentException("unknown supply schema");
         for(String field:List.of("Points","Known","Demands","Policies","Routes","Production"))
-            if(!(tag.get(field) instanceof ListTag list)||!list.isEmpty()&&list.getElementType()!=Tag.TAG_COMPOUND||list.size()>MAX_ENTRIES*64)
+            if(!(tag.get(field) instanceof ListTag list)||!list.isEmpty()&&MinecraftApi.elementType(list)!=Tag.TAG_COMPOUND||list.size()>MAX_ENTRIES*64)
                 throw new IllegalArgumentException("invalid supply list "+field);
         var d=new SupplyFlowData();
-        for(Tag value:tag.getList("Points",Tag.TAG_COMPOUND)){var p=FieldworkStorage.load((CompoundTag)value);if(d.points.containsKey(p.containerId()))throw new IllegalArgumentException("duplicate supply point");d.register(p);}
-        for(Tag value:tag.getList("Known",Tag.TAG_COMPOUND)){var t=(CompoundTag)value;var actor=SubjectRef.load(t.getCompound("Actor"));UUID id=uuid(t,"Point");if(d.known(actor).contains(id))throw new IllegalArgumentException("duplicate knowledge");d.reveal(actor,id);}
-        for(Tag value:tag.getList("Demands",Tag.TAG_COMPOUND)){var t=(CompoundTag)value;UUID id=uuid(t,"Id");if(d.demands.containsKey(id))throw new IllegalArgumentException("duplicate demand scope");d.demand(id,SubjectRef.load(t.getCompound("Principal")),uuid(t,"Destination"));}
-        for(Tag value:tag.getList("Policies",Tag.TAG_COMPOUND)){var t=(CompoundTag)value;required(t,"Target",Tag.TAG_INT);var p=new Policy(t.getString("Id"),SubjectRef.load(t.getCompound("Principal")),uuid(t,"Destination"),fingerprint(t.getCompound("Item")),t.getInt("Target"),t.getString("Category"));if(d.policies.containsKey(p.id()))throw new IllegalArgumentException("duplicate policy");d.policy(p);}
-        for(Tag value:tag.getList("Routes",Tag.TAG_COMPOUND)){var t=(CompoundTag)value;required(t,"Quantity",Tag.TAG_INT);required(t,"RetryAt",Tag.TAG_LONG);required(t,"Failures",Tag.TAG_INT);required(t,"Detail",Tag.TAG_STRING);Pending p=null;
-            if(t.contains("Pending")){required(t,"Pending",Tag.TAG_COMPOUND);var x=t.getCompound("Pending");for(String k:List.of("SourceRevision","TargetRevision","Time"))required(x,k,Tag.TAG_LONG);required(x,"Quantity",Tag.TAG_INT);required(x,"Pickup",Tag.TAG_BYTE);p=new Pending(uuid(x,"Id"),x.getBoolean("Pickup"),uuid(x,"Bag"),x.getInt("Quantity"),fingerprint(x.getCompound("Item")),x.getLong("SourceRevision"),x.getLong("TargetRevision"),x.getLong("Time"));}
-            var r=new Route(uuid(t,"Id"),uuid(t,"Need"),uuid(t,"Source"),uuid(t,"Destination"),SubjectRef.load(t.getCompound("Principal")),t.getInt("Quantity"),t.contains("CarrierEntity")?uuid(t,"CarrierEntity"):null,t.contains("CarrierCharacter")?uuid(t,"CarrierCharacter"):null,Stage.valueOf(t.getString("Stage")),t.getLong("RetryAt"),t.getInt("Failures"),p,t.getString("Detail"));
+        for(Tag value:MinecraftApi.listOfType(tag, "Points",Tag.TAG_COMPOUND)){var p=FieldworkStorage.load((CompoundTag)value);if(d.points.containsKey(p.containerId()))throw new IllegalArgumentException("duplicate supply point");d.register(p);}
+        for(Tag value:MinecraftApi.listOfType(tag, "Known",Tag.TAG_COMPOUND)){var t=(CompoundTag)value;var actor=SubjectRef.load(t.getCompoundOrEmpty("Actor"));UUID id=uuid(t,"Point");if(d.known(actor).contains(id))throw new IllegalArgumentException("duplicate knowledge");d.reveal(actor,id);}
+        for(Tag value:MinecraftApi.listOfType(tag, "Demands",Tag.TAG_COMPOUND)){var t=(CompoundTag)value;UUID id=uuid(t,"Id");if(d.demands.containsKey(id))throw new IllegalArgumentException("duplicate demand scope");d.demand(id,SubjectRef.load(t.getCompoundOrEmpty("Principal")),uuid(t,"Destination"));}
+        for(Tag value:MinecraftApi.listOfType(tag, "Policies",Tag.TAG_COMPOUND)){var t=(CompoundTag)value;required(t,"Target",Tag.TAG_INT);var p=new Policy(t.getStringOr("Id", ""),SubjectRef.load(t.getCompoundOrEmpty("Principal")),uuid(t,"Destination"),fingerprint(t.getCompoundOrEmpty("Item")),t.getIntOr("Target", 0),t.getStringOr("Category", ""));if(d.policies.containsKey(p.id()))throw new IllegalArgumentException("duplicate policy");d.policy(p);}
+        for(Tag value:MinecraftApi.listOfType(tag, "Routes",Tag.TAG_COMPOUND)){var t=(CompoundTag)value;required(t,"Quantity",Tag.TAG_INT);required(t,"RetryAt",Tag.TAG_LONG);required(t,"Failures",Tag.TAG_INT);required(t,"Detail",Tag.TAG_STRING);Pending p=null;
+            if(t.contains("Pending")){required(t,"Pending",Tag.TAG_COMPOUND);var x=t.getCompoundOrEmpty("Pending");for(String k:List.of("SourceRevision","TargetRevision","Time"))required(x,k,Tag.TAG_LONG);required(x,"Quantity",Tag.TAG_INT);required(x,"Pickup",Tag.TAG_BYTE);p=new Pending(uuid(x,"Id"),x.getBooleanOr("Pickup", false),uuid(x,"Bag"),x.getIntOr("Quantity", 0),fingerprint(x.getCompoundOrEmpty("Item")),x.getLongOr("SourceRevision", 0L),x.getLongOr("TargetRevision", 0L),x.getLongOr("Time", 0L));}
+            var r=new Route(uuid(t,"Id"),uuid(t,"Need"),uuid(t,"Source"),uuid(t,"Destination"),SubjectRef.load(t.getCompoundOrEmpty("Principal")),t.getIntOr("Quantity", 0),t.contains("CarrierEntity")?uuid(t,"CarrierEntity"):null,t.contains("CarrierCharacter")?uuid(t,"CarrierCharacter"):null,Stage.valueOf(t.getStringOr("Stage", "")),t.getLongOr("RetryAt", 0L),t.getIntOr("Failures", 0),p,t.getStringOr("Detail", ""));
             d.point(r.source());d.point(r.destination());if(!d.demands.containsKey(r.need())||d.routes.containsKey(r.id()))throw new IllegalArgumentException("orphan or duplicate route");d.route(r);}
-        for(Tag value:tag.getList("Production",Tag.TAG_COMPOUND)){var t=(CompoundTag)value;UUID need=uuid(t,"Need");if(!d.demands.containsKey(need)||d.production.containsKey(need))throw new IllegalArgumentException("invalid production link");d.production(need,uuid(t,"Order"));}
+        for(Tag value:MinecraftApi.listOfType(tag, "Production",Tag.TAG_COMPOUND)){var t=(CompoundTag)value;UUID need=uuid(t,"Need");if(!d.demands.containsKey(need)||d.production.containsKey(need))throw new IllegalArgumentException("invalid production link");d.production(need,uuid(t,"Order"));}
         return d;
     }
-    private static UUID uuid(CompoundTag t,String key){if(!t.hasUUID(key))throw new IllegalArgumentException("missing supply UUID "+key);return t.getUUID(key);}
-    private static void required(CompoundTag t,String key,int type){if(!t.contains(key,type))throw new IllegalArgumentException("invalid supply field "+key);}
+    private static UUID uuid(CompoundTag t,String key){if(!t.read(key, UUIDUtil.CODEC).isPresent())throw new IllegalArgumentException("missing supply UUID "+key);return t.read(key, UUIDUtil.CODEC).orElseThrow();}
+    private static void required(CompoundTag t,String key,int type){if(!MinecraftApi.containsTag(t, key,type))throw new IllegalArgumentException("invalid supply field "+key);}
     private static ItemFingerprint fingerprint(CompoundTag t){required(t,"Item",Tag.TAG_STRING);required(t,"Components",Tag.TAG_INT);return ItemFingerprint.load(t);}
 }

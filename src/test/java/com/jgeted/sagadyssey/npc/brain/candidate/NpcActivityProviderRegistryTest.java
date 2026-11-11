@@ -5,7 +5,7 @@ import com.jgeted.sagadyssey.npc.brain.context.NpcPerceptionSnapshot;
 import com.jgeted.sagadyssey.npc.brain.plan.NpcPlanKind;
 import com.jgeted.sagadyssey.npc.brain.plan.NpcPlanPhase;
 import com.jgeted.sagadyssey.npc.brain.plan.NpcPlanPriority;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -34,10 +34,10 @@ class NpcActivityProviderRegistryTest {
     @Test
     void rejectsCandidateThatClaimsAnotherProvider() {
         NpcActivityProviderRegistry registry = new NpcActivityProviderRegistry();
-        ResourceLocation registered = id("registered");
+        Identifier registered = id("registered");
         registry.register(new NpcActivityProvider() {
             @Override
-            public ResourceLocation id() {
+            public Identifier id() {
                 return registered;
             }
 
@@ -52,10 +52,10 @@ class NpcActivityProviderRegistryTest {
     }
 
     private static NpcActivityProvider provider(String providerKey, String candidateKey) {
-        ResourceLocation id = id(providerKey);
+        Identifier id = id(providerKey);
         return new NpcActivityProvider() {
             @Override
-            public ResourceLocation id() {
+            public Identifier id() {
                 return id;
             }
 
@@ -66,7 +66,7 @@ class NpcActivityProviderRegistryTest {
         };
     }
 
-    private static NpcActivityCandidate candidate(String key, ResourceLocation providerId) {
+    private static NpcActivityCandidate candidate(String key, Identifier providerId) {
         return new NpcActivityCandidate(key, providerId, NpcPlanKind.WORK,
                 NpcPlanPriority.NORMAL, null, null,
                 List.of(new NpcPlanStepTemplate(NpcPlanPhase.ACTING,
@@ -81,7 +81,7 @@ class NpcActivityProviderRegistryTest {
                 Set.of(), Map.of());
     }
 
-    private static ResourceLocation id(String path) {
-        return ResourceLocation.fromNamespaceAndPath("sagadyssey", path);
+    private static Identifier id(String path) {
+        return Identifier.fromNamespaceAndPath("sagadyssey", path);
     }
 }

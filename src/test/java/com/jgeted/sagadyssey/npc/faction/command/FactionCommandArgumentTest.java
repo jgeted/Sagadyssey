@@ -1,8 +1,8 @@
 package com.jgeted.sagadyssey.npc.faction.command;
 
 import com.mojang.brigadier.StringReader;
-import net.minecraft.commands.arguments.ResourceLocationArgument;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.commands.arguments.IdentifierArgument;
+import net.minecraft.resources.Identifier;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -11,7 +11,7 @@ class FactionCommandArgumentTest {
 
     @Test
     void parsesAdvertisedNamespacedFactionId() throws Exception {
-        ResourceLocation parsed = ResourceLocationArgument.id()
+        Identifier parsed = IdentifierArgument.id()
                 .parse(new StringReader("sagadyssey:kingdom"));
 
         assertEquals("sagadyssey:kingdom", FactionCommand.normalizeFactionId(parsed));
@@ -19,7 +19,7 @@ class FactionCommandArgumentTest {
 
     @Test
     void keepsLegacyShortFactionIdWorking() throws Exception {
-        ResourceLocation parsed = ResourceLocationArgument.id()
+        Identifier parsed = IdentifierArgument.id()
                 .parse(new StringReader("kingdom"));
 
         assertEquals("kingdom", FactionCommand.normalizeFactionId(parsed));

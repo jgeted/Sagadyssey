@@ -1,5 +1,7 @@
 package com.jgeted.sagadyssey.social.needs;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+
 import com.jgeted.sagadyssey.npc.ai.MovementProgress;
 import com.jgeted.sagadyssey.npc.brain.execution.*;
 import com.jgeted.sagadyssey.npc.brain.fieldwork.*;
@@ -9,19 +11,19 @@ import com.jgeted.sagadyssey.npc.profession.NpcProfession;
 import com.jgeted.sagadyssey.social.life.NpcSchedulePlanner;
 import com.jgeted.sagadyssey.worldsim.rights.*;
 import com.jgeted.sagadyssey.worldsim.transfer.*;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.world.Container;
 import java.util.*;
 
 /** Merchant owns purchased goods, pays real money, carries it, and only earns on a real resale. */
 public final class MerchantSupplyTask implements NpcTaskExecutor {
-    public static final ResourceLocation ID=ResourceLocation.parse("sagadyssey:merchant_supply");
-    public static final ResourceLocation PROVIDER=ResourceLocation.parse("sagadyssey:merchant_supply");
+    public static final Identifier ID=Identifier.parse("sagadyssey:merchant_supply");
+    public static final Identifier PROVIDER=Identifier.parse("sagadyssey:merchant_supply");
     private static final ItemFingerprint MONEY=new ItemFingerprint("minecraft:emerald",0);
     private final Map<UUID,MovementProgress> movement=new HashMap<>();
     public static Optional<NpcPlan> choose(NpcBase npc,long now){
         if(!SupplyTransportTask.eligible(npc)||npc.getProfession()!=NpcProfession.TRADER||!NpcSchedulePlanner.allowsWork(npc))return Optional.empty();
-        var data=MerchantSupplyData.get(npc.getServer());
+        var data=MerchantSupplyData.get(MinecraftApi.server(npc));
         var current=data.journeys().stream().filter(j->j.merchantEntity().equals(npc.getUUID())&&j.stage()!=MerchantSupplyData.Stage.DONE&&j.stage()!=MerchantSupplyData.Stage.REVIEW).findFirst().orElse(null);
         if(current!=null&&current.retryAt()>now)return Optional.empty();
         if(current==null){
@@ -29,8 +31,8 @@ public final class MerchantSupplyTask implements NpcTaskExecutor {
             var known=data.known(npc.getCharacterId()).stream().filter(o->o.time()<=now&&now-o.time()<=24000&&o.available()>0).sorted(Comparator.comparing(o->o.offer().toString())).toList();
             outer:for(var buyMemory:known){var buy=data.offer(buyMemory.offer());if(!buy.sells()||buy.expiresAt()<=now)continue;
                 for(var sellMemory:known){var sell=data.offer(sellMemory.offer());if(sell.sells()||sell.expiresAt()<=now||sell.settlement().equals(buy.settlement())||!sell.item().equals(buy.item())||sell.unitEmeralds()<=buy.unitEmeralds())continue;
-                    var points=SupplyFlowData.get(npc.getServer());var a=points.point(buy.point());var b=points.point(sell.point());
-                    if(!a.dimension().equals(npc.level().dimension().location().toString())||!a.dimension().equals(b.dimension())||a.containerId().equals(b.containerId()))continue;
+                    var points=SupplyFlowData.get(MinecraftApi.server(npc));var a=points.point(buy.point());var b=points.point(sell.point());
+                    if(!a.dimension().equals(npc.level().dimension().identifier().toString())||!a.dimension().equals(b.dimension())||a.containerId().equals(b.containerId()))continue;
                     int quantity=Math.min(Math.min(buyMemory.available(),sellMemory.available()),SupplyFlowService.count(npc.getPersonalInventory(),MONEY)/buy.unitEmeralds());
                     if(quantity<1)continue;current=new MerchantSupplyData.Journey(UUID.randomUUID(),npc.getUUID(),npc.getCharacterId(),buy.id(),sell.id(),quantity,MerchantSupplyData.Stage.BUY,null,0,0,0,now,now,"依据本人已知供需报价选择路线");data.journey(current);break outer;
                 }
@@ -42,12 +44,12 @@ public final class MerchantSupplyTask implements NpcTaskExecutor {
         return Optional.of(new NpcPlan(UUID.randomUUID(),npc.getUUID(),current.token(),PROVIDER,NpcPlanKind.WORK,NpcPlanPriority.NORMAL,NpcPlanStatus.SELECTED,steps,0,now,now,now+40,now+12000,null,"买入、携带和真实卖出"));
     }
     private static void step(List<NpcPlanStep> steps,MerchantSupplyData.Journey j,String op,NpcPlanPhase phase,long now){steps.add(new NpcPlanStep(steps.size(),phase,ID,Map.of("journey",j.id().toString(),"operation",op),NpcPlanStepStatus.PENDING,now,"真实贸易路线"));}
-    @Override public ResourceLocation id(){return ID;}
+    @Override public Identifier id(){return ID;}
     @Override public TaskTickResult start(NpcExecutionContext c,NpcPlan p,NpcPlanStep s){return tick(c,p,s);}
     @Override public TaskTickResult recover(NpcExecutionContext c,NpcPlan p,NpcPlanStep s){movement.remove(p.id());return tick(c,p,s);}
     @Override public TaskTickResult tick(NpcExecutionContext raw,NpcPlan plan,NpcPlanStep step){
         if(!(raw instanceof NpcEntityExecutionContext c))return TaskTickResult.failed("贸易需要实体");
-        var npc=c.npc();var server=npc.getServer();var data=MerchantSupplyData.get(server);long now=c.gameTime();
+        var npc=c.npc();var server=MinecraftApi.server(npc);var data=MerchantSupplyData.get(server);long now=c.gameTime();
         var j=data.journey(UUID.fromString(step.params().get("journey")));
         if(j.stage()==MerchantSupplyData.Stage.DONE)return TaskTickResult.stepSucceeded("真实交易已经完成");
         if(j.stage()==MerchantSupplyData.Stage.REVIEW)return TaskTickResult.failed(j.detail());
@@ -61,7 +63,7 @@ public final class MerchantSupplyTask implements NpcTaskExecutor {
         var offer=data.offer(buying?j.buy():j.sell());var point=SupplyFlowData.get(server).point(offer.point());
         if(offer.expiresAt()<=now)return defer(c,plan,j,"已知报价到期，保留货物等待新约定",true);
         var market=SupplyFlowService.container(server,point);
-        if(market==null||!SupplyFlowService.validOwner(server,point)||!point.dimension().equals(c.level().dimension().location().toString()))return defer(c,plan,j,"贸易目标失效或权属变化",false);
+        if(market==null||!SupplyFlowService.validOwner(server,point)||!point.dimension().equals(c.level().dimension().identifier().toString()))return defer(c,plan,j,"贸易目标失效或权属变化",false);
         if(!FieldworkRoutes.closeEnough(npc,point.position())){
             if(!npc.onGround())return TaskTickResult.running("等待安全落地后继续贸易路线");
             var path=FieldworkRoutes.plan(npc,point.position(),false);if(path==null)return defer(c,plan,j,"贸易路径不可达",false);
@@ -95,11 +97,11 @@ public final class MerchantSupplyTask implements NpcTaskExecutor {
         npc.playAction(NpcAction.TRADE_PRESENT,20);return TaskTickResult.stepSucceeded(buying?"真实付款并买入商品":"真实交货并收到货款");
     }
     private MerchantSupplyData.Journey settle(NpcEntityExecutionContext c,MerchantSupplyData.Journey j,TransferReceipt receipt){
-        if(!receipt.transferId().equals(j.transfer()))throw new IllegalStateException("wrong merchant receipt");var data=MerchantSupplyData.get(c.npc().getServer());var rights=RightsStateData.get(c.npc().getServer());
+        if(!receipt.transferId().equals(j.transfer()))throw new IllegalStateException("wrong merchant receipt");var data=MerchantSupplyData.get(MinecraftApi.server(c.npc()));var rights=RightsStateData.get(MinecraftApi.server(c.npc()));
         rights.releaseReservations(j.token());var offer=data.offer(j.stage()==MerchantSupplyData.Stage.BUY?j.buy():j.sell());
         if(receipt.successful()){
             if(j.stage()==MerchantSupplyData.Stage.SELL&&data.settlement(j.id(),false)==null)
-                SupplyFlowService.merchantDelivered(c.npc().getServer(),offer,receipt.transferId(),j.quantity(),c.gameTime());
+                SupplyFlowService.merchantDelivered(MinecraftApi.server(c.npc()),offer,receipt.transferId(),j.quantity(),c.gameTime());
             data.settlement(j.id(),j.stage()==MerchantSupplyData.Stage.BUY,receipt.transferId());
             if(j.stage()==MerchantSupplyData.Stage.BUY){UUID cargo=ContainerIds.npcCargo(j.merchantCharacter());var owner=SubjectRef.character(j.merchantCharacter());
                 if(!rights.reserve(new AssetReservation(SupplyFlowService.receipt(j.id(),"cargo"),cargo,offer.item(),j.quantity(),owner,j.token(),"已付款在途商品",c.gameTime(),c.gameTime()+24000),SupplyFlowService.count(c.npc().getTransportInventory(),offer.item()),c.gameTime()))throw new IllegalStateException("merchant cargo commitment conflict");}
@@ -109,7 +111,7 @@ public final class MerchantSupplyTask implements NpcTaskExecutor {
         }else j=j.update(j.stage(),null,0,0,0,c.gameTime(),c.gameTime()+600,receipt.reason());data.journey(j);return j;
     }
     private TaskTickResult defer(NpcEntityExecutionContext c,NpcPlan p,MerchantSupplyData.Journey j,String reason,boolean review){movement.remove(p.id());c.npc().getNavigation().stop();
-        MerchantSupplyData.get(c.npc().getServer()).journey(j.update(review?MerchantSupplyData.Stage.REVIEW:j.stage(),j.transfer(),j.personalRevision(),j.cargoRevision(),j.marketRevision(),j.time(),c.gameTime()+600,reason));
+        MerchantSupplyData.get(MinecraftApi.server(c.npc())).journey(j.update(review?MerchantSupplyData.Stage.REVIEW:j.stage(),j.transfer(),j.personalRevision(),j.cargoRevision(),j.marketRevision(),j.time(),c.gameTime()+600,reason));
         c.npc().reportWorkActivity("保管钱货并等待",null,reason);return TaskTickResult.failed(reason);}
     @Override public void cancel(NpcExecutionContext raw,NpcPlan p,NpcPlanStep s,PlanCancellationReason reason){movement.remove(p.id());if(raw instanceof NpcEntityExecutionContext c)c.npc().getNavigation().stop();}
 }

@@ -1,5 +1,7 @@
 package com.jgeted.sagadyssey.social.religion.life;
 
+import net.minecraft.core.UUIDUtil;
+
 import com.jgeted.sagadyssey.knowledge.*;
 import com.jgeted.sagadyssey.npc.entity.NpcBase;
 import com.jgeted.sagadyssey.social.institution.*;
@@ -35,7 +37,7 @@ public final class ChurchLifeService {
     public static ChurchActivity consent(MinecraftServer s,UUID id,LivingEntity actor){var d=ChurchLifeData.get(s);var a=d.activity(id);var t=ReligionData.get(s).temple(a.temple());
         if(!ReligionService.near(actor,t))throw new IllegalStateException("请先到本地教堂，不能远程替别人同意");
         var next=a.accept(ReligionService.character(actor));d.put(next);return next;}
-    public static boolean present(LivingEntity e,TempleRecord t,BlockPos pos){return e!=null&&e.isAlive()&&e.level().dimension().location().toString().equals(t.alms().dimension())&&ReligionService.interacting(e,pos);}
+    public static boolean present(LivingEntity e,TempleRecord t,BlockPos pos){return e!=null&&e.isAlive()&&e.level().dimension().identifier().toString().equals(t.alms().dimension())&&ReligionService.interacting(e,pos);}
     public static boolean usable(MinecraftServer s,TempleRecord t,BlockPos p){var l=SupplyFlowService.level(s,t.alms().dimension());return l!=null&&l.hasChunkAt(p)&&l.getBlockState(p).getCollisionShape(l,p).isEmpty()&&l.getBlockState(p.above()).getCollisionShape(l,p.above()).isEmpty()&&l.getBlockState(p.below()).isCollisionShapeFullBlock(l,p.below());}
     public static List<UUID> attendees(MinecraftServer s,ChurchActivity a,NpcBase host){var t=ReligionData.get(s).temple(a.temple());return a.invited().stream().filter(a.consent()::contains).filter(id->{var e=ReligionService.body(s,id);return present(e,t,a.venue())&&host.hasLineOfSight(e)&&host.distanceToSqr(e)<=36;}).toList();}
     public static boolean published(MinecraftServer s,ChurchRecord r){if(r.activity()==null)return true;var a=ChurchLifeData.get(s).activity(r.activity());return a.stage()==ChurchActivity.Stage.SETTLING||a.stage()==ChurchActivity.Stage.COMPLETED;}
@@ -54,7 +56,7 @@ public final class ChurchLifeService {
         String text=book.pages().stream().map(p->p.raw().getString()).collect(java.util.stream.Collectors.joining("\n"));
         var id=ContainerIds.named("chapel-original-book:"+t.id()+":"+ItemFingerprint.of(stack));var old=ChurchLifeData.get(s).findRecord(id);if(old!=null)return old;
         var r=new ChurchRecord(id,t.id(),null,null,ContainerIds.named("book-author:"+book.author()),t.treasury().containerId(),s.overworld().getGameTime(),book.title().raw(),text,access,Set.of(),.7,ItemFingerprint.of(stack),"church.source_text");ChurchLifeData.get(s).put(r);return r;}
-    public static ItemStack book(ChurchRecord r){var stack=new ItemStack(Items.WRITTEN_BOOK);stack.set(DataComponents.WRITTEN_BOOK_CONTENT,new WrittenBookContent(Filterable.passThrough(r.title()),r.author().toString(),0,List.of(Filterable.passThrough(Component.literal(r.text()))),true));var tag=new CompoundTag();tag.putUUID("ChurchDocument",r.id());tag.putLong("AuthoredAt",r.authoredAt());if(r.source()!=null)tag.putUUID("Source",r.source());stack.set(DataComponents.CUSTOM_DATA,CustomData.of(tag));return stack;}
+    public static ItemStack book(ChurchRecord r){var stack=new ItemStack(Items.WRITTEN_BOOK);stack.set(DataComponents.WRITTEN_BOOK_CONTENT,new WrittenBookContent(Filterable.passThrough(r.title()),r.author().toString(),0,List.of(Filterable.passThrough(Component.literal(r.text()))),true));var tag=new CompoundTag();tag.store("ChurchDocument", UUIDUtil.CODEC,r.id());tag.putLong("AuthoredAt",r.authoredAt());if(r.source()!=null)tag.store("Source", UUIDUtil.CODEC,r.source());stack.set(DataComponents.CUSTOM_DATA,CustomData.of(tag));return stack;}
     public static ChurchRecord prepareRecord(MinecraftServer s,ChurchActivity a,List<UUID> actual){var d=ChurchLifeData.get(s);var existing=d.findRecord(a.id());if(existing!=null)return existing;
         var t=ReligionData.get(s).temple(a.temple());String title=switch(a.kind()){case RITE->"集会记录";case LESSON->"教学记录";case COPY->"抄本";case VISIT->"探访记录";case MARRIAGE->"婚礼仪式记录";case FUNERAL->"丧礼仪式记录";case MAINTENANCE->"场所维护记录";case WATCH->"看守巡查记录";};
         String text=switch(a.kind()){case RITE->"主持者与受邀者实际到场，集会已举行。";case LESSON->"教员与学生当面查阅教材；知识来自该教材，不保证教材内容为真。";case COPY->d.record(a.source()).text();case VISIT->"本人同意的当面探访已完成；此记录不表示疾病已治愈。";case MARRIAGE->"双方明确同意并实际到场，婚礼仪式举行；家庭配偶登记须另行依法确认。";case FUNERAL->"收到死亡报告后举行丧礼；未凭此核实死亡、墓葬或遗产。";case MAINTENANCE->"已检查并维护本地指定步道支撑；未声称整个建筑已修复。";case WATCH->"看守在指定地点实际巡视；没有由后台全知生成犯罪判断。";};

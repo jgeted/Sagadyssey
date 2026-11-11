@@ -1,11 +1,13 @@
 package com.jgeted.sagadyssey.social.production;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.world.level.saveddata.SavedData;
+import com.jgeted.sagadyssey.worldsim.NbtSavedData;
 
 import javax.annotation.Nullable;
 import java.util.Comparator;
@@ -14,7 +16,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
-public final class ProductionBatchData extends SavedData {
+public final class ProductionBatchData extends NbtSavedData {
     private static final String DATA_NAME = "sagadyssey_production_batches_v2";
     private static final int MAX_RETAINED = 1024;
     private static final Factory<ProductionBatchData> FACTORY =
@@ -22,7 +24,7 @@ public final class ProductionBatchData extends SavedData {
     private final Map<UUID, ProductionBatch> batches = new HashMap<>();
 
     public static ProductionBatchData get(MinecraftServer server) {
-        return server.overworld().getDataStorage().computeIfAbsent(FACTORY, DATA_NAME);
+        return server.overworld().getDataStorage().computeIfAbsent(FACTORY.type(DATA_NAME));
     }
 
     public void put(ProductionBatch batch) {
@@ -52,10 +54,10 @@ public final class ProductionBatchData extends SavedData {
 
     private static ProductionBatchData load(CompoundTag tag, HolderLookup.Provider registries) {
         ProductionBatchData data = new ProductionBatchData();
-        ListTag list = tag.getList("Batches", Tag.TAG_COMPOUND);
+        ListTag list = MinecraftApi.listOfType(tag, "Batches", Tag.TAG_COMPOUND);
         for (int index = 0; index < list.size(); index++) {
             try {
-                ProductionBatch batch = ProductionBatch.load(list.getCompound(index));
+                ProductionBatch batch = ProductionBatch.load(list.getCompoundOrEmpty(index));
                 data.batches.put(batch.id(), batch);
             } catch (RuntimeException ignored) { }
         }

@@ -1,7 +1,7 @@
 package com.jgeted.sagadyssey.npc.faction.api;
 
 import com.jgeted.sagadyssey.npc.faction.*;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.player.Player;
 
@@ -23,7 +23,7 @@ public final class SagadysseyFactionApiImpl implements SagadysseyFactionApi {
     private SagadysseyFactionApiImpl() {}
 
     @Override
-    public Faction getFaction(ResourceLocation id) {
+    public Faction getFaction(Identifier id) {
         return FactionRegistry.get(id);
     }
 

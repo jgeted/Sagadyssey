@@ -1,15 +1,14 @@
 package com.jgeted.sagadyssey.worldsim;
 
+import com.jgeted.sagadyssey.gametest.PortedGameTests.*;
+
 import com.jgeted.sagadyssey.npc.brain.persistence.NpcBrainData;
 import net.minecraft.SharedConstants;
-import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.gametest.framework.GameTestServer;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtIo;
 import net.minecraft.world.level.storage.LevelResource;
-import net.neoforged.neoforge.gametest.GameTestHolder;
-import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
 import java.nio.file.Files;
 import java.util.Arrays;
@@ -51,7 +50,7 @@ public final class PersistentDataRecoveryGameTests {
         invalidData.putString("OriginalEvidence", "must remain byte-for-byte intact");
         var root = new CompoundTag();
         root.put("data", invalidData);
-        root.putInt("DataVersion", SharedConstants.getCurrentVersion().getDataVersion().getVersion());
+        root.putInt("DataVersion", SharedConstants.getCurrentVersion().dataVersion().version());
         NbtIo.writeCompressed(root, path);
         byte[] original = Files.readAllBytes(path);
 
@@ -64,7 +63,7 @@ public final class PersistentDataRecoveryGameTests {
             }
             helper.assertTrue(rejected, "unreadable existing data must not create an empty ledger");
         }
-        server.overworld().getDataStorage().save();
+        server.overworld().getDataStorage().saveAndJoin();
         helper.assertTrue(Arrays.equals(original, Files.readAllBytes(path)),
                 "saving other ledgers must preserve the original unreadable file");
         if (suffix.equals(".dat_old"))

@@ -7,7 +7,7 @@ import com.jgeted.sagadyssey.npc.brain.plan.NpcPlanPriority;
 import com.jgeted.sagadyssey.npc.brain.plan.NpcPlanStatus;
 import com.jgeted.sagadyssey.npc.brain.plan.NpcPlanStep;
 import com.jgeted.sagadyssey.npc.brain.plan.NpcPlanStepStatus;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import org.junit.jupiter.api.Test;
 
 import java.util.Map;
@@ -16,14 +16,14 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 
 class NpcTaskExecutorTest {
-    private static final ResourceLocation EXECUTOR_ID = ResourceLocation.fromNamespaceAndPath(
+    private static final Identifier EXECUTOR_ID = Identifier.fromNamespaceAndPath(
             "sagadyssey", "no_op");
 
     @Test
     void defaultCancellationIsASafeNoOp() {
         NpcTaskExecutor executor = new NpcTaskExecutor() {
             @Override
-            public ResourceLocation id() {
+            public Identifier id() {
                 return EXECUTOR_ID;
             }
 

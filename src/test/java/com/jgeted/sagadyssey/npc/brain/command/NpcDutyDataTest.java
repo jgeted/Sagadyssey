@@ -1,4 +1,6 @@
 package com.jgeted.sagadyssey.npc.brain.command;
+
+import com.jgeted.sagadyssey.core.MinecraftApi;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.*;
 import org.junit.jupiter.api.Test;
@@ -16,8 +18,8 @@ class NpcDutyDataTest {
     @Test void settlementCannotRewindToWork(){var d=new NpcDutyData();var i=duty();d.put(i.update(Status.SETTLING,28,150,"pending"));assertThrows(IllegalStateException.class,()->d.put(i.update(Status.OPEN,28,151,"retry")));}
     @Test void escortRequiresOriginalAuthorization(){var i=duty();assertThrows(IllegalArgumentException.class,()->new Duty(i.id(),i.body(),i.character(),i.targetBody(),i.targetCharacter(),Kind.ESCORT,i.source(),List.of(),i.dimension(),i.anchor(),100,100,700,0,100,Status.OPEN,"no proof"));}
     @Test void oldOrUnknownSchemaFailsClosed(){var t=new NpcDutyData().save(new CompoundTag(),null);t.putInt("Schema",99);assertThrows(IllegalArgumentException.class,()->NpcDutyData.load(t,null));t.remove("Schema");assertThrows(IllegalArgumentException.class,()->NpcDutyData.load(t,null));}
-    @Test void malformedSavedConsentFieldsFailClosed(){var d=new NpcDutyData();d.put(duty());var t=d.save(new CompoundTag(),null);t.getList("Duties",Tag.TAG_COMPOUND).getCompound(0).remove("TargetCharacter");assertThrows(IllegalArgumentException.class,()->NpcDutyData.load(t,null));}
-    @Test void duplicateIdentityRejectedOnDisk(){var d=new NpcDutyData();d.put(duty());var t=d.save(new CompoundTag(),null);var l=t.getList("Duties",Tag.TAG_COMPOUND);l.add(l.get(0).copy());assertThrows(IllegalArgumentException.class,()->NpcDutyData.load(t,null));}
+    @Test void malformedSavedConsentFieldsFailClosed(){var d=new NpcDutyData();d.put(duty());var t=d.save(new CompoundTag(),null);MinecraftApi.listOfType(t, "Duties",Tag.TAG_COMPOUND).getCompoundOrEmpty(0).remove("TargetCharacter");assertThrows(IllegalArgumentException.class,()->NpcDutyData.load(t,null));}
+    @Test void duplicateIdentityRejectedOnDisk(){var d=new NpcDutyData();d.put(duty());var t=d.save(new CompoundTag(),null);var l=MinecraftApi.listOfType(t, "Duties",Tag.TAG_COMPOUND);l.add(l.get(0).copy());assertThrows(IllegalArgumentException.class,()->NpcDutyData.load(t,null));}
     @Test void deadlinesAreFinite(){var i=duty();assertThrows(IllegalArgumentException.class,()->new Duty(i.id(),i.body(),i.character(),i.targetBody(),i.targetCharacter(),i.kind(),i.source(),i.proofs(),i.dimension(),i.anchor(),28,100,24101,0,100,Status.OPEN,"infinite"));}
     @Test void historyViewCannotMutateLedger(){var d=new NpcDutyData();d.put(duty());assertThrows(UnsupportedOperationException.class,()->d.all().clear());}
 }

@@ -19,7 +19,7 @@ public final class LodFingerprints {
     private static void append(Tag tag,StringBuilder out) {
         out.append(tag.getId()).append(':');
         if(tag instanceof CompoundTag compound) {
-            compound.getAllKeys().stream().sorted().forEach(k->{out.append(k.length()).append(':').append(k);append(compound.get(k),out);});
+            compound.keySet().stream().sorted().forEach(k->{out.append(k.length()).append(':').append(k);append(compound.get(k),out);});
         } else if(tag instanceof ListTag list) {out.append(list.size()).append(':');list.forEach(t->append(t,out));}
         else {var value=tag.toString();out.append(value.length()).append(':').append(value);}
         out.append(';');
@@ -36,5 +36,5 @@ public final class LodFingerprints {
         for(var value:npc.getInventoryMigrationOverflowSnapshot())stacks.add(stack(npc,value));
         tag.put("OrderedSlots",stacks);return tag;
     }
-    private static Tag stack(NpcBase npc,ItemStack stack) {return stack.isEmpty()?new CompoundTag():stack.save(npc.level().registryAccess());}
+    private static Tag stack(NpcBase npc,ItemStack stack) {return stack.isEmpty()?new CompoundTag():com.jgeted.sagadyssey.core.MinecraftApi.saveItem(stack, npc.level().registryAccess());}
 }

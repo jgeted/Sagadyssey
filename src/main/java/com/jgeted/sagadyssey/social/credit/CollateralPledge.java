@@ -1,5 +1,7 @@
 package com.jgeted.sagadyssey.social.credit;
 
+import net.minecraft.core.UUIDUtil;
+
 import com.jgeted.sagadyssey.worldsim.rights.ItemFingerprint;
 import com.jgeted.sagadyssey.worldsim.rights.SubjectRef;
 import net.minecraft.nbt.CompoundTag;
@@ -17,7 +19,7 @@ public record CollateralPledge(UUID containerId, ItemFingerprint fingerprint,
 
     CompoundTag save() {
         CompoundTag tag = new CompoundTag();
-        tag.putUUID("Container", containerId);
+        tag.store("Container", UUIDUtil.CODEC, containerId);
         tag.put("Fingerprint", fingerprint.save());
         tag.putInt("Quantity", quantity);
         tag.put("Pledgor", pledgor.save());
@@ -25,8 +27,8 @@ public record CollateralPledge(UUID containerId, ItemFingerprint fingerprint,
     }
 
     static CollateralPledge load(CompoundTag tag) {
-        return new CollateralPledge(tag.getUUID("Container"),
-                ItemFingerprint.load(tag.getCompound("Fingerprint")), tag.getInt("Quantity"),
-                SubjectRef.load(tag.getCompound("Pledgor")));
+        return new CollateralPledge(tag.read("Container", UUIDUtil.CODEC).orElseThrow(),
+                ItemFingerprint.load(tag.getCompoundOrEmpty("Fingerprint")), tag.getIntOr("Quantity", 0),
+                SubjectRef.load(tag.getCompoundOrEmpty("Pledgor")));
     }
 }

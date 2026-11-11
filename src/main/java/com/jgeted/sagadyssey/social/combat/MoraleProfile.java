@@ -1,5 +1,7 @@
 package com.jgeted.sagadyssey.social.combat;
 
+import net.minecraft.core.UUIDUtil;
+
 import net.minecraft.nbt.CompoundTag;
 
 import java.util.UUID;
@@ -28,7 +30,7 @@ public record MoraleProfile(UUID characterId, int baseline, int current,
 
     CompoundTag save() {
         CompoundTag tag = new CompoundTag();
-        tag.putUUID("Character", characterId);
+        tag.store("Character", UUIDUtil.CODEC, characterId);
         tag.putInt("Baseline", baseline);
         tag.putInt("Current", current);
         tag.putLong("LastChangedAt", lastChangedAt);
@@ -37,7 +39,7 @@ public record MoraleProfile(UUID characterId, int baseline, int current,
     }
 
     static MoraleProfile load(CompoundTag tag) {
-        return new MoraleProfile(tag.getUUID("Character"), tag.getInt("Baseline"),
-                tag.getInt("Current"), tag.getLong("LastChangedAt"), tag.getInt("Revision"));
+        return new MoraleProfile(tag.read("Character", UUIDUtil.CODEC).orElseThrow(), tag.getIntOr("Baseline", 0),
+                tag.getIntOr("Current", 0), tag.getLongOr("LastChangedAt", 0L), tag.getIntOr("Revision", 0));
     }
 }

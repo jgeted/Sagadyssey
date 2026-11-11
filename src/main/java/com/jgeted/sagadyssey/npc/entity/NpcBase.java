@@ -1,5 +1,10 @@
 package com.jgeted.sagadyssey.npc.entity;
 
+import net.minecraft.server.level.ServerLevel;
+
+import com.jgeted.sagadyssey.core.MinecraftApi;
+import net.minecraft.core.UUIDUtil;
+
 import com.jgeted.sagadyssey.npc.ai.AiMutex;
 import com.jgeted.sagadyssey.npc.appearance.NpcFaceVariant;
 import com.jgeted.sagadyssey.npc.appearance.NpcGender;
@@ -36,7 +41,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.tags.BlockTags;
 import net.minecraft.world.ContainerHelper;
 import net.minecraft.world.damagesource.DamageSource;
@@ -50,7 +55,7 @@ import net.minecraft.world.entity.Leashable;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.PathfinderMob;
-import net.minecraft.world.entity.animal.horse.AbstractHorse;
+import net.minecraft.world.entity.animal.equine.AbstractHorse;
 import net.minecraft.world.entity.decoration.LeashFenceKnotEntity;
 import net.minecraft.world.entity.ai.attributes.AttributeSupplier;
 import net.minecraft.world.entity.ai.attributes.AttributeInstance;
@@ -71,7 +76,6 @@ import net.minecraft.world.item.CrossbowItem;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.Items;
-import net.minecraft.world.item.SwordItem;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.network.PacketDistributor;
@@ -91,6 +95,10 @@ import java.util.*;
  *   Lvl / Exp / Kills / Moral / Cost / OwnerUUID → 自定义 NBT
  */
 public class NpcBase extends PathfinderMob implements IFactionInteractable {
+    public net.minecraft.server.MinecraftServer getServer() {
+        return MinecraftApi.server(this);
+    }
+
 
     public static final String WORK_OUTPUT_OWNER_TAG = "SagadysseyWorkOutputOwner";
 
@@ -121,8 +129,8 @@ public class NpcBase extends PathfinderMob implements IFactionInteractable {
     private static final EntityDataAccessor<Integer> DATA_LOGISTICS_CARGO =
             SynchedEntityData.defineId(NpcBase.class, EntityDataSerializers.INT);
     /** 只同步账号 UUID 用于客户端隐藏私人指挥反馈；权限仍全部由服务端校验。 */
-    private static final EntityDataAccessor<Optional<UUID>> DATA_OWNER_UUID =
-            SynchedEntityData.defineId(NpcBase.class, EntityDataSerializers.OPTIONAL_UUID);
+    private static final EntityDataAccessor<String> DATA_OWNER_UUID =
+            SynchedEntityData.defineId(NpcBase.class, EntityDataSerializers.STRING);
 
     // === 自定义属性（NBT 持久化） ===
     private String customName = "NPC";
@@ -169,8 +177,8 @@ public class NpcBase extends PathfinderMob implements IFactionInteractable {
 
     /** 士气 0-100；分档影响伤害和低血撤退阈值。 */
     private int moral = 50;
-    private static final ResourceLocation MORALE_DAMAGE_ID =
-            ResourceLocation.fromNamespaceAndPath(Sagadyssey.MOD_ID, "morale_damage");
+    private static final Identifier MORALE_DAMAGE_ID =
+            Identifier.fromNamespaceAndPath(Sagadyssey.MOD_ID, "morale_damage");
 
     /** 招募费用（绿宝石数量） */
     private int recruitmentCost = 3;
@@ -241,8 +249,8 @@ public class NpcBase extends PathfinderMob implements IFactionInteractable {
     private int mountedAttackCooldown = 0;
 
     /** 战士冲锋是短时爆发；重甲兵的坚守位置由 STAY 指令记录。 */
-    private static final ResourceLocation WARRIOR_CHARGE_DAMAGE_ID =
-            ResourceLocation.fromNamespaceAndPath(Sagadyssey.MOD_ID, "warrior_charge_damage");
+    private static final Identifier WARRIOR_CHARGE_DAMAGE_ID =
+            Identifier.fromNamespaceAndPath(Sagadyssey.MOD_ID, "warrior_charge_damage");
     private int warriorChargeTicks = 0;
     private int warriorChargeCooldown = 0;
     private int heavyBraceCooldown = 0;
@@ -310,7 +318,7 @@ public class NpcBase extends PathfinderMob implements IFactionInteractable {
         if (this.getNavigation() instanceof GroundPathNavigation navigation) {
             navigation.setCanOpenDoors(true);
         }
-        if (!level.isClientSide) {
+        if (!level.isClientSide()) {
             this.gender = this.random.nextBoolean() ? NpcGender.MALE : NpcGender.FEMALE;
             NpcFaceVariant[] faces = NpcFaceVariant.values();
             this.faceVariant = faces[this.random.nextInt(faces.length)];
@@ -335,7 +343,7 @@ public class NpcBase extends PathfinderMob implements IFactionInteractable {
         builder.define(DATA_LOGISTICS_DELIVERED, 0);
         builder.define(DATA_LOGISTICS_REQUESTED, 0);
         builder.define(DATA_LOGISTICS_CARGO, 0);
-        builder.define(DATA_OWNER_UUID, Optional.empty());
+        builder.define(DATA_OWNER_UUID, "");
     }
 
     // === Getter / Setter ===
@@ -347,7 +355,7 @@ public class NpcBase extends PathfinderMob implements IFactionInteractable {
     }
 
     public NpcGender getGender() {
-        if (this.level().isClientSide) {
+        if (this.level().isClientSide()) {
             int ordinal = this.entityData.get(DATA_GENDER);
             NpcGender[] values = NpcGender.values();
             return ordinal >= 0 && ordinal < values.length ? values[ordinal] : NpcGender.MALE;
@@ -356,7 +364,7 @@ public class NpcBase extends PathfinderMob implements IFactionInteractable {
     }
 
     public NpcFaceVariant getFaceVariant() {
-        if (this.level().isClientSide) {
+        if (this.level().isClientSide()) {
             int ordinal = this.entityData.get(DATA_FACE_VARIANT);
             NpcFaceVariant[] values = NpcFaceVariant.values();
             return ordinal >= 0 && ordinal < values.length ? values[ordinal] : NpcFaceVariant.YOUNG;
@@ -373,7 +381,7 @@ public class NpcBase extends PathfinderMob implements IFactionInteractable {
     }
 
     public NpcProfession getProfession() {
-        if (this.level().isClientSide) {
+        if (this.level().isClientSide()) {
             int ordinal = this.entityData.get(DATA_PROFESSION);
             NpcProfession[] values = NpcProfession.values();
             return ordinal >= 0 && ordinal < values.length ? values[ordinal] : NpcProfession.NONE;
@@ -390,7 +398,7 @@ public class NpcBase extends PathfinderMob implements IFactionInteractable {
         }
         this.recruitmentCost = profession.getRecruitmentCost();
 
-        if (profession == NpcProfession.TRADER && !this.level().isClientSide) {
+        if (profession == NpcProfession.TRADER && !this.level().isClientSide()) {
             if (wasNone) this.merchantTradeSeed = this.random.nextInt();
             this.merchantRegion = NpcMerchantRegion.detect(this.level(), this.blockPosition());
             this.merchantRestockAt = this.level().getGameTime() + 12000L;
@@ -417,7 +425,7 @@ public class NpcBase extends PathfinderMob implements IFactionInteractable {
         // 重置交易列表，重新抽 Lv1
         this.activeTrades.clear();
         this.unlockedTradeLevel = 0;
-        if (!this.level().isClientSide && profession != NpcProfession.NONE) {
+        if (!this.level().isClientSide() && profession != NpcProfession.NONE) {
             this.merchantMarkupRate = 0.20 + this.random.nextDouble() * 0.30;
             unlockNextTradeLevel();
         }
@@ -433,7 +441,7 @@ public class NpcBase extends PathfinderMob implements IFactionInteractable {
     }
 
     public NpcSocialClass getSocialClass() {
-        if (this.level().isClientSide) {
+        if (this.level().isClientSide()) {
             int ordinal = this.entityData.get(DATA_SOCIAL_CLASS);
             NpcSocialClass[] values = NpcSocialClass.values();
             return ordinal >= 0 && ordinal < values.length ? values[ordinal] : NpcSocialClass.COMMONER;
@@ -442,7 +450,7 @@ public class NpcBase extends PathfinderMob implements IFactionInteractable {
     }
 
     public NpcOffice getOffice() {
-        if (this.level().isClientSide) {
+        if (this.level().isClientSide()) {
             int ordinal = this.entityData.get(DATA_OFFICE);
             NpcOffice[] values = NpcOffice.values();
             return ordinal >= 0 && ordinal < values.length ? values[ordinal] : NpcOffice.NONE;
@@ -480,7 +488,7 @@ public class NpcBase extends PathfinderMob implements IFactionInteractable {
 
     /** 在服务端启动一个短时职业动作，并通过 SynchedEntityData 通知所有客户端。 */
     public void playAction(NpcAction action, int durationTicks) {
-        if (this.level().isClientSide || action == null || action == NpcAction.NONE) return;
+        if (this.level().isClientSide() || action == null || action == NpcAction.NONE) return;
         int duration = Math.max(1, durationTicks);
         this.entityData.set(DATA_ACTION, action.ordinal());
         this.entityData.set(DATA_ACTION_DURATION, duration);
@@ -518,7 +526,7 @@ public class NpcBase extends PathfinderMob implements IFactionInteractable {
 
     /** 同步正在执行的物流摘要。stage: 0=无, 1=去取货, 2=去交付, 3=护送。 */
     public void syncLogisticsStatus(int stage, String itemId, int delivered, int requested, int cargo) {
-        if (this.level().isClientSide) return;
+        if (this.level().isClientSide()) return;
         this.entityData.set(DATA_LOGISTICS_STAGE, Math.max(0, Math.min(3, stage)));
         String safeItem = itemId == null ? "" : itemId;
         this.entityData.set(DATA_LOGISTICS_ITEM,
@@ -537,7 +545,8 @@ public class NpcBase extends PathfinderMob implements IFactionInteractable {
     public int getLogisticsDelivered() { return this.entityData.get(DATA_LOGISTICS_DELIVERED); }
     public int getLogisticsRequested() { return this.entityData.get(DATA_LOGISTICS_REQUESTED); }
     public int getLogisticsCargo() { return this.entityData.get(DATA_LOGISTICS_CARGO); }
-    public Optional<UUID> getSyncedOwnerUUID() { return this.entityData.get(DATA_OWNER_UUID); }
+    public Optional<UUID> getSyncedOwnerUUID() { String owner = this.entityData.get(DATA_OWNER_UUID);
+        return owner.isEmpty() ? Optional.empty() : Optional.of(UUID.fromString(owner)); }
 
     /** 根据经验计算当前等级（1-4） */
     public int getNpcLevel() {
@@ -570,7 +579,7 @@ public class NpcBase extends PathfinderMob implements IFactionInteractable {
 
     /** 初始化/升级时调用：从下一级池抽交易并固定数量 */
     public void unlockNextTradeLevel() {
-        if (this.level().isClientSide) return;
+        if (this.level().isClientSide()) return;
         int nextLevel = unlockedTradeLevel + 1;
         if (nextLevel > 4 || getNpcLevel() < nextLevel) return;
 
@@ -628,15 +637,15 @@ public class NpcBase extends PathfinderMob implements IFactionInteractable {
 
     @Override
     public void tick() {
-        if(!level().isClientSide&&getServer()!=null){
+        if(!level().isClientSide()&&getServer()!=null){
             com.jgeted.sagadyssey.social.growth.SettlementSafetyRuntime.maintain(this);
             com.jgeted.sagadyssey.npc.brain.command.NpcDutyTask.emergency(this);
             com.jgeted.sagadyssey.social.combat.NpcCombatRuntime.maintain(this);
         }
-        if (!level().isClientSide && getServer()!=null && tickCount%20==0)
+        if (!level().isClientSide() && getServer()!=null && tickCount%20==0)
             com.jgeted.sagadyssey.npc.brain.command.NpcCommandService.maintain(this);
         super.tick();
-        if (this.level().isClientSide) return;
+        if (this.level().isClientSide()) return;
 
         if (this.serverActionEndTick >= 0 && this.tickCount >= this.serverActionEndTick) {
             this.entityData.set(DATA_ACTION, NpcAction.NONE.ordinal());
@@ -910,7 +919,7 @@ public class NpcBase extends PathfinderMob implements IFactionInteractable {
     }
 
     public void restockMerchantIfNeeded() {
-        if (this.level().isClientSide || this.profession != NpcProfession.TRADER) return;
+        if (this.level().isClientSide() || this.profession != NpcProfession.TRADER) return;
         NpcMerchantRegion detected = NpcMerchantRegion.detect(this.level(), this.blockPosition());
         if (this.merchantRestockAt < 0L) this.merchantRestockAt = this.level().getGameTime() + 12000L;
         if (detected == this.merchantRegion && this.level().getGameTime() < this.merchantRestockAt) return;
@@ -965,7 +974,7 @@ public class NpcBase extends PathfinderMob implements IFactionInteractable {
     }
 
     @Override
-    public boolean doHurtTarget(Entity target) {
+    public boolean doHurtTarget(ServerLevel serverLevel, Entity target) {
         boolean charging = this.profession == NpcProfession.WARRIOR && warriorChargeTicks > 0;
         AttributeInstance attackDamage = charging ? this.getAttribute(Attributes.ATTACK_DAMAGE) : null;
         AttributeModifier chargeDamage = charging
@@ -981,12 +990,12 @@ public class NpcBase extends PathfinderMob implements IFactionInteractable {
         boolean didHit;
         try {
             // 将冲锋加成并入同一次原版近战结算，避免第二次 hurt 被受伤无敌帧吞掉。
-            didHit = super.doHurtTarget(target);
+            didHit = super.doHurtTarget(serverLevel, target);
         } finally {
             if (attackDamage != null) attackDamage.removeModifier(WARRIOR_CHARGE_DAMAGE_ID);
         }
 
-        if (didHit && !this.level().isClientSide) {
+        if (didHit && !this.level().isClientSide()) {
             if (charging) finishWarriorCharge();
             playAction(this.profession == NpcProfession.HEAVY
                     ? NpcAction.HEAVY_STRIKE : NpcAction.MELEE_SLASH, 12);
@@ -1175,19 +1184,19 @@ public class NpcBase extends PathfinderMob implements IFactionInteractable {
         Player player = this.level().getPlayerByUUID(playerUUID);
         if (!(player instanceof net.minecraft.server.level.ServerPlayer serverPlayer)) {
             // 客户端只负责显示；所有权限判断最终仍由服务端再次验证。
-            return this.level().isClientSide && ownerUUID != null && ownerUUID.equals(playerUUID);
+            return this.level().isClientSide() && ownerUUID != null && ownerUUID.equals(playerUUID);
         }
         UUID current = CharacterRegistry.currentId(serverPlayer);
         if (!serverPlayer.isAlive() || current == null) return false;
         bindLegacyOwnerToCurrent(serverPlayer);
         var services = com.jgeted.sagadyssey.social.service.ServiceRelationshipData
-                .get(serverPlayer.getServer());
+                .get(MinecraftApi.server(serverPlayer));
         if (!services.hasHistory(getCharacterId()) && ownerCharacterId != null) {
             services.ensureLegacyRecruitment(ownerCharacterId, getCharacterId(),
-                    serverPlayer.serverLevel().getGameTime());
+                    serverPlayer.level().getGameTime());
         }
         return services.hasActiveBetween(current, getCharacterId(),
-                serverPlayer.serverLevel().getGameTime());
+                serverPlayer.level().getGameTime());
     }
 
     /** 返回仍在控制此 NPC 的在线玩家；上一世的账号不再被视作主人。 */
@@ -1218,7 +1227,7 @@ public class NpcBase extends PathfinderMob implements IFactionInteractable {
      */
     public void setOwner(UUID playerUUID) {
         this.ownerUUID = playerUUID;
-        this.entityData.set(DATA_OWNER_UUID, Optional.ofNullable(playerUUID));
+        this.entityData.set(DATA_OWNER_UUID, playerUUID == null ? "" : playerUUID.toString());
         this.ownerCharacterId = null;
         if (playerUUID != null) {
             // 仅同步旧客户端字段；服务关系不改变籍贯、制度成员或阵营。
@@ -1243,7 +1252,7 @@ public class NpcBase extends PathfinderMob implements IFactionInteractable {
             this.originalFaction = null;
         }
         this.ownerUUID = null;
-        this.entityData.set(DATA_OWNER_UUID, Optional.empty());
+        this.entityData.set(DATA_OWNER_UUID, "");
         this.ownerCharacterId = null;
     }
 
@@ -1251,7 +1260,7 @@ public class NpcBase extends PathfinderMob implements IFactionInteractable {
     public void syncLegacyServiceProjection(@Nullable UUID accountId, @Nullable UUID principalId) {
         this.ownerUUID = accountId;
         this.ownerCharacterId = principalId;
-        this.entityData.set(DATA_OWNER_UUID, Optional.ofNullable(accountId));
+        this.entityData.set(DATA_OWNER_UUID, accountId == null ? "" : accountId.toString());
         if (combatGoal != null) combatGoal.refreshSources();
     }
 
@@ -1282,7 +1291,7 @@ public class NpcBase extends PathfinderMob implements IFactionInteractable {
         }
 
         // 如果 NPC 已经在马旁边且马有鞍，立刻骑上去
-        if (!this.level().isClientSide && this.distanceTo(mount) <= 3.0F) {
+        if (!this.level().isClientSide() && this.distanceTo(mount) <= 3.0F) {
             if (mount instanceof AbstractHorse h && h.isSaddled()) {
                 this.startRiding(mount);
             }
@@ -1365,7 +1374,7 @@ public class NpcBase extends PathfinderMob implements IFactionInteractable {
 
     /** 切换到近战模式：移除远程 goal，注册近战 goal，并把主手的弓换成背包里的剑/斧 */
     public void ensureMeleeMode() {
-        if (this.level().isClientSide) return;
+        if (this.level().isClientSide()) return;
         if (!isRangedMode) return; // 已经是近战模式
 
         if (rangedGoal != null) {
@@ -1384,7 +1393,7 @@ public class NpcBase extends PathfinderMob implements IFactionInteractable {
 
     /** 切换到远程模式：移除近战 goal，注册远程 goal，并把主手武器换回弓/弩 */
     public void ensureRangedMode() {
-        if (this.level().isClientSide) return;
+        if (this.level().isClientSide()) return;
         if (isRangedMode) return; // 已经是远程模式
 
         if (meleeAttackGoal != null) {
@@ -1412,7 +1421,7 @@ public class NpcBase extends PathfinderMob implements IFactionInteractable {
     /** 是否是近战武器（剑/斧） */
     private static boolean isMeleeWeaponItem(ItemStack stack) {
         return !stack.isEmpty()
-                && (stack.getItem() instanceof SwordItem || stack.getItem() instanceof AxeItem);
+                && (stack.is(net.minecraft.tags.ItemTags.SWORDS) || stack.getItem() instanceof AxeItem);
     }
 
     /** 在 36 格随身物品栏中查找近战武器，返回槽位下标，无则 -1。 */
@@ -1454,8 +1463,8 @@ public class NpcBase extends PathfinderMob implements IFactionInteractable {
     /** 仅在工作背包确实装不下时生成带来源标记的实体，之后可由本人安全回收。 */
     public void spawnWorkOutput(ItemStack stack) {
         if (stack == null || stack.isEmpty()) return;
-        ItemEntity item = this.spawnAtLocation(stack);
-        if (item != null) item.getPersistentData().putUUID(WORK_OUTPUT_OWNER_TAG, getCharacterId());
+        ItemEntity item = this.spawnAtLocation(MinecraftApi.serverLevel(this), stack);
+        if (item != null) item.getPersistentData().store(WORK_OUTPUT_OWNER_TAG, UUIDUtil.CODEC, getCharacterId());
     }
 
     public boolean hasBagItem(Item item, int count) {
@@ -1678,7 +1687,7 @@ public class NpcBase extends PathfinderMob implements IFactionInteractable {
             }
         }
         // 背包满了，掉落在地上（兜底）
-        this.spawnAtLocation(lead);
+        this.spawnAtLocation(MinecraftApi.serverLevel(this), lead);
     }
 
     /** 找最近的栅栏 */
@@ -1703,7 +1712,7 @@ public class NpcBase extends PathfinderMob implements IFactionInteractable {
      * @return true 拴马成功，false 失败（无栅栏/无栓绳/马已拴）
      */
     public boolean tetherHorse() {
-        if (!this.hasMount() || this.level().isClientSide) return false;
+        if (!this.hasMount() || this.level().isClientSide()) return false;
         Entity mount = getMount();
         if (mount == null || !mount.isAlive()) return false;
 
@@ -1724,12 +1733,12 @@ public class NpcBase extends PathfinderMob implements IFactionInteractable {
 
     /** 解拴马：只断开栓绳连接，不处理物品回收 */
     public void untetherHorse() {
-        if (!this.hasMount() || this.level().isClientSide) return;
+        if (!this.hasMount() || this.level().isClientSide()) return;
         Entity mount = getMount();
         if (mount == null || !mount.isAlive()) return;
 
         if (mount instanceof Leashable leashable && leashable.isLeashed()) {
-            leashable.dropLeash(true, false);
+            leashable.removeLeash();
         }
     }
 
@@ -1810,7 +1819,7 @@ public class NpcBase extends PathfinderMob implements IFactionInteractable {
     public void clearLogisticsMoveTarget() { this.logisticsMoveTarget = null; }
 
     public void reportWorkActivity(String activity, @Nullable BlockPos target, String detail) {
-        if (level().isClientSide) return;
+        if (level().isClientSide()) return;
         this.workActivity = activity == null || activity.isBlank() ? "未知任务" : activity;
         this.workActivityTarget = target == null ? null : target.immutable();
         this.workActivityDetail = detail == null ? "" : detail;
@@ -2040,7 +2049,7 @@ public class NpcBase extends PathfinderMob implements IFactionInteractable {
     }
 
     @Override
-    public boolean hurt(DamageSource source, float amount) {
+    public boolean hurtServer(ServerLevel damageLevel, DamageSource source, float amount) {
         boolean interruptedRest = this.isSleeping()
                 || "回家休息".equals(this.workActivity)
                 || "等待休息出发".equals(this.workActivity)
@@ -2061,8 +2070,8 @@ public class NpcBase extends PathfinderMob implements IFactionInteractable {
         boolean hostileHit = hostileAttacker != null;
         if (hostileAttacker != null) this.hostileTargetCandidate = hostileAttacker;
         float healthBeforeDamage = this.getHealth();
-        boolean damaged = super.hurt(source, amount);
-        if (damaged && !this.level().isClientSide) {
+        boolean damaged = super.hurtServer(damageLevel, source, amount);
+        if (damaged && !this.level().isClientSide()) {
             this.lastDamageGameTime = this.level().getGameTime();
             if (this.isSleeping()) this.stopSleeping();
             if (interruptedRest) {
@@ -2099,7 +2108,7 @@ public class NpcBase extends PathfinderMob implements IFactionInteractable {
                 setMoral(profile.current());
             }
         }
-        if (damaged && hostileHit && !this.level().isClientSide) {
+        if (damaged && hostileHit && !this.level().isClientSide()) {
             if (this.level() instanceof net.minecraft.server.level.ServerLevel serverLevel) {
                 UUID subject = hostileAttacker instanceof NpcBase other ? other.getCharacterId()
                         : hostileAttacker instanceof net.minecraft.server.level.ServerPlayer player
@@ -2126,7 +2135,7 @@ public class NpcBase extends PathfinderMob implements IFactionInteractable {
 
         // === 指挥杖：选择 / 取消选择集团成员 ===
         if (stack.is(ModItems.NPC_COMMAND_WAND.get())) {
-            if (player.level().isClientSide) {
+            if (player.level().isClientSide()) {
                 // 客户端不打开命令 GUI（不发 request_stats），交给服务端处理
                 return InteractionResult.SUCCESS;
             }
@@ -2145,7 +2154,7 @@ public class NpcBase extends PathfinderMob implements IFactionInteractable {
                 boolean selected = data.isSelected(getCharacterId());
                 player.displayClientMessage(Component.literal((selected ? "§a已选中 " : "§e已取消选择 ")
                         + getNpcName()), true);
-                serverPlayer.serverLevel().sendParticles(
+                serverPlayer.level().sendParticles(
                         selected ? net.minecraft.core.particles.ParticleTypes.HAPPY_VILLAGER
                                 : net.minecraft.core.particles.ParticleTypes.SMOKE,
                         getX(), getY() + getBbHeight() + 0.25, getZ(),
@@ -2171,15 +2180,15 @@ public class NpcBase extends PathfinderMob implements IFactionInteractable {
 
             if (leashedHorse != null) {
                 AbstractHorse horse = (AbstractHorse) leashedHorse;
-                if (horse.isTamed() && horse.getOwnerUUID() != null
-                        && horse.getOwnerUUID().equals(player.getUUID())) {
-                    if (!player.level().isClientSide) {
+                if (horse.isTamed() && MinecraftApi.ownerId(horse) != null
+                        && MinecraftApi.ownerId(horse).equals(player.getUUID())) {
+                    if (!player.level().isClientSide()) {
                         this.bindMount(horse);
                         player.displayClientMessage(
                                 Component.literal("§a" + this.getNpcName() + " 已绑定坐骑！"), true);
                     }
                 } else {
-                    if (!player.level().isClientSide) {
+                    if (!player.level().isClientSide()) {
                         player.displayClientMessage(
                                 Component.literal("§c这匹马不属于你"), true);
                     }
@@ -2191,28 +2200,34 @@ public class NpcBase extends PathfinderMob implements IFactionInteractable {
 
         // 潜行右键只是明确打开递交意图选择，不会在世界中直接转移物品。
         if (NpcInteractionPolicy.opensHandoverShortcut(!stack.isEmpty(), player.isShiftKeyDown())) {
-            if (!player.level().isClientSide
+            if (!player.level().isClientSide()
                     && player instanceof net.minecraft.server.level.ServerPlayer serverPlayer) {
                 PacketDistributor.sendToPlayer(serverPlayer, new HandoverPromptPayload(getId(), hand,
                         getNpcName(), stack.getHoverName().getString(), stack.getCount()));
             }
-            return InteractionResult.sidedSuccess(player.level().isClientSide);
+            return InteractionResult.SUCCESS;
         }
 
-        if (player.level().isClientSide) {
+        if (player.level().isClientSide()) {
             // 普通右键无论是否手持物品，都先打开基于观察者知识生成的人物投影。
             NpcInteractionPacket.requestStats(this.getId());
         }
-        return InteractionResult.sidedSuccess(player.level().isClientSide);
+        return InteractionResult.SUCCESS;
     }
 
     // === NBT 持久化 ===
 
     @Override
-    public void addAdditionalSaveData(CompoundTag tag) {
-        super.addAdditionalSaveData(tag);
+    public void addAdditionalSaveData(net.minecraft.world.level.storage.ValueOutput output) {
+        super.addAdditionalSaveData(output);
+        CompoundTag tag = new CompoundTag();
+        writeNpcData(tag);
+        output.store(MinecraftApi.COMPOUND_FIELDS, tag);
+    }
+
+    private void writeNpcData(CompoundTag tag) {
         tag.putInt("SagadysseyNpcDataVersion", NpcInventoryMigration.DATA_VERSION);
-        tag.putUUID(NpcCharacterIdentityMigration.CHARACTER_ID_KEY, getCharacterId());
+        tag.store(NpcCharacterIdentityMigration.CHARACTER_ID_KEY, UUIDUtil.CODEC, getCharacterId());
         tag.putString("NpcName", this.customName);
         tag.putString("Profession", this.profession.name());
         tag.putString("SocialClass", this.socialClass.name());
@@ -2247,32 +2262,32 @@ public class NpcBase extends PathfinderMob implements IFactionInteractable {
         }
         tag.putString("NpcTier", this.npcTier.name());
         if (this.ownerUUID != null) {
-            tag.putUUID("OwnerUUID", this.ownerUUID);
+            tag.store("OwnerUUID", UUIDUtil.CODEC, this.ownerUUID);
         }
         if (this.ownerCharacterId != null) {
-            tag.putUUID("OwnerCharacterId", this.ownerCharacterId);
+            tag.store("OwnerCharacterId", UUIDUtil.CODEC, this.ownerCharacterId);
         }
         if (this.homeSettlementId != null) {
-            tag.putUUID("HomeSettlementId", this.homeSettlementId);
+            tag.store("HomeSettlementId", UUIDUtil.CODEC, this.homeSettlementId);
         }
 
         if (this.mountUUID != null) {
-            tag.putUUID("MountUUID", this.mountUUID);
+            tag.store("MountUUID", UUIDUtil.CODEC, this.mountUUID);
         }
         tag.putBoolean("MountSaddled", mountSaddled);
         tag.putBoolean("LeadMountMode", leadMountMode);
 
-        ContainerHelper.saveAllItems(tag, equipmentInventory.getItems(), level().registryAccess());
+        MinecraftApi.saveItems(tag, equipmentInventory.getItems(), level().registryAccess());
         tag.putLong("PersonalInventoryRevision", equipmentInventory.revision());
         if (inventoryMigrationOverflow.stream().anyMatch(stack -> !stack.isEmpty())) {
             ListTag overflowTag = new ListTag();
             inventoryMigrationOverflow.stream()
                     .filter(stack -> !stack.isEmpty())
-                    .forEach(stack -> overflowTag.add(stack.save(level().registryAccess())));
+                    .forEach(stack -> overflowTag.add(MinecraftApi.saveItem(stack, level().registryAccess())));
             tag.put("InventoryMigrationOverflow", overflowTag);
         }
         CompoundTag cargoTag = new CompoundTag();
-        ContainerHelper.saveAllItems(cargoTag, transportInventory.getItems(), level().registryAccess());
+        MinecraftApi.saveItems(cargoTag, transportInventory.getItems(), level().registryAccess());
         tag.put("TransportCargo", cargoTag);
 
         // 交易数据持久化
@@ -2283,10 +2298,10 @@ public class NpcBase extends PathfinderMob implements IFactionInteractable {
         for (int i = 0; i < activeTrades.size(); i++) {
             NpcTradeOffer t = activeTrades.get(i);
             CompoundTag entry = new CompoundTag();
-            entry.put("CostItem", t.costItem().save(level().registryAccess()));
+            entry.put("CostItem", MinecraftApi.saveItem(t.costItem(), level().registryAccess()));
             entry.putInt("CostMin", t.costMin());
             entry.putInt("CostMax", t.costMax());
-            entry.put("ResultItem", t.resultItem().save(level().registryAccess()));
+            entry.put("ResultItem", MinecraftApi.saveItem(t.resultItem(), level().registryAccess()));
             entry.putInt("ResultMin", t.resultMin());
             entry.putInt("ResultMax", t.resultMax());
             entry.putInt("MinLevel", t.minNpcLevel());
@@ -2296,29 +2311,30 @@ public class NpcBase extends PathfinderMob implements IFactionInteractable {
     }
 
     @Override
-    public void readAdditionalSaveData(CompoundTag tag) {
-        // Vanilla omits wholly empty equipment lists. Constructor spawn gear must not
-        // survive that omission and silently appear again when an empty-handed NPC loads.
-        for (EquipmentSlot slot : EquipmentSlot.values()) setItemSlot(slot, ItemStack.EMPTY);
+    public void readAdditionalSaveData(net.minecraft.world.level.storage.ValueInput input) {
+        super.readAdditionalSaveData(input);
+        readNpcData(input.read(MinecraftApi.COMPOUND_FIELDS).orElseGet(CompoundTag::new));
+    }
+
+    private void readNpcData(CompoundTag tag) {
         equipmentInventory.clearContent();
-        super.readAdditionalSaveData(tag);
         this.characterId = NpcCharacterIdentityMigration.resolve(tag, getUUID());
         if (tag.contains("NpcName")) {
-            this.customName = tag.getString("NpcName");
+            this.customName = tag.getStringOr("NpcName", "");
         }
         if (tag.contains("Profession")) {
             try {
-                this.profession = NpcProfession.valueOf(tag.getString("Profession"));
+                this.profession = NpcProfession.valueOf(tag.getStringOr("Profession", ""));
             } catch (IllegalArgumentException e) {
                 this.profession = NpcProfession.NONE;
             }
         }
         if (tag.contains("SocialClass") || tag.contains("Office")) {
-            this.socialClass = NpcSocialClass.byName(tag.getString("SocialClass"));
-            this.office = NpcOffice.byName(tag.getString("Office"));
+            this.socialClass = NpcSocialClass.byName(tag.getStringOr("SocialClass", ""));
+            this.office = NpcOffice.byName(tag.getStringOr("Office", ""));
         } else if (tag.contains("SocialStatus")) {
             // v1 身份存档迁移：线性状态拆为阶层与职务。
-            NpcSocialStatus legacy = NpcSocialStatus.byName(tag.getString("SocialStatus"));
+            NpcSocialStatus legacy = NpcSocialStatus.byName(tag.getStringOr("SocialStatus", ""));
             this.socialClass = legacy.defaultSocialClass();
             this.office = legacy.defaultOffice();
         } else {
@@ -2326,14 +2342,14 @@ public class NpcBase extends PathfinderMob implements IFactionInteractable {
             this.office = NpcOffice.NONE;
         }
         if (tag.contains("Gender")) {
-            this.gender = NpcGender.byName(tag.getString("Gender"));
+            this.gender = NpcGender.byName(tag.getStringOr("Gender", ""));
         }
         if (tag.contains("FaceVariant")) {
-            this.faceVariant = NpcFaceVariant.byName(tag.getString("FaceVariant"));
+            this.faceVariant = NpcFaceVariant.byName(tag.getStringOr("FaceVariant", ""));
         }
-        if (tag.contains("NpcLevel") && tag.getInt("NpcLevel") > 1 && !tag.contains("Experience")) {
+        if (tag.contains("NpcLevel") && tag.getIntOr("NpcLevel", 0) > 1 && !tag.contains("Experience")) {
             // 向后兼容：旧存档有 NpcLevel 但没有 Experience，按最低经验转换
-            int oldLevel = tag.getInt("NpcLevel");
+            int oldLevel = tag.getIntOr("NpcLevel", 0);
             this.experience = switch (oldLevel) {
                 case 2 -> 200;
                 case 3 -> 600;
@@ -2342,65 +2358,65 @@ public class NpcBase extends PathfinderMob implements IFactionInteractable {
             };
         }
         if (tag.contains("Experience")) {
-            this.experience = tag.getInt("Experience");
+            this.experience = tag.getIntOr("Experience", 0);
         }
         if (tag.contains("MerchantSeed")) {
-            this.merchantTradeSeed = tag.getInt("MerchantSeed");
+            this.merchantTradeSeed = tag.getIntOr("MerchantSeed", 0);
         }
         this.merchantRestockAt = tag.contains("MerchantRestockAt")
-                ? tag.getLong("MerchantRestockAt") : -1L;
+                ? tag.getLongOr("MerchantRestockAt", 0L) : -1L;
         this.merchantRegion = tag.contains("MerchantRegion")
-                ? NpcMerchantRegion.byName(tag.getString("MerchantRegion")) : NpcMerchantRegion.PLAINS;
+                ? NpcMerchantRegion.byName(tag.getStringOr("MerchantRegion", "")) : NpcMerchantRegion.PLAINS;
         if (tag.contains("BardFollowTicks")) {
-            this.bardFollowTicks = tag.getInt("BardFollowTicks");
+            this.bardFollowTicks = tag.getIntOr("BardFollowTicks", 0);
         }
-        this.actionStartCount = Math.max(0, tag.getInt("ActionStartCount"));
+        this.actionStartCount = Math.max(0, tag.getIntOr("ActionStartCount", 0));
         if (tag.contains("Kills")) {
-            this.kills = tag.getInt("Kills");
+            this.kills = tag.getIntOr("Kills", 0);
         }
         if (tag.contains("Moral")) {
-            setMoral(tag.getInt("Moral"));
+            setMoral(tag.getIntOr("Moral", 0));
         }
         if (tag.contains("RecruitmentCost")) {
-            this.recruitmentCost = tag.getInt("RecruitmentCost");
+            this.recruitmentCost = tag.getIntOr("RecruitmentCost", 0);
         }
         if (tag.contains("OwnerUUID")) {
-            this.ownerUUID = tag.getUUID("OwnerUUID");
+            this.ownerUUID = tag.read("OwnerUUID", UUIDUtil.CODEC).orElseThrow();
         } else {
             this.ownerUUID = null;
         }
-        this.entityData.set(DATA_OWNER_UUID, Optional.ofNullable(this.ownerUUID));
-        this.ownerCharacterId = tag.hasUUID("OwnerCharacterId")
-                ? tag.getUUID("OwnerCharacterId") : null;
-        this.homeSettlementId = tag.hasUUID("HomeSettlementId")
-                ? tag.getUUID("HomeSettlementId") : null;
+        this.entityData.set(DATA_OWNER_UUID, this.ownerUUID == null ? "" : this.ownerUUID.toString());
+        this.ownerCharacterId = tag.read("OwnerCharacterId", UUIDUtil.CODEC).isPresent()
+                ? tag.read("OwnerCharacterId", UUIDUtil.CODEC).orElseThrow() : null;
+        this.homeSettlementId = tag.read("HomeSettlementId", UUIDUtil.CODEC).isPresent()
+                ? tag.read("HomeSettlementId", UUIDUtil.CODEC).orElseThrow() : null;
         // 原阵营 ID（招募前保存的完整 ID，如 "sagadyssey:kingdom"）
         this.originalFaction = tag.contains("OriginalFaction")
-                ? tag.getString("OriginalFaction") : null;
+                ? tag.getStringOr("OriginalFaction", "") : null;
         if (tag.contains("MountUUID")) {
-            this.mountUUID = tag.getUUID("MountUUID");
+            this.mountUUID = tag.read("MountUUID", UUIDUtil.CODEC).orElseThrow();
         } else {
             this.mountUUID = null;
         }
-        this.mountSaddled = tag.getBoolean("MountSaddled");
-        this.leadMountMode = tag.getBoolean("LeadMountMode");
+        this.mountSaddled = tag.getBooleanOr("MountSaddled", false);
+        this.leadMountMode = tag.getBooleanOr("LeadMountMode", false);
         if (tag.contains("NpcCommand")) {
             try {
-                this.command = NpcCommand.valueOf(tag.getString("NpcCommand"));
+                this.command = NpcCommand.valueOf(tag.getStringOr("NpcCommand", ""));
             } catch (IllegalArgumentException e) {
                 this.command = NpcCommand.IDLE;
             }
         }
         if (tag.contains("FarmMode")) {
             try {
-                this.farmMode = FarmMode.valueOf(tag.getString("FarmMode"));
+                this.farmMode = FarmMode.valueOf(tag.getStringOr("FarmMode", ""));
             } catch (IllegalArgumentException e) {
                 this.farmMode = FarmMode.AUTO;
             }
         }
         if (tag.contains("WorkZoneMin") && tag.contains("WorkZoneMax")) {
-            int[] min = tag.getIntArray("WorkZoneMin");
-            int[] max = tag.getIntArray("WorkZoneMax");
+            int[] min = tag.getIntArray("WorkZoneMin").orElseGet(() -> new int[0]);
+            int[] max = tag.getIntArray("WorkZoneMax").orElseGet(() -> new int[0]);
             if (min.length == 3 && max.length == 3) {
                 this.workZoneMin = new BlockPos(min[0], min[1], min[2]);
                 this.workZoneMax = new BlockPos(max[0], max[1], max[2]);
@@ -2408,7 +2424,7 @@ public class NpcBase extends PathfinderMob implements IFactionInteractable {
         }
         if (tag.contains("Faction")) {
             try {
-                String factionId = tag.getString("Faction");
+                String factionId = tag.getStringOr("Faction", "");
                 // 兼容旧格式（"HOSTILE"/"NEUTRAL"/"FRIENDLY"）和新格式（"sagadyssey:kingdom"）
                 if (factionId.contains(":")) {
                     this.faction = FactionRegistry.get(factionId);
@@ -2426,7 +2442,7 @@ public class NpcBase extends PathfinderMob implements IFactionInteractable {
         }
         if (tag.contains("NpcTier")) {
             try {
-                this.npcTier = IFactionInteractable.NpcTier.valueOf(tag.getString("NpcTier"));
+                this.npcTier = IFactionInteractable.NpcTier.valueOf(tag.getStringOr("NpcTier", ""));
             } catch (IllegalArgumentException e) {
                 this.npcTier = IFactionInteractable.NpcTier.NORMAL;
             }
@@ -2434,13 +2450,13 @@ public class NpcBase extends PathfinderMob implements IFactionInteractable {
 
         if (tag.contains("Items")) {
             equipmentInventory.clearContent();
-            ContainerHelper.loadAllItems(tag, equipmentInventory.getItems(), level().registryAccess());
+            MinecraftApi.loadItems(tag, equipmentInventory.getItems(), level().registryAccess());
         }
         inventoryMigrationOverflow.clear();
         if (tag.contains("InventoryMigrationOverflow")) {
-            ListTag overflowTag = tag.getList("InventoryMigrationOverflow", Tag.TAG_COMPOUND);
+            ListTag overflowTag = MinecraftApi.listOfType(tag, "InventoryMigrationOverflow", Tag.TAG_COMPOUND);
             for (int index = 0; index < overflowTag.size(); index++) {
-                ItemStack.parse(level().registryAccess(), overflowTag.getCompound(index))
+                MinecraftApi.parseItem(level().registryAccess(), overflowTag.getCompoundOrEmpty(index))
                         .filter(stack -> !stack.isEmpty())
                         .ifPresent(inventoryMigrationOverflow::add);
             }
@@ -2449,12 +2465,12 @@ public class NpcBase extends PathfinderMob implements IFactionInteractable {
         if (tag.contains("BowSlot") || tag.contains("ArrowSlot")) {
             List<ItemStack> legacySpecialSlots = new ArrayList<>();
             if (tag.contains("BowSlot")) {
-                legacySpecialSlots.add(ItemStack.parse(level().registryAccess(),
-                        tag.getCompound("BowSlot")).orElse(ItemStack.EMPTY));
+                legacySpecialSlots.add(MinecraftApi.parseItem(level().registryAccess(),
+                        tag.getCompoundOrEmpty("BowSlot")).orElse(ItemStack.EMPTY));
             }
             if (tag.contains("ArrowSlot")) {
-                legacySpecialSlots.add(ItemStack.parse(level().registryAccess(),
-                        tag.getCompound("ArrowSlot")).orElse(ItemStack.EMPTY));
+                legacySpecialSlots.add(MinecraftApi.parseItem(level().registryAccess(),
+                        tag.getCompoundOrEmpty("ArrowSlot")).orElse(ItemStack.EMPTY));
             }
             for (ItemStack overflow : NpcInventoryMigration.mergeLegacySlots(
                     equipmentInventory, legacySpecialSlots)) {
@@ -2463,46 +2479,46 @@ public class NpcBase extends PathfinderMob implements IFactionInteractable {
             migratedSpecialSlots = true;
         }
         long savedRevision = tag.contains("PersonalInventoryRevision")
-                ? tag.getLong("PersonalInventoryRevision") : 0L;
+                ? tag.getLongOr("PersonalInventoryRevision", 0L) : 0L;
         equipmentInventory.restoreRevision(savedRevision + (migratedSpecialSlots ? 1L : 0L));
         if (tag.contains("GuardAnchor")) {
-            int[] anchor = tag.getIntArray("GuardAnchor");
+            int[] anchor = tag.getIntArray("GuardAnchor").orElseGet(() -> new int[0]);
             if (anchor.length == 3) this.guardAnchor = new BlockPos(anchor[0], anchor[1], anchor[2]);
         } else if (this.command == NpcCommand.STAY) {
             this.guardAnchor = this.blockPosition().immutable();
         }
         if (tag.contains("PatrolCenter")) {
-            int[] center = tag.getIntArray("PatrolCenter");
+            int[] center = tag.getIntArray("PatrolCenter").orElseGet(() -> new int[0]);
             if (center.length == 3) this.patrolCenter = new BlockPos(center[0], center[1], center[2]);
-            this.patrolRadius = Math.max(4, Math.min(48, tag.getInt("PatrolRadius")));
+            this.patrolRadius = Math.max(4, Math.min(48, tag.getIntOr("PatrolRadius", 0)));
         }
         transportInventory.clearContent();
         if (tag.contains("TransportCargo")) {
-            ContainerHelper.loadAllItems(tag.getCompound("TransportCargo"),
+            MinecraftApi.loadItems(tag.getCompoundOrEmpty("TransportCargo"),
                     transportInventory.getItems(), level().registryAccess());
         }
 
         // 交易数据恢复
         if (tag.contains("UnlockedTradeLevel")) {
-            this.unlockedTradeLevel = tag.getInt("UnlockedTradeLevel");
+            this.unlockedTradeLevel = tag.getIntOr("UnlockedTradeLevel", 0);
         }
         if (tag.contains("MerchantMarkup")) {
-            this.merchantMarkupRate = tag.getDouble("MerchantMarkup");
+            this.merchantMarkupRate = tag.getDoubleOr("MerchantMarkup", 0.0);
         }
         this.activeTrades.clear();
         if (tag.contains("ActiveTrades")) {
-            CompoundTag tradesTag = tag.getCompound("ActiveTrades");
-            int count = tradesTag.getInt("Count");
+            CompoundTag tradesTag = tag.getCompoundOrEmpty("ActiveTrades");
+            int count = tradesTag.getIntOr("Count", 0);
             for (int i = 0; i < count; i++) {
-                CompoundTag entry = tradesTag.getCompound("t" + i);
-                ItemStack costItem = ItemStack.parse(level().registryAccess(), entry.getCompound("CostItem")).orElse(ItemStack.EMPTY);
-                ItemStack resultItem = ItemStack.parse(level().registryAccess(), entry.getCompound("ResultItem")).orElse(ItemStack.EMPTY);
+                CompoundTag entry = tradesTag.getCompoundOrEmpty("t" + i);
+                ItemStack costItem = MinecraftApi.parseItem(level().registryAccess(), entry.getCompoundOrEmpty("CostItem")).orElse(ItemStack.EMPTY);
+                ItemStack resultItem = MinecraftApi.parseItem(level().registryAccess(), entry.getCompoundOrEmpty("ResultItem")).orElse(ItemStack.EMPTY);
                 if (costItem.isEmpty() || resultItem.isEmpty()) continue;
-                int costMin = entry.getInt("CostMin");
-                int costMax = entry.getInt("CostMax");
-                int resultMin = entry.getInt("ResultMin");
-                int resultMax = entry.getInt("ResultMax");
-                int minLevel = entry.getInt("MinLevel");
+                int costMin = entry.getIntOr("CostMin", 0);
+                int costMax = entry.getIntOr("CostMax", 0);
+                int resultMin = entry.getIntOr("ResultMin", 0);
+                int resultMax = entry.getIntOr("ResultMax", 0);
+                int minLevel = entry.getIntOr("MinLevel", 0);
                 this.activeTrades.add(new NpcTradeOffer(costItem, costMin, costMax, resultItem, resultMin, resultMax, minLevel));
             }
         }

@@ -1,5 +1,8 @@
 package com.jgeted.sagadyssey.npc.brain.fieldwork;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+import net.minecraft.core.UUIDUtil;
+
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
@@ -7,7 +10,7 @@ import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.level.storage.LevelResource;
-import net.minecraft.world.level.saveddata.SavedData;
+import com.jgeted.sagadyssey.worldsim.NbtSavedData;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -23,7 +26,7 @@ import java.nio.file.Files;
  * 阶段 4 服务端检查点：检索游标、暂时不可达记忆和单方块回执。
  * 回执不可静默丢弃，否则重载后的重试可能重复收获；未接入普通玩家同步接口。
  */
-public final class FieldworkData extends SavedData implements FieldworkCommitService.Ledger {
+public final class FieldworkData extends NbtSavedData implements FieldworkCommitService.Ledger {
     public static final String DATA_NAME = "sagadyssey_fieldwork_v3";
     public static final int SCHEMA = 2;
     public static final Factory<FieldworkData> FACTORY = new Factory<>(FieldworkData::new, FieldworkData::load);
@@ -154,13 +157,13 @@ public final class FieldworkData extends SavedData implements FieldworkCommitSer
     public static FieldworkData get(MinecraftServer server) {
         Objects.requireNonNull(server, "server");
         var storage = server.overworld().getDataStorage();
-        FieldworkData loaded = storage.get(FACTORY, DATA_NAME);
+        FieldworkData loaded = storage.get(FACTORY.type(DATA_NAME));
         if (loaded != null) return loaded;
         // DimensionDataStorage 会吞掉反序列化/IO 异常并返回 null。
         // computeIfAbsent 此时会创建空账本，导致已有动作被重复执行，故不能使用它。
         FieldworkData resolved = resolveLoaded(loaded, Files.notExists(
                 server.getWorldPath(LevelResource.ROOT).resolve("data").resolve(DATA_NAME + ".dat")));
-        storage.set(DATA_NAME, resolved);
+        storage.set(FACTORY.type(DATA_NAME), resolved);
         return resolved;
     }
 
@@ -270,7 +273,7 @@ public final class FieldworkData extends SavedData implements FieldworkCommitSer
         ListTag scanTags = new ListTag();
         scans.entrySet().stream().sorted(Map.Entry.comparingByKey()).forEach(entry -> {
             CompoundTag scan = saveArea(entry.getValue().area());
-            scan.putUUID("NpcId", entry.getKey());
+            scan.store("NpcId", UUIDUtil.CODEC, entry.getKey());
             scan.putLong("NextIndex", entry.getValue().nextIndex());
             scan.putBoolean("SawUnloaded", entry.getValue().sawUnloaded());
             scan.putLong("RetryAt", entry.getValue().retryAt());
@@ -281,7 +284,7 @@ public final class FieldworkData extends SavedData implements FieldworkCommitSer
         unreachable.entrySet().stream().sorted(Map.Entry.comparingByKey()).forEach(entry -> {
             for (Unreachable memory : sortedMemories(entry.getValue())) {
                 CompoundTag encoded = new CompoundTag();
-                encoded.putUUID("NpcId", entry.getKey());
+                encoded.store("NpcId", UUIDUtil.CODEC, entry.getKey());
                 encoded.putString("Dimension", memory.dimension());
                 encoded.putLong("Target", memory.target().asLong());
                 encoded.putLong("RetryAt", memory.retryAt());
@@ -297,8 +300,8 @@ public final class FieldworkData extends SavedData implements FieldworkCommitSer
         ListTag deliveryTags = new ListTag();
         deliveries.values().stream().sorted(Comparator.comparing(value -> value.transferId().toString())).forEach(value -> {
             CompoundTag encoded = new CompoundTag();
-            encoded.putUUID("TransferId", value.transferId());
-            encoded.putUUID("NpcId", value.npcId());
+            encoded.store("TransferId", UUIDUtil.CODEC, value.transferId());
+            encoded.store("NpcId", UUIDUtil.CODEC, value.npcId());
             encoded.putString("Fingerprint", value.fingerprint());
             encoded.putInt("Quantity", value.quantity());
             encoded.putLong("CommittedAt", value.committedAt());
@@ -308,8 +311,8 @@ public final class FieldworkData extends SavedData implements FieldworkCommitSer
         ListTag consumptionTags = new ListTag();
         outputConsumptions.entrySet().stream().sorted(Map.Entry.comparingByKey()).forEach(entry -> {
             var value = entry.getValue(); var encoded = new CompoundTag();
-            encoded.putString("Key", value.key()); encoded.putUUID("NpcId", value.npcId());
-            encoded.putUUID("PersonId", value.personId()); encoded.putUUID("ContainerId", value.containerId());
+            encoded.putString("Key", value.key()); encoded.store("NpcId", UUIDUtil.CODEC, value.npcId());
+            encoded.store("PersonId", UUIDUtil.CODEC, value.personId()); encoded.store("ContainerId", UUIDUtil.CODEC, value.containerId());
             encoded.put("Owner", value.owner().save()); encoded.putString("Fingerprint", value.fingerprint());
             encoded.putInt("Quantity", value.quantity()); encoded.putInt("OutputQuantity", value.outputQuantity());
             encoded.putLong("StartedAt", value.startedAt()); encoded.putLong("CommittedAt", value.committedAt());
@@ -319,7 +322,7 @@ public final class FieldworkData extends SavedData implements FieldworkCommitSer
         tag.put("OutputConsumptions", consumptionTags);
         ListTag storageTags = new ListTag();
         testStorage.entrySet().stream().sorted(Map.Entry.comparingByKey()).forEach(entry -> {
-            CompoundTag encoded = entry.getValue().save(); encoded.putUUID("NpcId", entry.getKey()); storageTags.add(encoded);
+            CompoundTag encoded = entry.getValue().save(); encoded.store("NpcId", UUIDUtil.CODEC, entry.getKey()); storageTags.add(encoded);
         });
         tag.put("TestStorage", storageTags);
         ListTag pendingTags = new ListTag();
@@ -327,32 +330,32 @@ public final class FieldworkData extends SavedData implements FieldworkCommitSer
         tag.put("PendingDeliveries", pendingTags);
         ListTag deliveryRetryTags = new ListTag();
         deliveryRetryAt.entrySet().stream().sorted(Map.Entry.comparingByKey()).forEach(entry -> {
-            CompoundTag retry = new CompoundTag(); retry.putUUID("NpcId", entry.getKey()); retry.putLong("RetryAt", entry.getValue()); deliveryRetryTags.add(retry);
+            CompoundTag retry = new CompoundTag(); retry.store("NpcId", UUIDUtil.CODEC, entry.getKey()); retry.putLong("RetryAt", entry.getValue()); deliveryRetryTags.add(retry);
         });
         tag.put("DeliveryRetry", deliveryRetryTags);
         ListTag profileTags = new ListTag();
         searchProfiles.entrySet().stream().sorted(Map.Entry.comparingByKey()).forEach(entry -> {
-            CompoundTag profile = new CompoundTag(); profile.putUUID("NpcId", entry.getKey()); profile.putString("Profile", entry.getValue()); profileTags.add(profile);
+            CompoundTag profile = new CompoundTag(); profile.store("NpcId", UUIDUtil.CODEC, entry.getKey()); profile.putString("Profile", entry.getValue()); profileTags.add(profile);
         });
         tag.put("SearchProfiles", profileTags);
         return tag;
     }
 
     public static FieldworkData load(CompoundTag tag, HolderLookup.Provider registries) {
-        if (tag == null || !tag.contains("Schema", Tag.TAG_INT) || (tag.getInt("Schema") != 1 && tag.getInt("Schema") != SCHEMA)) {
+        if (tag == null || !MinecraftApi.containsTag(tag, "Schema", Tag.TAG_INT) || (tag.getIntOr("Schema", 0) != 1 && tag.getIntOr("Schema", 0) != SCHEMA)) {
             throw new IllegalStateException("unsupported fieldwork checkpoint schema");
         }
-        if (tag.getInt("Schema") == 1 && tag.contains("OutputConsumptions"))
+        if (tag.getIntOr("Schema", 0) == 1 && tag.contains("OutputConsumptions"))
             throw new IllegalStateException("schema1 cannot silently discard output consumption records");
         FieldworkData data = new FieldworkData();
         for (Tag entry : requireList(tag, "Scans")) {
             CompoundTag scan = (CompoundTag) entry;
             try {
-                if (!scan.contains("SawUnloaded", Tag.TAG_BYTE)) {
+                if (!MinecraftApi.containsTag(scan, "SawUnloaded", Tag.TAG_BYTE)) {
                     throw new IllegalArgumentException("missing scan loading evidence");
                 }
                 data.scans.put(uuid(scan, "NpcId"), new FieldworkScan.Cursor(loadArea(scan),
-                        number(scan, "NextIndex"), scan.getBoolean("SawUnloaded"), number(scan, "RetryAt")));
+                        number(scan, "NextIndex"), scan.getBooleanOr("SawUnloaded", false), number(scan, "RetryAt")));
             } catch (IllegalArgumentException exception) {
                 // 无效游标可安全重新检索，但不能同样忽略已提交的回执。
             }
@@ -361,8 +364,8 @@ public final class FieldworkData extends SavedData implements FieldworkCommitSer
             CompoundTag memory = (CompoundTag) entry;
             try {
                 long retryAt = number(memory, "RetryAt");
-                data.rememberUnreachable(uuid(memory, "NpcId"), memory.getString("Dimension"),
-                        BlockPos.of(number(memory, "Target")), 0L, retryAt, memory.getString("Reason"));
+                data.rememberUnreachable(uuid(memory, "NpcId"), memory.getStringOr("Dimension", ""),
+                        BlockPos.of(number(memory, "Target")), 0L, retryAt, memory.getStringOr("Reason", ""));
             } catch (IllegalArgumentException exception) {
                 // 损坏的短期记忆不会阻止其余检查点读取。
             }
@@ -379,7 +382,7 @@ public final class FieldworkData extends SavedData implements FieldworkCommitSer
             for (Tag entry : requireList(tag, "Deliveries")) {
                 CompoundTag delivery = (CompoundTag) entry;
                 data.delivered(new FieldworkCargo.Delivery(uuid(delivery, "TransferId"), uuid(delivery, "NpcId"),
-                        delivery.getString("Fingerprint"), integer(delivery, "Quantity"), number(delivery, "CommittedAt")));
+                        delivery.getStringOr("Fingerprint", ""), integer(delivery, "Quantity"), number(delivery, "CommittedAt")));
             }
         }
         if (tag.contains("TestStorage")) for (Tag entry : requireList(tag, "TestStorage")) {
@@ -394,21 +397,21 @@ public final class FieldworkData extends SavedData implements FieldworkCommitSer
         }
         if (tag.contains("SearchProfiles")) for (Tag entry : requireList(tag, "SearchProfiles")) {
             CompoundTag profile = (CompoundTag) entry;
-            data.searchProfiles.put(uuid(profile, "NpcId"), FieldworkAction.requireText(profile.getString("Profile"), 1_024, "profile"));
+            data.searchProfiles.put(uuid(profile, "NpcId"), FieldworkAction.requireText(profile.getStringOr("Profile", ""), 1_024, "profile"));
         }
-        if (tag.getInt("Schema") == SCHEMA) {
+        if (tag.getIntOr("Schema", 0) == SCHEMA) {
             try {
                 var unresolvedBodies = new java.util.HashSet<UUID>();
                 for (Tag entry : requireList(tag, "OutputConsumptions")) {
                     var encoded = (CompoundTag) entry;
-                    if (!encoded.contains("Owner", Tag.TAG_COMPOUND) || !encoded.getCompound("Owner").hasUUID("Id"))
+                    if (!MinecraftApi.containsTag(encoded, "Owner", Tag.TAG_COMPOUND) || !encoded.getCompoundOrEmpty("Owner").read("Id", UUIDUtil.CODEC).isPresent())
                         throw new IllegalArgumentException("missing output consumption owner");
-                    var value = new FieldworkCargo.OutputConsumption(encoded.getString("Key"), uuid(encoded, "NpcId"),
+                    var value = new FieldworkCargo.OutputConsumption(encoded.getStringOr("Key", ""), uuid(encoded, "NpcId"),
                             uuid(encoded, "PersonId"), uuid(encoded, "ContainerId"),
-                            com.jgeted.sagadyssey.worldsim.rights.SubjectRef.load(encoded.getCompound("Owner")),
-                            encoded.getString("Fingerprint"), integer(encoded, "Quantity"), integer(encoded, "OutputQuantity"),
+                            com.jgeted.sagadyssey.worldsim.rights.SubjectRef.load(encoded.getCompoundOrEmpty("Owner")),
+                            encoded.getStringOr("Fingerprint", ""), integer(encoded, "Quantity"), integer(encoded, "OutputQuantity"),
                             number(encoded, "StartedAt"), number(encoded, "CommittedAt"), number(encoded, "BeforeRevision"),
-                            number(encoded, "FinalRevision"), FieldworkCargo.ConsumptionState.valueOf(encoded.getString("State")));
+                            number(encoded, "FinalRevision"), FieldworkCargo.ConsumptionState.valueOf(encoded.getStringOr("State", "")));
                     if (data.outputConsumptions.putIfAbsent(value.key(), value) != null)
                         throw new IllegalStateException("duplicate output consumption checkpoint");
                     if (value.state() == FieldworkCargo.ConsumptionState.PENDING && !unresolvedBodies.add(value.npcId()))
@@ -438,15 +441,15 @@ public final class FieldworkData extends SavedData implements FieldworkCommitSer
     }
 
     private static FieldworkSearchArea loadArea(CompoundTag tag) {
-        return new FieldworkSearchArea(tag.getString("Dimension"),
+        return new FieldworkSearchArea(tag.getStringOr("Dimension", ""),
                 BlockPos.of(number(tag, "Min")), BlockPos.of(number(tag, "Max")));
     }
 
     private static CompoundTag saveReceipt(FieldworkActionReceipt receipt) {
         FieldworkAction action = receipt.action();
         CompoundTag tag = new CompoundTag();
-        tag.putUUID("PlanId", action.planId());
-        tag.putUUID("NpcId", action.npcId());
+        tag.store("PlanId", UUIDUtil.CODEC, action.planId());
+        tag.store("NpcId", UUIDUtil.CODEC, action.npcId());
         tag.putInt("Step", action.stepIndex());
         tag.putString("Dimension", action.dimension());
         tag.putLong("Target", action.target().asLong());
@@ -468,38 +471,38 @@ public final class FieldworkData extends SavedData implements FieldworkCommitSer
 
     private static FieldworkActionReceipt loadReceipt(CompoundTag tag) {
         FieldworkAction action = new FieldworkAction(uuid(tag, "PlanId"), uuid(tag, "NpcId"),
-                integer(tag, "Step"), tag.getString("Dimension"), BlockPos.of(number(tag, "Target")),
-                FieldworkAction.Operation.valueOf(tag.getString("Operation")), tag.getString("ExpectedState"));
+                integer(tag, "Step"), tag.getStringOr("Dimension", ""), BlockPos.of(number(tag, "Target")),
+                FieldworkAction.Operation.valueOf(tag.getStringOr("Operation", "")), tag.getStringOr("ExpectedState", ""));
         List<FieldworkActionReceipt.ItemDelta> deltas = new ArrayList<>();
         ListTag items = requireList(tag, "InventoryDeltas");
         if (items.size() > 96) throw new IllegalArgumentException("too many item deltas");
         for (Tag entry : items) {
             CompoundTag item = (CompoundTag) entry;
-            deltas.add(new FieldworkActionReceipt.ItemDelta(item.getString("Fingerprint"), integer(item, "Quantity")));
+            deltas.add(new FieldworkActionReceipt.ItemDelta(item.getStringOr("Fingerprint", ""), integer(item, "Quantity")));
         }
-        return new FieldworkActionReceipt(action, number(tag, "CommittedAt"), tag.getString("ResultingState"),
+        return new FieldworkActionReceipt(action, number(tag, "CommittedAt"), tag.getStringOr("ResultingState", ""),
                 deltas, integer(tag, "ToolDamage"));
     }
 
     private static UUID uuid(CompoundTag tag, String key) {
-        if (!tag.hasUUID(key)) throw new IllegalArgumentException("missing UUID: " + key);
-        return tag.getUUID(key);
+        if (!tag.read(key, UUIDUtil.CODEC).isPresent()) throw new IllegalArgumentException("missing UUID: " + key);
+        return tag.read(key, UUIDUtil.CODEC).orElseThrow();
     }
 
     private static long number(CompoundTag tag, String key) {
-        if (!tag.contains(key, Tag.TAG_LONG)) throw new IllegalArgumentException("missing long: " + key);
-        return tag.getLong(key);
+        if (!MinecraftApi.containsTag(tag, key, Tag.TAG_LONG)) throw new IllegalArgumentException("missing long: " + key);
+        return tag.getLongOr(key, 0L);
     }
 
     private static int integer(CompoundTag tag, String key) {
-        if (!tag.contains(key, Tag.TAG_INT)) throw new IllegalArgumentException("missing integer: " + key);
-        return tag.getInt(key);
+        if (!MinecraftApi.containsTag(tag, key, Tag.TAG_INT)) throw new IllegalArgumentException("missing integer: " + key);
+        return tag.getIntOr(key, 0);
     }
 
     private static ListTag requireList(CompoundTag tag, String key) {
-        if (!tag.contains(key, Tag.TAG_LIST)) throw new IllegalArgumentException("missing list: " + key);
-        ListTag list = tag.getList(key, Tag.TAG_COMPOUND);
-        if (!((ListTag) tag.get(key)).isEmpty() && ((ListTag) tag.get(key)).getElementType() != Tag.TAG_COMPOUND) {
+        if (!MinecraftApi.containsTag(tag, key, Tag.TAG_LIST)) throw new IllegalArgumentException("missing list: " + key);
+        ListTag list = MinecraftApi.listOfType(tag, key, Tag.TAG_COMPOUND);
+        if (!((ListTag) tag.get(key)).isEmpty() && MinecraftApi.elementType(((ListTag) tag.get(key))) != Tag.TAG_COMPOUND) {
             throw new IllegalArgumentException("wrong list type: " + key);
         }
         return list;

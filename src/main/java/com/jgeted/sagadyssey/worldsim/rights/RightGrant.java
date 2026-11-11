@@ -1,5 +1,7 @@
 package com.jgeted.sagadyssey.worldsim.rights;
 
+import net.minecraft.core.UUIDUtil;
+
 import net.minecraft.nbt.CompoundTag;
 
 import java.util.EnumSet;
@@ -22,8 +24,8 @@ public record RightGrant(UUID id, UUID containerId, SubjectRef holder, Set<Asset
 
     public CompoundTag save() {
         CompoundTag tag = new CompoundTag();
-        tag.putUUID("Id", id);
-        tag.putUUID("Container", containerId);
+        tag.store("Id", UUIDUtil.CODEC, id);
+        tag.store("Container", UUIDUtil.CODEC, containerId);
         tag.put("Holder", holder.save());
         int mask = 0;
         for (AssetRight right : rights) mask |= 1 << right.ordinal();
@@ -37,11 +39,11 @@ public record RightGrant(UUID id, UUID containerId, SubjectRef holder, Set<Asset
 
     public static RightGrant load(CompoundTag tag) {
         EnumSet<AssetRight> rights = EnumSet.noneOf(AssetRight.class);
-        int mask = tag.getInt("Rights");
+        int mask = tag.getIntOr("Rights", 0);
         for (AssetRight right : AssetRight.values()) if ((mask & (1 << right.ordinal())) != 0) rights.add(right);
-        return new RightGrant(tag.getUUID("Id"), tag.getUUID("Container"),
-                SubjectRef.load(tag.getCompound("Holder")), rights, tag.getString("Basis"),
-                tag.getLong("Starts"), tag.contains("Ends") ? tag.getLong("Ends") : null,
-                tag.getBoolean("Revocable"));
+        return new RightGrant(tag.read("Id", UUIDUtil.CODEC).orElseThrow(), tag.read("Container", UUIDUtil.CODEC).orElseThrow(),
+                SubjectRef.load(tag.getCompoundOrEmpty("Holder")), rights, tag.getStringOr("Basis", ""),
+                tag.getLongOr("Starts", 0L), tag.contains("Ends") ? tag.getLongOr("Ends", 0L) : null,
+                tag.getBooleanOr("Revocable", false));
     }
 }

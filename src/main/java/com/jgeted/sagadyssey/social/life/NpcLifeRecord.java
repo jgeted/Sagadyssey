@@ -1,5 +1,8 @@
 package com.jgeted.sagadyssey.social.life;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+import net.minecraft.core.UUIDUtil;
+
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
@@ -193,7 +196,7 @@ public record NpcLifeRecord(
 
     public CompoundTag save() {
         CompoundTag tag = new CompoundTag();
-        tag.putUUID("Npc", npcId);
+        tag.store("Npc", UUIDUtil.CODEC, npcId);
         tag.putString("Dimension", dimension);
         putUuid(tag, "OriginSettlement", originSettlementId);
         putUuid(tag, "InstitutionSettlement", institutionWorkplaceSettlementId);
@@ -229,32 +232,32 @@ public record NpcLifeRecord(
 
     @Nullable
     public static NpcLifeRecord load(CompoundTag tag) {
-        if (!tag.hasUUID("Npc")) return null;
+        if (!tag.read("Npc", UUIDUtil.CODEC).isPresent()) return null;
         List<NpcRelationRecord> relations = new ArrayList<>();
-        ListTag relationList = tag.getList("Relations", Tag.TAG_COMPOUND);
+        ListTag relationList = MinecraftApi.listOfType(tag, "Relations", Tag.TAG_COMPOUND);
         for (int index = 0; index < relationList.size(); index++) {
-            CompoundTag relation = relationList.getCompound(index);
-            if (relation.hasUUID("Other")) relations.add(NpcRelationRecord.load(relation));
+            CompoundTag relation = relationList.getCompoundOrEmpty(index);
+            if (relation.read("Other", UUIDUtil.CODEC).isPresent()) relations.add(NpcRelationRecord.load(relation));
         }
         List<NpcMemoryRecord> memories = new ArrayList<>();
-        ListTag memoryList = tag.getList("Memories", Tag.TAG_COMPOUND);
+        ListTag memoryList = MinecraftApi.listOfType(tag, "Memories", Tag.TAG_COMPOUND);
         for (int index = 0; index < memoryList.size(); index++) {
-            memories.add(NpcMemoryRecord.load(memoryList.getCompound(index)));
+            memories.add(NpcMemoryRecord.load(memoryList.getCompoundOrEmpty(index)));
         }
-        return new NpcLifeRecord(tag.getUUID("Npc"), tag.getString("Dimension"),
+        return new NpcLifeRecord(tag.read("Npc", UUIDUtil.CODEC).orElseThrow(), tag.getStringOr("Dimension", ""),
                 getUuid(tag, "OriginSettlement"), getUuid(tag, "InstitutionSettlement"),
-                getPos(tag, "InstitutionWorkplace"), tag.getString("ResidenceName"),
+                getPos(tag, "InstitutionWorkplace"), tag.getStringOr("ResidenceName", ""),
                 getPos(tag, "Bed"), getPos(tag, "PrivateStorage"),
-                NpcWorkAuthority.parse(tag.getString("Authority")), getUuid(tag, "AuthorityId"),
+                NpcWorkAuthority.parse(tag.getStringOr("Authority", "")), getUuid(tag, "AuthorityId"),
                 getUuid(tag, "ActiveSettlement"), getPos(tag, "ActiveWorkplace"),
-                NpcWorkShift.parse(tag.getString("Shift")), tag.getInt("Courage"),
-                tag.getInt("Duty"), tag.getInt("Ambition"), tag.getInt("Sociability"),
-                tag.contains("Conscience") ? tag.getInt("Conscience") : 50,
-                tag.contains("Faith") ? tag.getInt("Faith") : 50,
-                tag.getInt("Fatigue"), NpcLongTermGoal.parse(tag.getString("LongTermGoal")),
-                relations, memories, tag.getString("LastDecision"),
-                tag.getString("LastDecisionReason"), tag.getLong("LastDecisionAt"),
-                tag.getLong("DecisionLockedUntil"));
+                NpcWorkShift.parse(tag.getStringOr("Shift", "")), tag.getIntOr("Courage", 0),
+                tag.getIntOr("Duty", 0), tag.getIntOr("Ambition", 0), tag.getIntOr("Sociability", 0),
+                tag.contains("Conscience") ? tag.getIntOr("Conscience", 0) : 50,
+                tag.contains("Faith") ? tag.getIntOr("Faith", 0) : 50,
+                tag.getIntOr("Fatigue", 0), NpcLongTermGoal.parse(tag.getStringOr("LongTermGoal", "")),
+                relations, memories, tag.getStringOr("LastDecision", ""),
+                tag.getStringOr("LastDecisionReason", ""), tag.getLongOr("LastDecisionAt", 0L),
+                tag.getLongOr("DecisionLockedUntil", 0L));
     }
 
     private static int trait(long seed, int rotation) {
@@ -263,13 +266,13 @@ public record NpcLifeRecord(
 
     private static int clampTrait(int value) { return Math.max(0, Math.min(100, value)); }
     private static void putUuid(CompoundTag tag, String key, @Nullable UUID value) {
-        if (value != null) tag.putUUID(key, value);
+        if (value != null) tag.store(key, UUIDUtil.CODEC, value);
     }
-    private static UUID getUuid(CompoundTag tag, String key) { return tag.hasUUID(key) ? tag.getUUID(key) : null; }
+    private static UUID getUuid(CompoundTag tag, String key) { return tag.read(key, UUIDUtil.CODEC).isPresent() ? tag.read(key, UUIDUtil.CODEC).orElseThrow() : null; }
     private static void putPos(CompoundTag tag, String key, @Nullable BlockPos value) {
         if (value != null) tag.putLong(key, value.asLong());
     }
     private static BlockPos getPos(CompoundTag tag, String key) {
-        return tag.contains(key) ? BlockPos.of(tag.getLong(key)) : null;
+        return tag.contains(key) ? BlockPos.of(tag.getLongOr(key, 0L)) : null;
     }
 }

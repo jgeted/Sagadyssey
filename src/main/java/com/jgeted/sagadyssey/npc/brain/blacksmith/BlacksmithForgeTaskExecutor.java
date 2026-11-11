@@ -12,14 +12,14 @@ import com.jgeted.sagadyssey.npc.entity.NpcAction;
 import com.jgeted.sagadyssey.social.production.ProductionOrder;
 import com.jgeted.sagadyssey.social.production.ProductionOrderData;
 import com.jgeted.sagadyssey.social.production.ProductionOrderStatus;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 
 /** 持久化劳动起点后只启动一次锻造表现；重载恢复绝不重播动作。 */
 public final class BlacksmithForgeTaskExecutor implements NpcTaskExecutor {
     private final java.util.Map<java.util.UUID,com.jgeted.sagadyssey.npc.ai.MovementProgress> movement=new java.util.HashMap<>();
     @Override public void forget(java.util.UUID body,java.util.UUID plan){movement.remove(plan);}
     @Override
-    public ResourceLocation id() {
+    public Identifier id() {
         return BlacksmithTaskIds.FORGE;
     }
 

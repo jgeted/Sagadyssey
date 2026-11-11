@@ -1,5 +1,7 @@
 package com.jgeted.sagadyssey.social;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+
 import com.jgeted.sagadyssey.social.character.CharacterRecord;
 import com.jgeted.sagadyssey.social.character.CharacterRegistryData;
 import com.jgeted.sagadyssey.social.logistics.LogisticsData;
@@ -20,7 +22,7 @@ import com.mojang.brigadier.CommandDispatcher;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -34,7 +36,7 @@ public final class SocialSystemAuditCommand {
 
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
         dispatcher.register(Commands.literal("saga").then(Commands.literal("audit")
-                .requires(source -> source.hasPermission(2))
+                .requires(source -> MinecraftApi.hasPermission(source, 2))
                 .executes(ctx -> audit(ctx.getSource()))));
     }
 
@@ -51,7 +53,7 @@ public final class SocialSystemAuditCommand {
         Set<UUID> settlementIds = new HashSet<>();
         settlements.allSettlements().forEach(settlement -> {
             settlementIds.add(settlement.id());
-            if (ResourceLocation.tryParse(settlement.dimension()) == null)
+            if (Identifier.tryParse(settlement.dimension()) == null)
                 issues.add("聚落维度无效: " + settlement.name());
             UUID holder = politics.titleHolder(settlement.id());
             if (holder != null && !isLiving(characters, holder))

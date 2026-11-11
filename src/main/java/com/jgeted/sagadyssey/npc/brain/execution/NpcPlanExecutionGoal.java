@@ -1,5 +1,7 @@
 package com.jgeted.sagadyssey.npc.brain.execution;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+
 import com.jgeted.sagadyssey.npc.entity.NpcBase;
 import net.minecraft.world.entity.ai.goal.Goal;
 
@@ -39,12 +41,12 @@ public final class NpcPlanExecutionGoal extends Goal {
     @Override
     public void stop() {
         npc.getNavigation().stop();
-        if (!NpcBrainRuntime.isPlanned(npc) || npc.getServer() == null
-                || NpcBrainRuntime.data(npc.getServer()).active(npc.getUUID()).isEmpty()) return;
+        if (!NpcBrainRuntime.isPlanned(npc) || MinecraftApi.server(npc) == null
+                || NpcBrainRuntime.data(MinecraftApi.server(npc)).active(npc.getUUID()).isEmpty()) return;
         if (npc.getTarget() != null && npc.getTarget().isAlive()) {
             NpcBrainRuntime.cancel(npc, PlanCancellationReason.THREAT,
                     "发现战斗威胁，取消非战斗计划");
-        } else if (npc.isInWaterOrBubble()
+        } else if (npc.isInWater()
                 || npc.getHealth() <= npc.getMaxHealth() * 0.25F) {
             NpcBrainRuntime.cancel(npc, PlanCancellationReason.URGENT_NEED,
                     "生存状态抢占，取消非战斗计划");
@@ -52,12 +54,12 @@ public final class NpcPlanExecutionGoal extends Goal {
     }
 
     private boolean shouldRun() {
-        return !npc.level().isClientSide
+        return !npc.level().isClientSide()
                 && NpcBrainRuntime.isPlanned(npc)
-                && (NpcBrainRuntime.data(npc.getServer()).active(npc.getUUID()).isPresent()
+                && (NpcBrainRuntime.data(MinecraftApi.server(npc)).active(npc.getUUID()).isPresent()
                 || urgentHunger()
-                || com.jgeted.sagadyssey.npc.brain.command.NpcCommandData.get(npc.getServer()).active(npc.getCharacterId()).isPresent()
-                || com.jgeted.sagadyssey.npc.brain.command.NpcCommandData.get(npc.getServer()).queued(npc.getCharacterId()).isPresent()
+                || com.jgeted.sagadyssey.npc.brain.command.NpcCommandData.get(MinecraftApi.server(npc)).active(npc.getCharacterId()).isPresent()
+                || com.jgeted.sagadyssey.npc.brain.command.NpcCommandData.get(MinecraftApi.server(npc)).queued(npc.getCharacterId()).isPresent()
                 || com.jgeted.sagadyssey.npc.brain.command.NpcDutyTask.eligible(npc)
                 || npc.getCommand() == com.jgeted.sagadyssey.npc.entity.NpcCommand.WORK
                 && (com.jgeted.sagadyssey.npc.brain.fieldwork.FieldworkDiscovery.producer(npc)
@@ -72,7 +74,7 @@ public final class NpcPlanExecutionGoal extends Goal {
     /** Wake the existing survival chooser without changing a standing command or granting food rights. */
     private boolean urgentHunger() {
         if (!npc.isAlive()) return false;
-        var life = com.jgeted.sagadyssey.social.life.NpcLifeData.get(npc.getServer());
+        var life = com.jgeted.sagadyssey.social.life.NpcLifeData.get(MinecraftApi.server(npc));
         var needs = life.needs(npc.getCharacterId());
         return life.record(npc.getCharacterId()) != null && needs != null && needs.hunger() >= 800;
     }

@@ -1,12 +1,14 @@
 package com.jgeted.sagadyssey.social.credit;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+
 import com.jgeted.sagadyssey.worldsim.rights.SubjectRef;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.world.level.saveddata.SavedData;
+import com.jgeted.sagadyssey.worldsim.NbtSavedData;
 
 import javax.annotation.Nullable;
 import java.util.ArrayList;
@@ -16,7 +18,7 @@ import java.util.Map;
 import java.util.UUID;
 
 /** Durable obligations and idempotent physical-payment evidence. */
-public final class CreditLedgerData extends SavedData {
+public final class CreditLedgerData extends NbtSavedData {
     private static final String DATA_NAME = "sagadyssey_credit_ledger";
     private static final Factory<CreditLedgerData> FACTORY =
             new Factory<>(CreditLedgerData::new, CreditLedgerData::load);
@@ -24,7 +26,7 @@ public final class CreditLedgerData extends SavedData {
     private final Map<UUID, CreditPaymentRecord> payments = new HashMap<>();
 
     public static CreditLedgerData get(MinecraftServer server) {
-        return server.overworld().getDataStorage().computeIfAbsent(FACTORY, DATA_NAME);
+        return server.overworld().getDataStorage().computeIfAbsent(FACTORY.type(DATA_NAME));
     }
 
     @Nullable public CreditAgreement agreement(UUID id) { return agreements.get(id); }
@@ -94,14 +96,14 @@ public final class CreditLedgerData extends SavedData {
 
     static CreditLedgerData load(CompoundTag tag, HolderLookup.Provider registries) {
         CreditLedgerData data = new CreditLedgerData();
-        ListTag agreementTags = tag.getList("Agreements", Tag.TAG_COMPOUND);
+        ListTag agreementTags = MinecraftApi.listOfType(tag, "Agreements", Tag.TAG_COMPOUND);
         for (int index = 0; index < agreementTags.size(); index++) {
-            CreditAgreement value = CreditAgreement.load(agreementTags.getCompound(index));
+            CreditAgreement value = CreditAgreement.load(agreementTags.getCompoundOrEmpty(index));
             data.agreements.put(value.id(), value);
         }
-        ListTag paymentTags = tag.getList("Payments", Tag.TAG_COMPOUND);
+        ListTag paymentTags = MinecraftApi.listOfType(tag, "Payments", Tag.TAG_COMPOUND);
         for (int index = 0; index < paymentTags.size(); index++) {
-            CreditPaymentRecord value = CreditPaymentRecord.load(paymentTags.getCompound(index));
+            CreditPaymentRecord value = CreditPaymentRecord.load(paymentTags.getCompoundOrEmpty(index));
             data.payments.put(value.paymentId(), value);
         }
         return data;

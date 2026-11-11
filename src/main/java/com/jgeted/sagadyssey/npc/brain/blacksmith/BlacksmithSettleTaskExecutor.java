@@ -13,13 +13,13 @@ import com.jgeted.sagadyssey.social.production.ProductionOrder;
 import com.jgeted.sagadyssey.social.production.ProductionOrderData;
 import com.jgeted.sagadyssey.social.production.ProductionOrderStatus;
 import com.jgeted.sagadyssey.social.production.ProductionService;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.world.Container;
 
 /** 以固定 batchId 幂等结算；输出满时保留生产批次并等待重试。 */
 public final class BlacksmithSettleTaskExecutor implements NpcTaskExecutor {
     @Override
-    public ResourceLocation id() {
+    public Identifier id() {
         return BlacksmithTaskIds.SETTLE;
     }
 

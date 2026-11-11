@@ -2,12 +2,9 @@ package com.jgeted.sagadyssey.npc.network;
 
 import com.jgeted.sagadyssey.npc.gui.NpcTradeScreen;
 import net.minecraft.client.Minecraft;
-import net.neoforged.api.distmarker.Dist;
-import net.neoforged.api.distmarker.OnlyIn;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
 
 /** Client-only trade-screen refresh behavior. */
-@OnlyIn(Dist.CLIENT)
 final class ClientNpcTradeResponseHandler {
     private ClientNpcTradeResponseHandler() {}
 

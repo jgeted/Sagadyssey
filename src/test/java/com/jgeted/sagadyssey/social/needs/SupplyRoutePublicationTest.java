@@ -1,5 +1,7 @@
 package com.jgeted.sagadyssey.social.needs;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+
 import com.jgeted.sagadyssey.social.logistics.LogisticsData;
 import com.jgeted.sagadyssey.npc.brain.fieldwork.FieldworkStorage;
 import com.jgeted.sagadyssey.worldsim.rights.*;
@@ -78,8 +80,7 @@ class SupplyRoutePublicationTest {
         assertEquals(1, fixture.flows.routes().size());
         assertEquals(1, fixture.logistics.orders().size());
         assertEquals(1, fixture.rights.reservations().size());
-        assertEquals(1, fixture.needs.save(new CompoundTag(), null)
-                .getList("Receipts", CompoundTag.TAG_COMPOUND).size());
+        assertEquals(1, MinecraftApi.listOfType(fixture.needs.save(new CompoundTag(), null), "Receipts", CompoundTag.TAG_COMPOUND).size());
     }
 
     @Test

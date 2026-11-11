@@ -1,5 +1,8 @@
 package com.jgeted.sagadyssey.npc.brain.fieldwork;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+import net.minecraft.core.UUIDUtil;
+
 import com.jgeted.sagadyssey.worldsim.rights.*;
 import com.jgeted.sagadyssey.worldsim.transfer.*;
 import net.minecraft.core.BlockPos;
@@ -18,15 +21,15 @@ public record FieldworkStorage(String dimension, BlockPos position, UUID contain
     }
     public CompoundTag save() {
         CompoundTag tag = new CompoundTag();
-        tag.putString("Dimension", dimension); tag.putLong("Position", position.asLong()); tag.putUUID("ContainerId", containerId);
+        tag.putString("Dimension", dimension); tag.putLong("Position", position.asLong()); tag.store("ContainerId", UUIDUtil.CODEC, containerId);
         tag.put("Owner", owner.save()); tag.putString("Policy", policy.name()); tag.putString("Intent", intent.name()); tag.putString("Authority", authority);
         return tag;
     }
     public static FieldworkStorage load(CompoundTag tag) {
-        if (!tag.contains("Position", net.minecraft.nbt.Tag.TAG_LONG)) throw new IllegalArgumentException("missing storage position");
-        return new FieldworkStorage(tag.getString("Dimension"), BlockPos.of(tag.getLong("Position")), tag.getUUID("ContainerId"),
-                SubjectRef.load(tag.getCompound("Owner")), AccessPolicy.valueOf(tag.getString("Policy")),
-                TransferIntent.valueOf(tag.getString("Intent")), tag.getString("Authority"));
+        if (!MinecraftApi.containsTag(tag, "Position", net.minecraft.nbt.Tag.TAG_LONG)) throw new IllegalArgumentException("missing storage position");
+        return new FieldworkStorage(tag.getStringOr("Dimension", ""), BlockPos.of(tag.getLongOr("Position", 0L)), tag.read("ContainerId", UUIDUtil.CODEC).orElseThrow(),
+                SubjectRef.load(tag.getCompoundOrEmpty("Owner")), AccessPolicy.valueOf(tag.getStringOr("Policy", "")),
+                TransferIntent.valueOf(tag.getStringOr("Intent", "")), tag.getStringOr("Authority", ""));
     }
 
     /** 先保存请求再调用统一转移；重载复用同一个 transferId 和原始请求负载。 */
@@ -45,7 +48,7 @@ public record FieldworkStorage(String dimension, BlockPos position, UUID contain
         }
         public CompoundTag save() {
             CompoundTag tag = new CompoundTag();
-            tag.putUUID("NpcId", npcId); tag.putUUID("SourceId", sourceId); tag.putUUID("TransferId", transferId);
+            tag.store("NpcId", UUIDUtil.CODEC, npcId); tag.store("SourceId", UUIDUtil.CODEC, sourceId); tag.store("TransferId", UUIDUtil.CODEC, transferId);
             tag.put("Actor", actor.save()); tag.put("Storage", storage.save()); tag.put("Fingerprint", fingerprint.save());
             tag.putInt("Quantity", quantity); tag.putLong("SourceRevision", sourceRevision); tag.putLong("TargetRevision", targetRevision); tag.putLong("RequestedAt", requestedAt);
             return tag;
@@ -53,11 +56,11 @@ public record FieldworkStorage(String dimension, BlockPos position, UUID contain
         public static Pending load(CompoundTag tag) {
             for (String key : java.util.List.of("Quantity", "SourceRevision", "TargetRevision", "RequestedAt")) {
                 int type = key.equals("Quantity") ? net.minecraft.nbt.Tag.TAG_INT : net.minecraft.nbt.Tag.TAG_LONG;
-                if (!tag.contains(key, type)) throw new IllegalArgumentException("missing or invalid pending delivery field: " + key);
+                if (!MinecraftApi.containsTag(tag, key, type)) throw new IllegalArgumentException("missing or invalid pending delivery field: " + key);
             }
-            return new Pending(tag.getUUID("NpcId"), tag.getUUID("SourceId"), SubjectRef.load(tag.getCompound("Actor")),
-                    FieldworkStorage.load(tag.getCompound("Storage")), tag.getUUID("TransferId"), ItemFingerprint.load(tag.getCompound("Fingerprint")),
-                    tag.getInt("Quantity"), tag.getLong("SourceRevision"), tag.getLong("TargetRevision"), tag.getLong("RequestedAt"));
+            return new Pending(tag.read("NpcId", UUIDUtil.CODEC).orElseThrow(), tag.read("SourceId", UUIDUtil.CODEC).orElseThrow(), SubjectRef.load(tag.getCompoundOrEmpty("Actor")),
+                    FieldworkStorage.load(tag.getCompoundOrEmpty("Storage")), tag.read("TransferId", UUIDUtil.CODEC).orElseThrow(), ItemFingerprint.load(tag.getCompoundOrEmpty("Fingerprint")),
+                    tag.getIntOr("Quantity", 0), tag.getLongOr("SourceRevision", 0L), tag.getLongOr("TargetRevision", 0L), tag.getLongOr("RequestedAt", 0L));
         }
     }
 }

@@ -28,7 +28,7 @@ import com.jgeted.sagadyssey.worldsim.transfer.TransferLedgerData;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceKey;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -69,8 +69,8 @@ public final class VerifierSnapshotCapture {
         captureDomainCounts(server, rights, domains, loadedNpcs);
 
         String dimension = requester == null
-                ? server.overworld().dimension().location().toString()
-                : requester.serverLevel().dimension().location().toString();
+                ? server.overworld().dimension().identifier().toString()
+                : requester.level().dimension().identifier().toString();
         FixedScenarioDeployment deployment = FixedScenarioData.get(server).latestIn(dimension);
         String scenarioId = deployment == null ? "" : deployment.scenarioId();
         String profile = deployment == null ? "" : deployment.testProfile();
@@ -86,7 +86,7 @@ public final class VerifierSnapshotCapture {
                                        Map<String, Long> totals, List<String> warnings) {
         int loadedNpcs = 0;
         for (ServerLevel level : server.getAllLevels()) {
-            String dimension = level.dimension().location().toString();
+            String dimension = level.dimension().identifier().toString();
             for (var entity : level.getAllEntities()) {
                 if (entity instanceof NpcBase npc) {
                     loadedNpcs++;
@@ -127,7 +127,7 @@ public final class VerifierSnapshotCapture {
             UUID subjectId = character == null ? player.getUUID() : character.id();
             UUID containerId = ContainerIds.playerPersonal(subjectId);
             captureContainer(containerId.toString(), "player_personal",
-                    player.serverLevel().dimension().location() + ":player:" + player.getUUID(),
+                    player.level().dimension().identifier() + ":player:" + player.getUUID(),
                     revision(rights, containerId), player.getInventory(), containers, totals, warnings);
             if (character == null) warnings.add("online_player_without_character:" + player.getUUID());
         }
@@ -290,7 +290,7 @@ public final class VerifierSnapshotCapture {
 
     @Nullable
     private static ServerLevel level(MinecraftServer server, String dimension) {
-        ResourceLocation location = ResourceLocation.tryParse(dimension);
+        Identifier location = Identifier.tryParse(dimension);
         if (location == null) return null;
         ResourceKey<Level> key = ResourceKey.create(Registries.DIMENSION, location);
         return server.getLevel(key);

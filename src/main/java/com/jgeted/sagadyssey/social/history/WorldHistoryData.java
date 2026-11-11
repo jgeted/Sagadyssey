@@ -1,11 +1,13 @@
 package com.jgeted.sagadyssey.social.history;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.world.level.saveddata.SavedData;
+import com.jgeted.sagadyssey.worldsim.NbtSavedData;
 
 import javax.annotation.Nullable;
 import java.util.ArrayList;
@@ -14,7 +16,7 @@ import java.util.List;
 import java.util.UUID;
 
 /** 世界编年史。事件有容量上限，淘汰时优先保留高重要度事件。 */
-public final class WorldHistoryData extends SavedData {
+public final class WorldHistoryData extends NbtSavedData {
     private static final String DATA_NAME = "sagadyssey_history";
     private static final int MAX_EVENTS = 2048;
     private static final Factory<WorldHistoryData> FACTORY =
@@ -23,7 +25,7 @@ public final class WorldHistoryData extends SavedData {
     private final List<HistoryEventRecord> events = new ArrayList<>();
 
     public static WorldHistoryData get(MinecraftServer server) {
-        return server.overworld().getDataStorage().computeIfAbsent(FACTORY, DATA_NAME);
+        return server.overworld().getDataStorage().computeIfAbsent(FACTORY.type(DATA_NAME));
     }
 
     public void append(long gameTime, String type, @Nullable UUID subjectId,
@@ -64,8 +66,8 @@ public final class WorldHistoryData extends SavedData {
 
     private static WorldHistoryData load(CompoundTag tag, HolderLookup.Provider registries) {
         WorldHistoryData data = new WorldHistoryData();
-        ListTag list = tag.getList("Events", Tag.TAG_COMPOUND);
-        for (int i = 0; i < list.size(); i++) data.events.add(HistoryEventRecord.load(list.getCompound(i)));
+        ListTag list = MinecraftApi.listOfType(tag, "Events", Tag.TAG_COMPOUND);
+        for (int i = 0; i < list.size(); i++) data.events.add(HistoryEventRecord.load(list.getCompoundOrEmpty(i)));
         data.trimIfNeeded();
         return data;
     }

@@ -1,5 +1,7 @@
 package com.jgeted.sagadyssey.social.combat;
 
+import net.minecraft.core.UUIDUtil;
+
 import net.minecraft.nbt.CompoundTag;
 
 import javax.annotation.Nullable;
@@ -103,9 +105,9 @@ public record WoundRecord(UUID id, UUID patientCharacterId,
 
     CompoundTag save() {
         CompoundTag tag = new CompoundTag();
-        tag.putUUID("Id", id);
-        tag.putUUID("Patient", patientCharacterId);
-        if (attackerCharacterId != null) tag.putUUID("Attacker", attackerCharacterId);
+        tag.store("Id", UUIDUtil.CODEC, id);
+        tag.store("Patient", UUIDUtil.CODEC, patientCharacterId);
+        if (attackerCharacterId != null) tag.store("Attacker", UUIDUtil.CODEC, attackerCharacterId);
         tag.putString("Type", type.name());
         tag.putString("Region", region.name());
         tag.putString("Severity", severity.name());
@@ -117,22 +119,22 @@ public record WoundRecord(UUID id, UUID patientCharacterId,
         tag.putLong("InflictedAt", inflictedAt);
         tag.putLong("LastUpdatedAt", lastUpdatedAt);
         tag.putString("Status", status.name());
-        if (sourceEvidenceId != null) tag.putUUID("SourceEvidence", sourceEvidenceId);
+        if (sourceEvidenceId != null) tag.store("SourceEvidence", UUIDUtil.CODEC, sourceEvidenceId);
         tag.putInt("Revision", revision);
         return tag;
     }
 
     static WoundRecord load(CompoundTag tag) {
-        return new WoundRecord(tag.getUUID("Id"), tag.getUUID("Patient"),
-                tag.hasUUID("Attacker") ? tag.getUUID("Attacker") : null,
-                WoundType.valueOf(tag.getString("Type")),
-                BodyRegion.valueOf(tag.getString("Region")),
-                WoundSeverity.valueOf(tag.getString("Severity")), tag.getInt("Trauma"),
-                tag.getInt("Bleeding"), tag.getInt("InfectionRisk"),
-                tag.getInt("Infection"), tag.getInt("Stability"),
-                tag.getLong("InflictedAt"), tag.getLong("LastUpdatedAt"),
-                WoundStatus.valueOf(tag.getString("Status")),
-                tag.hasUUID("SourceEvidence") ? tag.getUUID("SourceEvidence") : null,
-                tag.getInt("Revision"));
+        return new WoundRecord(tag.read("Id", UUIDUtil.CODEC).orElseThrow(), tag.read("Patient", UUIDUtil.CODEC).orElseThrow(),
+                tag.read("Attacker", UUIDUtil.CODEC).isPresent() ? tag.read("Attacker", UUIDUtil.CODEC).orElseThrow() : null,
+                WoundType.valueOf(tag.getStringOr("Type", "")),
+                BodyRegion.valueOf(tag.getStringOr("Region", "")),
+                WoundSeverity.valueOf(tag.getStringOr("Severity", "")), tag.getIntOr("Trauma", 0),
+                tag.getIntOr("Bleeding", 0), tag.getIntOr("InfectionRisk", 0),
+                tag.getIntOr("Infection", 0), tag.getIntOr("Stability", 0),
+                tag.getLongOr("InflictedAt", 0L), tag.getLongOr("LastUpdatedAt", 0L),
+                WoundStatus.valueOf(tag.getStringOr("Status", "")),
+                tag.read("SourceEvidence", UUIDUtil.CODEC).isPresent() ? tag.read("SourceEvidence", UUIDUtil.CODEC).orElseThrow() : null,
+                tag.getIntOr("Revision", 0));
     }
 }

@@ -1,5 +1,10 @@
 package com.jgeted.sagadyssey.npc.brain.command;
 
+import com.jgeted.sagadyssey.gametest.PortedGameTests.*;
+
+import com.jgeted.sagadyssey.core.MinecraftApi;
+import net.minecraft.core.UUIDUtil;
+
 import com.jgeted.sagadyssey.npc.brain.blacksmith.BlacksmithRestPlanFactory;
 import com.jgeted.sagadyssey.npc.brain.execution.NpcBrainRuntime;
 import com.jgeted.sagadyssey.npc.brain.persistence.NpcBehaviorMode;
@@ -41,19 +46,19 @@ public final class BlacksmithRestRestartGameTests {
                 var n = new NpcBase(NpcEntityTypes.NPC_BASE.get(), h.getLevel());
                 n.setPos(pos.getX()+.5, pos.getY(), pos.getZ()+.5); n.setProfession(NpcProfession.BLACKSMITH);
                 n.getPersonalInventory().clearContent(); n.setPersistenceRequired(); n.setCommand(NpcCommand.WORK);
-                h.getLevel().addFreshEntity(n); NpcLifeData.get(n.getServer()).ensureRegistered(n,h.getLevel().getGameTime());
+                h.getLevel().addFreshEntity(n); NpcLifeData.get(MinecraftApi.server(n)).ensureRegistered(n,h.getLevel().getGameTime());
                 NpcBrainRuntime.setMode(n,NpcBehaviorMode.PLANNED); actor[0] = n;
             }
             var n = actor[0];
-            h.assertTrue(NpcBrainRuntime.data(n.getServer()).active(n.getUUID()).isPresent(), "wait for actual entity goal to select rest");
-            var rest = NpcBrainRuntime.data(n.getServer()).active(n.getUUID()).orElseThrow();
+            h.assertTrue(NpcBrainRuntime.data(MinecraftApi.server(n)).active(n.getUUID()).isPresent(), "wait for actual entity goal to select rest");
+            var rest = NpcBrainRuntime.data(MinecraftApi.server(n)).active(n.getUUID()).orElseThrow();
             h.assertTrue(rest.providerId().equals(BlacksmithRestPlanFactory.PROVIDER), "original smith actually selected rest");
             n.setNoAi(true);
-            var tag = new CompoundTag(); tag.putUUID("Body",n.getUUID()); tag.putUUID("Character",n.getCharacterId());
-            tag.putUUID("Plan",rest.id()); tag.putLong("Position",pos.asLong()); tag.putLong("Deadline",rest.expiresAt());
+            var tag = new CompoundTag(); tag.store("Body", UUIDUtil.CODEC,n.getUUID()); tag.store("Character", UUIDUtil.CODEC,n.getCharacterId());
+            tag.store("Plan", UUIDUtil.CODEC,rest.id()); tag.putLong("Position",pos.asLong()); tag.putLong("Deadline",rest.expiresAt());
             try {
-                NbtIo.writeCompressed(tag,n.getServer().getWorldPath(LevelResource.ROOT).resolve("phase9-rest-checkpoint.nbt"));
-                n.getServer().saveEverything(true,true,true); net.neoforged.neoforge.common.IOUtilities.waitUntilIOWorkerComplete();
+                NbtIo.writeCompressed(tag,MinecraftApi.server(n).getWorldPath(LevelResource.ROOT).resolve("phase9-rest-checkpoint.nbt"));
+                MinecraftApi.server(n).saveEverything(true,true,true); 
             } catch (Exception ex) { throw new IllegalStateException("save original resting smith",ex); }
         });
     }
@@ -61,21 +66,21 @@ public final class BlacksmithRestRestartGameTests {
     @GameTest(template="fieldwork_empty", batch="phase9_rest_restart", timeoutTicks=400)
     public static void independentProcessRecoversOriginalRestWithoutImmortalWaitOrAssets(GameTestHelper h) {
         if (!Boolean.getBoolean("sagadyssey.phase4.requireRestart")) { h.succeed(); return; }
-        h.assertTrue(previous != null,"original checkpoint required"); force(h.getLevel(),BlockPos.of(previous.getLong("Position")));
+        h.assertTrue(previous != null,"original checkpoint required"); force(h.getLevel(),BlockPos.of(previous.getLongOr("Position", 0L)));
         boolean[] resumed = {false}; long[] resumedAt = {-1};
         h.succeedWhen(() -> {
-            var n = (NpcBase) h.getLevel().getEntity(previous.getUUID("Body"));
-            h.assertTrue(n != null && n.getCharacterId().equals(previous.getUUID("Character")),"original saved body and person, no clones");
-            var brain = NpcBrainRuntime.data(n.getServer());
+            var n = (NpcBase) h.getLevel().getEntity(previous.read("Body", UUIDUtil.CODEC).orElseThrow());
+            h.assertTrue(n != null && n.getCharacterId().equals(previous.read("Character", UUIDUtil.CODEC).orElseThrow()),"original saved body and person, no clones");
+            var brain = NpcBrainRuntime.data(MinecraftApi.server(n));
             if (!resumed[0]) {
                 var saved = brain.active(n.getUUID()).orElseThrow();
-                h.assertTrue(saved.id().equals(previous.getUUID("Plan")) && saved.expiresAt()==previous.getLong("Deadline"),"same rest identity and deadline from disk, no extension during offline time");
+                h.assertTrue(saved.id().equals(previous.read("Plan", UUIDUtil.CODEC).orElseThrow()) && saved.expiresAt()==previous.getLongOr("Deadline", 0L),"same rest identity and deadline from disk, no extension during offline time");
                 n.setNoAi(false); resumed[0] = true; resumedAt[0] = h.getTick();
             }
             h.assertTrue(h.getTick()-resumedAt[0]>=220,"observe more than two bounded rests after new JVM");
             h.assertTrue(brain.active(n.getUUID()).isPresent(), "next tick selects the next bounded rest");
             var active = brain.active(n.getUUID()).orElseThrow();
-            h.assertTrue(active.providerId().equals(BlacksmithRestPlanFactory.PROVIDER) && !active.id().equals(previous.getUUID("Plan")) && active.expiresAt()>h.getLevel().getGameTime(),"old rest ended, revalidated finite rest replaced it");
+            h.assertTrue(active.providerId().equals(BlacksmithRestPlanFactory.PROVIDER) && !active.id().equals(previous.read("Plan", UUIDUtil.CODEC).orElseThrow()) && active.expiresAt()>h.getLevel().getGameTime(),"old rest ended, revalidated finite rest replaced it");
             h.assertTrue(brain.history(n.getUUID()).size()<=32 && n.getPersonalInventory().isEmpty(),"bounded history and no free food, equipment or output across restart");
             n.setNoAi(true);
         });

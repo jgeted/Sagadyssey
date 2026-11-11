@@ -1,5 +1,11 @@
 package com.jgeted.sagadyssey.social.needs;
 
+import net.minecraft.world.level.gamerules.GameRules;
+
+import com.jgeted.sagadyssey.gametest.PortedGameTests.*;
+
+import net.minecraft.core.UUIDUtil;
+
 import com.jgeted.sagadyssey.Sagadyssey;
 import com.jgeted.sagadyssey.npc.brain.execution.NpcBrainRuntime;
 import com.jgeted.sagadyssey.npc.brain.fieldwork.FieldworkStorage;
@@ -18,7 +24,7 @@ import net.minecraft.core.*;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.gametest.framework.*;
 import net.minecraft.nbt.*;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.*;
 import net.minecraft.world.Container;
@@ -46,7 +52,7 @@ public final class PopulationHandoffGameTests {
     private static final ItemFingerprint FOOD=new ItemFingerprint("minecraft:carrot",0);
     private static final BlockPos BASE=new BlockPos(384,80,384);
     private static final BlockPos SOURCE=BASE.offset(10,1,6), PANTRY=BASE.offset(22,1,6);
-    private static final ResourceLocation EMPTY=ResourceLocation.parse("sagadyssey_handoff:empty");
+    private static final Identifier EMPTY=Identifier.parse("sagadyssey_handoff:empty");
     private static final String MARKER="population-handoff.nbt";
     private static CompoundTag restored;
     private static String phase(){return System.getProperty("sagadyssey.handoff.phase","disabled");}
@@ -65,25 +71,25 @@ public final class PopulationHandoffGameTests {
         var server=event.getServer();var l=server.overworld();restored=null;
         try {
             l.getStructureManager().getOrCreate(EMPTY).load(l.holderLookup(Registries.BLOCK),
-                    TagParser.parseTag("{size:[16,6,16],entities:[],blocks:[],palette:[{Name:\"minecraft:air\"}]}"));
+                    TagParser.parseCompoundFully("{size:[16,6,16],entities:[],blocks:[],palette:[{Name:\"minecraft:air\"}]}"));
             if(phase().endsWith("resume")) {
                 restored=NbtIo.readCompressed(server.getWorldPath(LevelResource.ROOT).resolve(MARKER),NbtAccounter.unlimitedHeap());
                 var world=NbtIo.readCompressed(server.getWorldPath(LevelResource.ROOT).resolve("level.dat"),NbtAccounter.unlimitedHeap());
-                server.getWorldData().overworldData().setGameTime(Math.max(restored.getLong("Time"),world.getCompound("Data").getLong("Time"))+1);
+                server.getWorldData().overworldData().setGameTime(Math.max(restored.getLongOr("Time", 0L),world.getCompoundOrEmpty("Data").getLongOr("Time", 0L))+1);
                 // Validate linked ledgers before any normal NPC tick can advance them.
-                require(restored.getCompound("Need").equals(NeedRequestData.get(server).request(restored.getUUID("NeedId")).save()),"whole-world demand restored exactly");
-                require(restored.getCompound("Flow").equals(SupplyFlowData.get(server).save(new CompoundTag(),server.registryAccess())),"whole-world routes and scopes restored exactly");
-                require(restored.getCompound("Rights").equals(RightsStateData.get(server).save(new CompoundTag(),server.registryAccess())),"whole-world rights and reservations restored exactly");
-                require(restored.getCompound("Characters").equals(CharacterRegistryData.get(server).save(new CompoundTag(),server.registryAccess())),"whole-world character identities restored exactly");
-                require(restored.getCompound("Households").equals(HouseholdData.get(server).save(new CompoundTag(),server.registryAccess())),"whole-world household membership restored exactly");
-                require(restored.getCompound("NpcBrain").equals(NpcBrainRuntime.data(server).save(new CompoundTag(),server.registryAccess())),"whole-world active work plans restored exactly");
-                require(!CharacterRegistryData.get(server).byId(restored.getUUID("APerson")).alive(),"original character stays dead across JVM");
+                require(restored.getCompoundOrEmpty("Need").equals(NeedRequestData.get(server).request(restored.read("NeedId", UUIDUtil.CODEC).orElseThrow()).save()),"whole-world demand restored exactly");
+                require(restored.getCompoundOrEmpty("Flow").equals(SupplyFlowData.get(server).save(new CompoundTag(),server.registryAccess())),"whole-world routes and scopes restored exactly");
+                require(restored.getCompoundOrEmpty("Rights").equals(RightsStateData.get(server).save(new CompoundTag(),server.registryAccess())),"whole-world rights and reservations restored exactly");
+                require(restored.getCompoundOrEmpty("Characters").equals(CharacterRegistryData.get(server).save(new CompoundTag(),server.registryAccess())),"whole-world character identities restored exactly");
+                require(restored.getCompoundOrEmpty("Households").equals(HouseholdData.get(server).save(new CompoundTag(),server.registryAccess())),"whole-world household membership restored exactly");
+                require(restored.getCompoundOrEmpty("NpcBrain").equals(NpcBrainRuntime.data(server).save(new CompoundTag(),server.registryAccess())),"whole-world active work plans restored exactly");
+                require(!CharacterRegistryData.get(server).byId(restored.read("APerson", UUIDUtil.CODEC).orElseThrow()).alive(),"original character stays dead across JVM");
                 var proof=restored.copy();proof.putLong("RestoredAt",l.getGameTime());proof.putBoolean("LinkedLedgersVerifiedBeforeTick",true);
                 NbtIo.writeCompressed(proof,server.getWorldPath(LevelResource.ROOT).resolve("handoff-restored-proof.nbt"));
             }
             force(l);l.setDayTime(1000);
-            l.getGameRules().getRule(GameRules.RULE_DAYLIGHT).set(false,server);
-            l.getGameRules().getRule(GameRules.RULE_DOMOBSPAWNING).set(false,server);
+            l.getGameRules().set(GameRules.ADVANCE_TIME, false,server);
+            l.getGameRules().set(GameRules.SPAWN_MOBS, false,server);
         } catch(Exception x){throw new IllegalStateException("handoff independent-world recovery",x);}
     }
     private static void require(boolean ok,String text){if(!ok)throw new IllegalStateException(text);}
@@ -94,7 +100,7 @@ public final class PopulationHandoffGameTests {
                 net.minecraft.world.level.block.Rotation.NONE,2400,0,true,PopulationHandoffGameTests::run));
     }
     private static NpcBase npc(ServerLevel l,BlockPos p,String name,NpcProfession profession,UUID settlement) {
-        var n=new NpcBase(NpcEntityTypes.NPC_BASE.get(),l);n.moveTo(p.getX()+.5,p.getY(),p.getZ()+.5,0,0);
+        var n=new NpcBase(NpcEntityTypes.NPC_BASE.get(),l);n.snapTo(p.getX()+.5,p.getY(),p.getZ()+.5,0,0);
         n.setNpcName(name);n.setProfession(profession);n.setHomeSettlementId(settlement);n.setPersistenceRequired();
         n.getPersonalInventory().clearContent();n.getTransportInventory().clearContent();
         n.setItemSlot(EquipmentSlot.MAINHAND,ItemStack.EMPTY);n.setItemSlot(EquipmentSlot.OFFHAND,ItemStack.EMPTY);
@@ -104,7 +110,7 @@ public final class PopulationHandoffGameTests {
     private static Fixture fixture(GameTestHelper h) {
         var l=h.getLevel();var s=l.getServer();force(l);
         for(var p:BlockPos.betweenClosed(BASE,BASE.offset(25,5,12)))l.setBlockAndUpdate(p,p.getY()==BASE.getY()?Blocks.STONE.defaultBlockState():Blocks.AIR.defaultBlockState());
-        var registry=SettlementRegistryData.get(s);var village=registry.create(s,"handoff village",SettlementType.VILLAGE,l.dimension().location().toString(),BASE,48,"sagadyssey:wilderness",null,l.getGameTime());
+        var registry=SettlementRegistryData.get(s);var village=registry.create(s,"handoff village",SettlementType.VILLAGE,l.dimension().identifier().toString(),BASE,48,"sagadyssey:wilderness",null,l.getGameTime());
         var a=npc(l,BASE.offset(2,1,6),"original courier",NpcProfession.COURIER,village.id());
         var b=npc(l,BASE.offset(2,1,8),"existing successor",NpcProfession.COURIER,village.id());
         var head=npc(l,BASE.offset(3,1,10),"household head",NpcProfession.NONE,village.id());
@@ -115,9 +121,9 @@ public final class PopulationHandoffGameTests {
             var bed=BASE.offset(5+i*3,1,2);
             l.setBlockAndUpdate(bed,Blocks.WHITE_BED.defaultBlockState().setValue(BedBlock.FACING,Direction.SOUTH).setValue(BedBlock.PART,BedPart.FOOT));
             l.setBlockAndUpdate(bed.south(),Blocks.WHITE_BED.defaultBlockState().setValue(BedBlock.FACING,Direction.SOUTH).setValue(BedBlock.PART,BedPart.HEAD));
-            life.registerInstitutional(people.get(i),l.dimension().location().toString(),village.id(),BASE,"handoff residence",bed,null,NpcWorkShift.DAY,l.getGameTime(),false);
+            life.registerInstitutional(people.get(i),l.dimension().identifier().toString(),village.id(),BASE,"handoff residence",bed,null,NpcWorkShift.DAY,l.getGameTime(),false);
         }
-        var households=HouseholdData.get(s);var home=households.create("handoff household",l.dimension().location().toString(),village.id(),head.getCharacterId(),BASE,l.getGameTime());
+        var households=HouseholdData.get(s);var home=households.create("handoff household",l.dimension().identifier().toString(),village.id(),head.getCharacterId(),BASE,l.getGameTime());
         require(households.addMember(home.id(),a.getCharacterId(),HouseholdRole.KIN,l.getGameTime()),"A joins real household");
         require(households.addMember(home.id(),b.getCharacterId(),HouseholdRole.KIN,l.getGameTime()),"B joins real household");
         l.setBlockAndUpdate(SOURCE,Blocks.BARREL.defaultBlockState());l.setBlockAndUpdate(PANTRY,Blocks.BARREL.defaultBlockState());
@@ -153,9 +159,9 @@ public final class PopulationHandoffGameTests {
     }
     private static CompoundTag describe(Fixture f,UUID old,long start) {
         var t=new CompoundTag();t.putString("Phase",phase());t.putLong("Time",f.level().getGameTime());t.putLong("Started",start);
-        t.putUUID("Settlement",f.settlement());t.putUUID("Household",f.household());t.putUUID("ABody",f.aBody());t.putUUID("APerson",f.aPerson());
-        t.putUUID("BBody",f.bBody());t.putUUID("BPerson",f.bPerson());t.putUUID("HeadBody",f.headBody());t.putUUID("HeadPerson",f.headPerson());
-        t.putUUID("NeedId",f.need());t.putUUID("OldRoute",old);t.putUUID("Grant",f.grant());t.putUUID("SourceId",f.source());
+        t.store("Settlement", UUIDUtil.CODEC,f.settlement());t.store("Household", UUIDUtil.CODEC,f.household());t.store("ABody", UUIDUtil.CODEC,f.aBody());t.store("APerson", UUIDUtil.CODEC,f.aPerson());
+        t.store("BBody", UUIDUtil.CODEC,f.bBody());t.store("BPerson", UUIDUtil.CODEC,f.bPerson());t.store("HeadBody", UUIDUtil.CODEC,f.headBody());t.store("HeadPerson", UUIDUtil.CODEC,f.headPerson());
+        t.store("NeedId", UUIDUtil.CODEC,f.need());t.store("OldRoute", UUIDUtil.CODEC,old);t.store("Grant", UUIDUtil.CODEC,f.grant());t.store("SourceId", UUIDUtil.CODEC,f.source());
         t.put("Need",f.demand().save());t.put("Flow",SupplyFlowData.get(f.server()).save(new CompoundTag(),f.server().registryAccess()));
         t.put("Rights",RightsStateData.get(f.server()).save(new CompoundTag(),f.server().registryAccess()));
         t.putInt("SourceCount",SupplyFlowService.count(f.sourceBox(),FOOD));t.putInt("PantryCount",SupplyFlowService.count(f.pantry(),FOOD));
@@ -176,7 +182,7 @@ public final class PopulationHandoffGameTests {
         try {
             var server=f.server();var root=server.getWorldPath(LevelResource.ROOT).toAbsolutePath().normalize();
             NbtIo.writeCompressed(describe(f,old,start),root.resolve(MARKER));
-            server.saveEverything(false,true,false);net.neoforged.neoforge.common.IOUtilities.waitUntilIOWorkerComplete();
+            server.saveEverything(false,true,false);
             var destination=root.resolveSibling(root.getFileName()+"-handoff-snapshot");
             require(!Files.exists(destination),"snapshot must be new");Files.createDirectories(destination);
             try(var files=Files.walk(root)){for(var p:files.toList()) {
@@ -188,7 +194,7 @@ public final class PopulationHandoffGameTests {
     }
     private static Fixture restore(GameTestHelper h) {
         require(restored!=null,"independent JVM marker required");var t=restored;
-        return new Fixture(h.getLevel(),t.getUUID("Settlement"),t.getUUID("Household"),t.getUUID("ABody"),t.getUUID("APerson"),t.getUUID("BBody"),t.getUUID("BPerson"),t.getUUID("HeadBody"),t.getUUID("HeadPerson"),t.getUUID("NeedId"),t.getUUID("Grant"),t.getUUID("SourceId"));
+        return new Fixture(h.getLevel(),t.read("Settlement", UUIDUtil.CODEC).orElseThrow(),t.read("Household", UUIDUtil.CODEC).orElseThrow(),t.read("ABody", UUIDUtil.CODEC).orElseThrow(),t.read("APerson", UUIDUtil.CODEC).orElseThrow(),t.read("BBody", UUIDUtil.CODEC).orElseThrow(),t.read("BPerson", UUIDUtil.CODEC).orElseThrow(),t.read("HeadBody", UUIDUtil.CODEC).orElseThrow(),t.read("HeadPerson", UUIDUtil.CODEC).orElseThrow(),t.read("NeedId", UUIDUtil.CODEC).orElseThrow(),t.read("Grant", UUIDUtil.CODEC).orElseThrow(),t.read("SourceId", UUIDUtil.CODEC).orElseThrow());
     }
     private static void preDeath(Fixture f,SupplyFlowData.Route r,long start) {
         require(r.stage()==SupplyFlowData.Stage.HELD&&f.aBody().equals(r.carrierEntity())&&f.aPerson().equals(r.carrierCharacter()),"A really owns the original live claim");
@@ -221,24 +227,24 @@ public final class PopulationHandoffGameTests {
     }
     private static void run(GameTestHelper h) {
         var f=phase().endsWith("resume")?restore(h):fixture(h);long start=f.level().getGameTime();
-        long[] at={-1};UUID[] old={restored==null?null:restored.getUUID("OldRoute")};boolean[] returned={false},changed={false};CompoundTag[] unloaded={null};
+        long[] at={-1};UUID[] old={restored==null?null:restored.read("OldRoute", UUIDUtil.CODEC).orElseThrow()};boolean[] returned={false},changed={false};CompoundTag[] unloaded={null};
         if(restored!=null)at[0]=start;
         h.onEachTick(()->{
             long now=f.level().getGameTime();if(f.b()==null||f.actor(f.headBody())==null)return;
-            if(phase().endsWith("resume")){association(f);finish(h,f,old[0],restored.getLong("Started"),false);return;}
+            if(phase().endsWith("resume")){association(f);finish(h,f,old[0],restored.getLongOr("Started", 0L),false);return;}
             if(old[0]==null) {
                 var claim=f.routes().stream().filter(r->f.aBody().equals(r.carrierEntity())).findFirst().orElse(null);
                 if(claim==null)return;preDeath(f,claim,start);old[0]=claim.id();at[0]=now;f.b().setNoAi(false);
                 if(phase().equals("calibrate")){f.b().setCommand(NpcCommand.STAY);return;}
                 if(phase().equals("unload")) {
-                    unloaded[0]=f.a().saveWithoutId(new CompoundTag());
+                    unloaded[0]=com.jgeted.sagadyssey.core.MinecraftApi.saveEntity(f.a());
                     try{NbtIo.writeCompressed(unloaded[0],f.server().getWorldPath(LevelResource.ROOT).resolve("handoff-unloaded-body.nbt"));}catch(Exception x){throw new IllegalStateException(x);}
                     f.a().remove(Entity.RemovalReason.UNLOADED_TO_CHUNK);return;
                 }
                 if(phase().equals("no-candidate")||phase().equals("capacity"))f.b().setProfession(NpcProfession.NONE);
                 if(phase().equals("conflict"))f.b().setCommand(NpcCommand.STAY);
                 if(phase().equals("permission"))RightsStateData.get(f.server()).revoke(f.grant());
-                f.a().kill();dead(f,old[0]);record(f,old[0],start,"released");
+                com.jgeted.sagadyssey.core.MinecraftApi.kill(f.a());dead(f,old[0]);record(f,old[0],start,"released");
                 if(phase().equals("pre-save")){snapshot(f,old[0],start);h.succeed();}
                 return;
             }
@@ -247,7 +253,7 @@ public final class PopulationHandoffGameTests {
                 require(CharacterRegistryData.get(f.server()).byId(f.aPerson()).alive(),"unloaded A remains alive");
                 require(f.routes().size()==1&&f.aBody().equals(f.routes().getFirst().carrierEntity())&&f.routes().getFirst().stage()!=SupplyFlowData.Stage.CANCELLED&&f.routes().getFirst().stage()!=SupplyFlowData.Stage.REVIEW,"unload cannot recruit B or replace original claim");
                 if(now-at[0]<200){require(f.a()==null,"original body genuinely unavailable");return;}
-                if(!returned[0]){try{var n=new NpcBase(NpcEntityTypes.NPC_BASE.get(),f.level());n.load(NbtIo.readCompressed(f.server().getWorldPath(LevelResource.ROOT).resolve("handoff-unloaded-body.nbt"),NbtAccounter.unlimitedHeap()));f.level().addFreshEntity(n);require(n.getUUID().equals(f.aBody())&&n.getCharacterId().equals(f.aPerson()),"same unloaded body and character restored");returned[0]=true;}catch(Exception x){throw new IllegalStateException(x);}return;}
+                if(!returned[0]){try{var n=new NpcBase(NpcEntityTypes.NPC_BASE.get(),f.level());com.jgeted.sagadyssey.core.MinecraftApi.loadEntity(n, NbtIo.readCompressed(f.server().getWorldPath(LevelResource.ROOT).resolve("handoff-unloaded-body.nbt"),NbtAccounter.unlimitedHeap()));f.level().addFreshEntity(n);require(n.getUUID().equals(f.aBody())&&n.getCharacterId().equals(f.aPerson()),"same unloaded body and character restored");returned[0]=true;}catch(Exception x){throw new IllegalStateException(x);}return;}
                 finish(h,f,old[0],start,true);return;
             }
             dead(f,old[0]);

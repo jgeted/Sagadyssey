@@ -1,11 +1,13 @@
 package com.jgeted.sagadyssey.social.security;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.world.level.saveddata.SavedData;
+import com.jgeted.sagadyssey.worldsim.NbtSavedData;
 
 import javax.annotation.Nullable;
 import java.util.HashMap;
@@ -14,14 +16,14 @@ import java.util.Map;
 import java.util.UUID;
 import com.jgeted.sagadyssey.worldsim.rights.SubjectRef;
 
-public final class SecurityData extends SavedData {
+public final class SecurityData extends NbtSavedData {
     private static final String DATA_NAME = "sagadyssey_security";
     private static final Factory<SecurityData> FACTORY = new Factory<>(SecurityData::new, SecurityData::load);
     private final Map<UUID, SecurityIncident> incidents = new HashMap<>();
     private final Map<UUID, PatrolDispatch> dispatches = new HashMap<>();
 
     public static SecurityData get(MinecraftServer server) {
-        return server.overworld().getDataStorage().computeIfAbsent(FACTORY, DATA_NAME);
+        return server.overworld().getDataStorage().computeIfAbsent(FACTORY.type(DATA_NAME));
     }
 
     boolean addIncident(SecurityIncident value) {
@@ -70,14 +72,14 @@ public final class SecurityData extends SavedData {
 
     private static SecurityData load(CompoundTag tag, HolderLookup.Provider registries) {
         SecurityData data = new SecurityData();
-        ListTag incidents = tag.getList("Incidents", Tag.TAG_COMPOUND);
+        ListTag incidents = MinecraftApi.listOfType(tag, "Incidents", Tag.TAG_COMPOUND);
         for (int index = 0; index < incidents.size(); index++) {
-            SecurityIncident value = SecurityIncident.load(incidents.getCompound(index));
+            SecurityIncident value = SecurityIncident.load(incidents.getCompoundOrEmpty(index));
             data.incidents.put(value.id(), value);
         }
-        ListTag dispatches = tag.getList("Dispatches", Tag.TAG_COMPOUND);
+        ListTag dispatches = MinecraftApi.listOfType(tag, "Dispatches", Tag.TAG_COMPOUND);
         for (int index = 0; index < dispatches.size(); index++) {
-            PatrolDispatch value = PatrolDispatch.load(dispatches.getCompound(index));
+            PatrolDispatch value = PatrolDispatch.load(dispatches.getCompoundOrEmpty(index));
             data.dispatches.put(value.id(), value);
         }
         return data;

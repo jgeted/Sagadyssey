@@ -7,7 +7,7 @@ import com.jgeted.sagadyssey.npc.brain.plan.NpcPlanBlocker;
 import com.jgeted.sagadyssey.npc.brain.plan.NpcPlanStep;
 import com.jgeted.sagadyssey.npc.entity.NpcBase;
 import net.minecraft.core.BlockPos;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 
 import javax.annotation.Nullable;
 import java.util.HashMap;
@@ -21,7 +21,7 @@ import java.util.Objects;
  * {@link #recover} 会重新建立导航，而不是依赖 JVM 中遗失的临时路径。</p>
  */
 public final class MoveToBlockTaskExecutor implements NpcTaskExecutor {
-    public static final ResourceLocation ID = ResourceLocation.fromNamespaceAndPath(
+    public static final Identifier ID = Identifier.fromNamespaceAndPath(
             "sagadyssey", "move_to_block");
     public static final String DIMENSION = "dimension";
     public static final String X = "x";
@@ -57,7 +57,7 @@ public final class MoveToBlockTaskExecutor implements NpcTaskExecutor {
     }
 
     @Override
-    public ResourceLocation id() {
+    public Identifier id() {
         return ID;
     }
 
@@ -192,7 +192,7 @@ public final class MoveToBlockTaskExecutor implements NpcTaskExecutor {
 
     static Parameters parseParameters(Map<String, String> params) {
         if (params == null) throw new IllegalArgumentException("参数表缺失");
-        ResourceLocation dimension = ResourceLocation.tryParse(required(params, DIMENSION));
+        Identifier dimension = Identifier.tryParse(required(params, DIMENSION));
         if (dimension == null) throw new IllegalArgumentException("dimension 无法解析");
         int x = parseCoordinate(params, X);
         int y = parseCoordinate(params, Y);
@@ -247,7 +247,7 @@ public final class MoveToBlockTaskExecutor implements NpcTaskExecutor {
         return value > Long.MAX_VALUE - increment ? Long.MAX_VALUE : value + increment;
     }
 
-    static record Parameters(ResourceLocation dimension, BlockPos target,
+    static record Parameters(Identifier dimension, BlockPos target,
                              double speed, double range) {
     }
 
@@ -257,7 +257,7 @@ public final class MoveToBlockTaskExecutor implements NpcTaskExecutor {
     }
 
     interface MovementDriver {
-        ResourceLocation dimension();
+        Identifier dimension();
 
         boolean alive();
 
@@ -289,13 +289,13 @@ public final class MoveToBlockTaskExecutor implements NpcTaskExecutor {
         @Nullable
         private static MovementDriver from(NpcExecutionContext context) {
             if (!(context instanceof NpcEntityExecutionContext entityContext)
-                    || entityContext.level().isClientSide) return null;
+                    || entityContext.level().isClientSide()) return null;
             return new EntityMovementDriver(entityContext);
         }
 
         @Override
-        public ResourceLocation dimension() {
-            return context.level().dimension().location();
+        public Identifier dimension() {
+            return context.level().dimension().identifier();
         }
 
         @Override
@@ -305,8 +305,8 @@ public final class MoveToBlockTaskExecutor implements NpcTaskExecutor {
 
         @Override
         public boolean validHeight(int y) {
-            return y >= context.level().getMinBuildHeight()
-                    && y < context.level().getMaxBuildHeight();
+            return y >= context.level().getMinY()
+                    && y < context.level().getMaxY() + 1;
         }
 
         @Override

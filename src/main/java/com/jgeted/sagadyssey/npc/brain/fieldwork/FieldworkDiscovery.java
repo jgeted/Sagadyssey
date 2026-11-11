@@ -1,5 +1,7 @@
 package com.jgeted.sagadyssey.npc.brain.fieldwork;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+
 import com.jgeted.sagadyssey.npc.entity.FarmMode;
 import com.jgeted.sagadyssey.npc.entity.NpcBase;
 import com.jgeted.sagadyssey.npc.profession.NpcProfession;
@@ -29,9 +31,9 @@ public final class FieldworkDiscovery {
             min = min.below();
             max = max.above(4);
         }
-        int bottom = Math.max(npc.level().getMinBuildHeight(), min.getY());
-        int top = Math.min(npc.level().getMaxBuildHeight() - 1, max.getY());
-        return new FieldworkSearchArea(npc.level().dimension().location().toString(),
+        int bottom = Math.max(npc.level().getMinY(), min.getY());
+        int top = Math.min(npc.level().getMaxY(), max.getY());
+        return new FieldworkSearchArea(npc.level().dimension().identifier().toString(),
                 new BlockPos(min.getX(), bottom, min.getZ()), new BlockPos(max.getX(), top, max.getZ()));
     }
 
@@ -52,6 +54,7 @@ public final class FieldworkDiscovery {
         BlockState state = npc.level().getBlockState(pos);
         if (npc.getProfession() == NpcProfession.WORKER) {
             if(!com.jgeted.sagadyssey.social.growth.SettlementDevelopmentData.productionTarget(npc,state))return null;
+            if(!com.jgeted.sagadyssey.social.growth.SettlementResourceStock.wants(npc,state))return null;
             if (state.is(BlockTags.LOGS)) {
                 // 逐块从顶向下，防止先拆根导致高处作业不可达。
                 if (npc.level().getBlockState(pos.above()).is(BlockTags.LOGS) && allowed(npc, pos.above())) return null;
@@ -62,10 +65,11 @@ public final class FieldworkDiscovery {
                 return change(pos, state.is(BlockTags.LEAVES) ? FieldworkAction.Operation.CHOP : FieldworkAction.Operation.MINE,
                         state, Blocks.AIR.defaultBlockState(), null);
             }
-            if ((state.is(Blocks.DIRT) || state.is(Blocks.GRASS_BLOCK) || state.is(Blocks.GRAVEL))
+            if (state.is(com.jgeted.sagadyssey.social.growth.SettlementMaterials.COVER)
                     && npc.level().getBlockState(pos.above()).isAir()) {
                 for (int depth = 1; depth <= 5; depth++) {
-                    if (allowed(npc, pos.below(depth)) && mineTarget(npc.level().getBlockState(pos.below(depth)))) {
+                    if (allowed(npc, pos.below(depth)) && mineTarget(npc.level().getBlockState(pos.below(depth)))
+                            && com.jgeted.sagadyssey.social.growth.SettlementResourceStock.wants(npc,npc.level().getBlockState(pos.below(depth)))) {
                         return change(pos, FieldworkAction.Operation.MINE, state, Blocks.AIR.defaultBlockState(), null);
                     }
                 }
@@ -198,11 +202,7 @@ public final class FieldworkDiscovery {
     }
 
     public static boolean mineTarget(BlockState state) {
-        return state.is(Blocks.STONE) || state.is(Blocks.DEEPSLATE) || state.is(Blocks.COBBLESTONE)
-                || state.is(Blocks.COBBLED_DEEPSLATE) || state.is(BlockTags.COAL_ORES)
-                || state.is(BlockTags.IRON_ORES) || state.is(BlockTags.COPPER_ORES) || state.is(BlockTags.GOLD_ORES)
-                || state.is(BlockTags.DIAMOND_ORES) || state.is(BlockTags.REDSTONE_ORES)
-                || state.is(BlockTags.LAPIS_ORES) || state.is(BlockTags.EMERALD_ORES);
+        return com.jgeted.sagadyssey.social.growth.SettlementMaterials.mineable(state);
     }
 
     public static Block seedBlock(Item item) {
@@ -253,9 +253,9 @@ public final class FieldworkDiscovery {
             if (npc.level().hasChunkAt(p) && npc.level().getBlockState(p).is(BlockTags.LOGS)) return true;
         }
         // 树干已按单格砍完后，不能把尚未清理的同树树叶遗忘。只使用本 NPC 的已知作业记录。
-        for (var receipt : FieldworkData.get(npc.getServer()).receiptsFor(npc.getUUID())) {
+        for (var receipt : FieldworkData.get(MinecraftApi.server(npc)).receiptsFor(npc.getUUID())) {
             if (receipt.action().operation() == FieldworkAction.Operation.CHOP
-                    && receipt.action().dimension().equals(npc.level().dimension().location().toString())
+                    && receipt.action().dimension().equals(npc.level().dimension().identifier().toString())
                     && receipt.action().target().distSqr(pos) <= 12D
                     && (receipt.action().expectedState().contains("_log\"") || receipt.action().expectedState().contains("_wood\""))) return true;
         }

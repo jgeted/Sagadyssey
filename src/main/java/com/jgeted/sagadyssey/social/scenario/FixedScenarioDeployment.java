@@ -1,5 +1,7 @@
 package com.jgeted.sagadyssey.social.scenario;
 
+import net.minecraft.core.UUIDUtil;
+
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 
@@ -65,13 +67,13 @@ public final class FixedScenarioDeployment {
 
     public CompoundTag save() {
         CompoundTag tag = new CompoundTag();
-        tag.putUUID("Id", id);
+        tag.store("Id", UUIDUtil.CODEC, id);
         tag.putString("Scenario", scenarioId);
         tag.putInt("DefinitionRevision", definitionRevision);
         tag.putInt("PreviousDefinitionRevision", previousDefinitionRevision);
         tag.putString("Dimension", dimension);
         tag.putLong("Anchor", anchor.asLong());
-        if (requestedBy != null) tag.putUUID("RequestedBy", requestedBy);
+        if (requestedBy != null) tag.store("RequestedBy", UUIDUtil.CODEC, requestedBy);
         tag.putLong("Started", startedGameTime);
         tag.putBoolean("Repair", repair);
         tag.putString("Phase", phase.name());
@@ -83,18 +85,18 @@ public final class FixedScenarioDeployment {
 
     @Nullable
     public static FixedScenarioDeployment load(CompoundTag tag) {
-        if (!tag.hasUUID("Id") || !tag.contains("Scenario") || !tag.contains("Dimension")) return null;
-        FixedScenarioDeployment deployment = new FixedScenarioDeployment(tag.getUUID("Id"),
-                tag.getString("Scenario"), tag.getInt("DefinitionRevision"),
-                tag.getInt("PreviousDefinitionRevision"), tag.getString("Dimension"),
-                BlockPos.of(tag.getLong("Anchor")),
-                tag.hasUUID("RequestedBy") ? tag.getUUID("RequestedBy") : null,
-                tag.getLong("Started"), tag.getBoolean("Repair"));
-        try { deployment.phase = Phase.valueOf(tag.getString("Phase")); }
+        if (!tag.read("Id", UUIDUtil.CODEC).isPresent() || !tag.contains("Scenario") || !tag.contains("Dimension")) return null;
+        FixedScenarioDeployment deployment = new FixedScenarioDeployment(tag.read("Id", UUIDUtil.CODEC).orElseThrow(),
+                tag.getStringOr("Scenario", ""), tag.getIntOr("DefinitionRevision", 0),
+                tag.getIntOr("PreviousDefinitionRevision", 0), tag.getStringOr("Dimension", ""),
+                BlockPos.of(tag.getLongOr("Anchor", 0L)),
+                tag.read("RequestedBy", UUIDUtil.CODEC).isPresent() ? tag.read("RequestedBy", UUIDUtil.CODEC).orElseThrow() : null,
+                tag.getLongOr("Started", 0L), tag.getBooleanOr("Repair", false));
+        try { deployment.phase = Phase.valueOf(tag.getStringOr("Phase", "")); }
         catch (IllegalArgumentException ignored) { deployment.phase = Phase.FAILED; }
-        deployment.cursor = Math.max(0, tag.getInt("Cursor"));
-        deployment.error = tag.getString("Error");
-        deployment.testProfile = tag.getString("TestProfile");
+        deployment.cursor = Math.max(0, tag.getIntOr("Cursor", 0));
+        deployment.error = tag.getStringOr("Error", "");
+        deployment.testProfile = tag.getStringOr("TestProfile", "");
         return deployment;
     }
 }

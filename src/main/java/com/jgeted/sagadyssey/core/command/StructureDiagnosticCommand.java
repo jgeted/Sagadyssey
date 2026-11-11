@@ -1,5 +1,7 @@
 package com.jgeted.sagadyssey.core.command;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+
 import com.jgeted.sagadyssey.Sagadyssey;
 import com.jgeted.sagadyssey.core.structure.SagadysseyStructures;
 import com.mojang.brigadier.CommandDispatcher;
@@ -10,7 +12,7 @@ import net.minecraft.core.Holder;
 import net.minecraft.core.Registry;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.biome.Biome;
@@ -32,7 +34,7 @@ public class StructureDiagnosticCommand {
             Commands.literal("saga")
                 .then(Commands.literal("structures")
                     .then(Commands.literal("dump")
-                        .requires(src -> src.hasPermission(2))
+                        .requires(src -> MinecraftApi.hasPermission(src, 2))
                         .executes(ctx -> dump(ctx.getSource()))
                     )
                 )
@@ -54,9 +56,9 @@ public class StructureDiagnosticCommand {
 
     private static void dumpStructureRegistry(CommandSourceStack source) {
         Registry<Structure> registry = source.getServer().registryAccess()
-                .registryOrThrow(Registries.STRUCTURE);
+                .lookupOrThrow(Registries.STRUCTURE);
 
-        List<ResourceLocation> allKeys = registry.keySet().stream()
+        List<Identifier> allKeys = registry.keySet().stream()
                 .filter(k -> k.getNamespace().equals(Sagadyssey.MOD_ID))
                 .sorted()
                 .toList();
@@ -64,8 +66,8 @@ public class StructureDiagnosticCommand {
         source.sendSuccess(() -> Component.literal(
                 "§e[STRUCTURE] 共 " + registry.size() + " 个（sagadyssey: " + allKeys.size() + " 个）"), false);
 
-        for (ResourceLocation key : allKeys) {
-            Structure s = registry.get(key);
+        for (Identifier key : allKeys) {
+            Structure s = registry.getValue(key);
             if (s == null) {
                 source.sendSuccess(() -> Component.literal(
                         "  §c" + key + " → NULL（注册表返回 null！）"), false);
@@ -84,7 +86,7 @@ public class StructureDiagnosticCommand {
                     "  §c没有找到 sagadyssey 命名空间的结构！"), false);
 
             // 列出所有已注册结构供参考
-            List<ResourceLocation> all = registry.keySet().stream().sorted().limit(10).toList();
+            List<Identifier> all = registry.keySet().stream().sorted().limit(10).toList();
             source.sendSuccess(() -> Component.literal(
                     "  §7所有结构（前10个）: " + all), false);
         }
@@ -92,9 +94,9 @@ public class StructureDiagnosticCommand {
 
     private static void dumpStructureSetRegistry(CommandSourceStack source) {
         Registry<StructureSet> registry = source.getServer().registryAccess()
-                .registryOrThrow(Registries.STRUCTURE_SET);
+                .lookupOrThrow(Registries.STRUCTURE_SET);
 
-        List<ResourceLocation> allKeys = registry.keySet().stream()
+        List<Identifier> allKeys = registry.keySet().stream()
                 .filter(k -> k.getNamespace().equals(Sagadyssey.MOD_ID))
                 .sorted()
                 .toList();
@@ -102,8 +104,8 @@ public class StructureDiagnosticCommand {
         source.sendSuccess(() -> Component.literal(
                 "§e[STRUCTURE_SET] 共 " + registry.size() + " 个（sagadyssey: " + allKeys.size() + " 个）"), false);
 
-        for (ResourceLocation key : allKeys) {
-            StructureSet ss = registry.get(key);
+        for (Identifier key : allKeys) {
+            StructureSet ss = registry.getValue(key);
             if (ss == null) {
                 source.sendSuccess(() -> Component.literal("  §c" + key + " → NULL"), false);
             } else {
@@ -116,7 +118,7 @@ public class StructureDiagnosticCommand {
 
                 for (var entry : ss.structures()) {
                     String structKey = entry.structure().unwrapKey()
-                            .map(k -> k.location().toString())
+                            .map(k -> k.identifier().toString())
                             .orElse("unknown");
                     source.sendSuccess(() -> Component.literal(
                             "    - " + structKey + " (weight=" + entry.weight() + ")"), false);
@@ -132,9 +134,9 @@ public class StructureDiagnosticCommand {
 
     private static void dumpTemplatePoolRegistry(CommandSourceStack source) {
         Registry<StructureTemplatePool> registry = source.getServer().registryAccess()
-                .registryOrThrow(Registries.TEMPLATE_POOL);
+                .lookupOrThrow(Registries.TEMPLATE_POOL);
 
-        List<ResourceLocation> allKeys = registry.keySet().stream()
+        List<Identifier> allKeys = registry.keySet().stream()
                 .filter(k -> k.getNamespace().equals(Sagadyssey.MOD_ID))
                 .sorted()
                 .toList();
@@ -142,8 +144,8 @@ public class StructureDiagnosticCommand {
         source.sendSuccess(() -> Component.literal(
                 "§e[TEMPLATE_POOL] 共 " + registry.size() + " 个（sagadyssey: " + allKeys.size() + " 个）"), false);
 
-        for (ResourceLocation key : allKeys) {
-            StructureTemplatePool pool = registry.get(key);
+        for (Identifier key : allKeys) {
+            StructureTemplatePool pool = registry.getValue(key);
             if (pool == null) {
                 source.sendSuccess(() -> Component.literal("  §c" + key + " → NULL"), false);
             } else {
@@ -167,7 +169,7 @@ public class StructureDiagnosticCommand {
         var manager = level.getStructureManager();
 
         for (String id : SagadysseyStructures.getAllIds()) {
-            ResourceLocation loc = ResourceLocation.fromNamespaceAndPath(Sagadyssey.MOD_ID, id);
+            Identifier loc = Identifier.fromNamespaceAndPath(Sagadyssey.MOD_ID, id);
             Optional<?> template = manager.get(loc);
 
             if (template.isPresent()) {
@@ -201,7 +203,7 @@ public class StructureDiagnosticCommand {
         // 获取玩家脚下的生物群系
         Holder<Biome> biomeHolder = level.getBiome(pos);
         String biomeKey = biomeHolder.unwrapKey()
-                .map(k -> k.location().toString())
+                .map(k -> k.identifier().toString())
                 .orElse("unknown");
         source.sendSuccess(() -> Component.literal(
                 "  §7玩家位置: " + pos.getX() + ", " + pos.getY() + ", " + pos.getZ()), false);
@@ -217,7 +219,7 @@ public class StructureDiagnosticCommand {
 
         // 列出 possibleBiomes 中的所有 biome（最多 15 个）
         List<String> possibleBiomeNames = possibleBiomes.stream()
-                .map(h -> h.unwrapKey().map(k -> k.location().toString()).orElse("?"))
+                .map(h -> h.unwrapKey().map(k -> k.identifier().toString()).orElse("?"))
                 .sorted()
                 .limit(15)
                 .toList();
@@ -226,15 +228,15 @@ public class StructureDiagnosticCommand {
 
         // 对每个结构检查
         Registry<Structure> registry = source.getServer().registryAccess()
-                .registryOrThrow(Registries.STRUCTURE);
+                .lookupOrThrow(Registries.STRUCTURE);
 
-        List<ResourceLocation> ourKeys = registry.keySet().stream()
+        List<Identifier> ourKeys = registry.keySet().stream()
                 .filter(k -> k.getNamespace().equals(Sagadyssey.MOD_ID))
                 .sorted()
                 .toList();
 
-        for (ResourceLocation key : ourKeys) {
-            Structure s = registry.get(key);
+        for (Identifier key : ourKeys) {
+            Structure s = registry.getValue(key);
             if (s == null) continue;
 
             // 1. 玩家位置 biome 检查（HolderSet.contains）
@@ -246,7 +248,7 @@ public class StructureDiagnosticCommand {
             // 逐个 biome 检查
             List<String> detailLines = new java.util.ArrayList<>();
             for (Holder<Biome> h : s.biomes().stream().limit(6).toList()) {
-                String name = h.unwrapKey().map(k -> k.location().toString()).orElse("?");
+                String name = h.unwrapKey().map(k -> k.identifier().toString()).orElse("?");
                 boolean inPossible = possibleBiomes.contains(h);
                 boolean isCurrent = h.equals(biomeHolder);
                 String marker = inPossible ? "§a✓" : "§c✗";
@@ -286,9 +288,9 @@ public class StructureDiagnosticCommand {
         source.sendSuccess(() -> Component.literal("§e[StructureSet 引用完整性]"), false);
 
         Registry<Structure> structReg = source.getServer().registryAccess()
-                .registryOrThrow(Registries.STRUCTURE);
+                .lookupOrThrow(Registries.STRUCTURE);
         Registry<StructureSet> setReg = source.getServer().registryAccess()
-                .registryOrThrow(Registries.STRUCTURE_SET);
+                .lookupOrThrow(Registries.STRUCTURE_SET);
 
         ServerLevel level = source.getLevel();
         var genState = level.getChunkSource().getGeneratorState();
@@ -302,9 +304,9 @@ public class StructureDiagnosticCommand {
         java.util.Set<String> possibleSetNames = new java.util.HashSet<>();
         java.util.Set<String> allSetNames = new java.util.HashSet<>();
         for (var holder : genState.possibleStructureSets()) {
-            holder.unwrapKey().ifPresent(k -> possibleSetNames.add(k.location().toString()));
+            holder.unwrapKey().ifPresent(k -> possibleSetNames.add(k.identifier().toString()));
         }
-        for (ResourceLocation k : setReg.keySet()) {
+        for (Identifier k : setReg.keySet()) {
             allSetNames.add(k.toString());
         }
         java.util.Set<String> filteredOut = new java.util.HashSet<>(allSetNames);
@@ -331,16 +333,16 @@ public class StructureDiagnosticCommand {
         // 直接测试 getPlacementsForStructure
         source.sendSuccess(() -> Component.literal("§e[getPlacementsForStructure 直接调用]"), false);
 
-        List<ResourceLocation> ourKeys = structReg.keySet().stream()
+        List<Identifier> ourKeys = structReg.keySet().stream()
                 .filter(k -> k.getNamespace().equals(Sagadyssey.MOD_ID))
                 .sorted()
                 .toList();
 
-        for (ResourceLocation key : ourKeys) {
-            Structure structFromReg = structReg.get(key);
+        for (Identifier key : ourKeys) {
+            Structure structFromReg = structReg.getValue(key);
             if (structFromReg == null) continue;
 
-            StructureSet structureSet = setReg.get(key);
+            StructureSet structureSet = setReg.getValue(key);
             if (structureSet == null) continue;
 
             boolean foundSelf = false;
@@ -348,7 +350,7 @@ public class StructureDiagnosticCommand {
                 var structHolder = entry.structure();
                 Structure structFromSet = structHolder.value();
                 String setKey = structHolder.unwrapKey()
-                        .map(k -> k.location().toString())
+                        .map(k -> k.identifier().toString())
                         .orElse("???");
 
                 if (!setKey.equals(key.toString())) continue;

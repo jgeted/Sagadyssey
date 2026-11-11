@@ -9,7 +9,7 @@ import com.jgeted.sagadyssey.worldsim.rights.RightsStateData;
 import com.jgeted.sagadyssey.worldsim.rights.RightsVerdict;
 import com.jgeted.sagadyssey.worldsim.rights.SubjectRef;
 import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.Container;
 import net.minecraft.world.item.Item;
@@ -279,11 +279,11 @@ public final class ProductionService {
     }
 
     private static ItemStack outputStack(ProductionMaterial output) {
-        ResourceLocation id = ResourceLocation.tryParse(output.fingerprint().itemId());
+        Identifier id = Identifier.tryParse(output.fingerprint().itemId());
         if (id == null || !BuiltInRegistries.ITEM.containsKey(id)) {
             throw new IllegalStateException("未知成品物品");
         }
-        Item item = BuiltInRegistries.ITEM.get(id);
+        Item item = BuiltInRegistries.ITEM.getValue(id);
         ItemStack stack = new ItemStack(item, output.quantity());
         if (output.quantity() > stack.getMaxStackSize()) {
             throw new IllegalStateException("单批成品超过堆叠上限");

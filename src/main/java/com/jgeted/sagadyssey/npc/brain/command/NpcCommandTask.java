@@ -1,5 +1,7 @@
 package com.jgeted.sagadyssey.npc.brain.command;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+
 import com.jgeted.sagadyssey.npc.ai.MovementProgress;
 import com.jgeted.sagadyssey.npc.brain.execution.*;
 import com.jgeted.sagadyssey.npc.brain.fieldwork.FieldworkRoutes;
@@ -7,18 +9,18 @@ import com.jgeted.sagadyssey.npc.brain.plan.*;
 import com.jgeted.sagadyssey.npc.entity.*;
 import com.jgeted.sagadyssey.social.character.CharacterRegistry;
 import net.minecraft.core.BlockPos;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import java.util.*;
 
 /** Finite legs share the only noncombat execution bridge. No teleport or remote completion. */
 public final class NpcCommandTask implements NpcTaskExecutor {
-    public static final ResourceLocation ID=ResourceLocation.fromNamespaceAndPath("sagadyssey","command_leg");
-    public static final ResourceLocation PROVIDER=ResourceLocation.fromNamespaceAndPath("sagadyssey","player_command");
+    public static final Identifier ID=Identifier.fromNamespaceAndPath("sagadyssey","command_leg");
+    public static final Identifier PROVIDER=Identifier.fromNamespaceAndPath("sagadyssey","player_command");
     private final Map<UUID,MovementProgress> movement=new HashMap<>();
     @Override public void forget(UUID body,UUID plan){movement.remove(plan);}
-    @Override public ResourceLocation id(){return ID;}
+    @Override public Identifier id(){return ID;}
     public static Optional<NpcPlan> choose(NpcBase npc,long now) {
-        var intent=NpcCommandData.get(npc.getServer()).active(npc.getCharacterId()).orElse(null);
+        var intent=NpcCommandData.get(MinecraftApi.server(npc)).active(npc.getCharacterId()).orElse(null);
         if(intent==null||intent.command()==NpcCommand.WORK||intent.closed()||now>=intent.expires()
                 ||npc.getTarget()!=null||!NpcCommandService.authorized(npc,intent,now))return Optional.empty();
         Map<String,String> params=new HashMap<>();params.put("intent",intent.id().toString());params.put("leg",Integer.toString(intent.leg()));
@@ -44,7 +46,7 @@ public final class NpcCommandTask implements NpcTaskExecutor {
     @Override public TaskTickResult start(NpcExecutionContext raw,NpcPlan p,NpcPlanStep s){return tick(raw,p,s);}
     @Override public TaskTickResult recover(NpcExecutionContext raw,NpcPlan p,NpcPlanStep s){return tick(raw,p,s);}
     @Override public TaskTickResult tick(NpcExecutionContext raw,NpcPlan p,NpcPlanStep s){
-        var c=(NpcEntityExecutionContext)raw;var npc=c.npc();var data=NpcCommandData.get(npc.getServer());
+        var c=(NpcEntityExecutionContext)raw;var npc=c.npc();var data=NpcCommandData.get(MinecraftApi.server(npc));
         var intent=data.find(UUID.fromString(s.params().get("intent")));
         if(intent==null||intent.status()!=NpcCommandIntent.Status.ACTIVE||c.gameTime()>=intent.expires()
                 ||!NpcCommandService.authorized(npc,intent,c.gameTime()))return failed(npc,p,"命令或原授权失效");
@@ -53,7 +55,7 @@ public final class NpcCommandTask implements NpcTaskExecutor {
         BlockPos destination;
         switch(intent.command()) {
             case FOLLOW -> {
-                var player=npc.getServer().getPlayerList().getPlayers().stream().filter(v->v.getUUID().equals(intent.player())).findFirst().orElse(null);
+                var player=MinecraftApi.server(npc).getPlayerList().getPlayers().stream().filter(v->v.getUUID().equals(intent.player())).findFirst().orElse(null);
                 if(player==null||!player.isAlive()||player.level()!=npc.level()
                         ||!intent.issuer().equals(CharacterRegistry.currentId(player)))
                     return failed(npc,p,"原发令人物离线、换身或不在本维度；不追随替代人物");
@@ -82,7 +84,7 @@ public final class NpcCommandTask implements NpcTaskExecutor {
         return TaskTickResult.running("向命令目标移动");
     }
     private TaskTickResult failed(NpcBase npc,NpcPlan p,String detail){movement.remove(p.id());npc.getNavigation().stop();
-        var data=NpcCommandData.get(npc.getServer());var i=data.find(UUID.fromString(p.currentStep().params().get("intent")));
+        var data=NpcCommandData.get(MinecraftApi.server(npc));var i=data.find(UUID.fromString(p.currentStep().params().get("intent")));
         if(i!=null&&!i.closed()){data.put(i.update(NpcCommandIntent.Status.CANCELLED,i.leg(),npc.level().getGameTime(),detail));npc.setCommand(i.previous());}
         return TaskTickResult.failed(detail);
     }

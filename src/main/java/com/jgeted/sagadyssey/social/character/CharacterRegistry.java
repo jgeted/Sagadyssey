@@ -13,13 +13,13 @@ public final class CharacterRegistry {
     private CharacterRegistry() {}
 
     public static CharacterRecord ensureCurrent(ServerPlayer player) {
-        return CharacterRegistryData.get(player.server)
+        return CharacterRegistryData.get(player.level().getServer())
                 .ensureCurrent(player, PlayerIdentityAttachments.get(player));
     }
 
     @Nullable
     public static CharacterRecord current(ServerPlayer player) {
-        return CharacterRegistryData.get(player.server).current(player.getUUID());
+        return CharacterRegistryData.get(player.level().getServer()).current(player.getUUID());
     }
 
     @Nullable
@@ -35,12 +35,12 @@ public final class CharacterRegistry {
 
     public static UUID legacyOwnerCharacter(ServerPlayer player) {
         ensureCurrent(player);
-        return CharacterRegistryData.get(player.server).legacyOwnerCharacter(player.getUUID());
+        return CharacterRegistryData.get(player.level().getServer()).legacyOwnerCharacter(player.getUUID());
     }
 
     public static void updateIdentity(ServerPlayer player, NpcSocialClass socialClass,
                                       NpcOffice office, String factionId) {
-        CharacterRegistryData.get(player.server)
+        CharacterRegistryData.get(player.level().getServer())
                 .updateIdentity(player.getUUID(), socialClass, office, factionId);
     }
 }

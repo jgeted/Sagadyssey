@@ -44,7 +44,7 @@ public final class ChapelBootstrapService{
         if(SupplyFlowService.container(server,point)==null)throw new IllegalArgumentException("physical loaded treasury/alms container required");return point;
     }
     public static InstitutionOffice appoint(MinecraftServer server,TempleRecord temple,SubjectRef actor,NpcBase holder,TempleRecord.Role role){
-        if(!holder.level().dimension().location().toString().equals(temple.alms().dimension()))throw new IllegalArgumentException("office holder must be in local dimension");
+        if(!holder.level().dimension().identifier().toString().equals(temple.alms().dimension()))throw new IllegalArgumentException("office holder must be in local dimension");
         var d=InstitutionData.get(server);long now=server.overworld().getGameTime();
         if(!d.authority(actor,temple.id(),OfficeAuthority.APPOINT_OFFICER,now).allowed())throw new IllegalStateException("no appointment authority");
         String title=switch(role){case CLERGY_OFFICIANT->"主持司祭";case DEACON_STEWARD->"济贫执事";case COMMUNITY_RELIGIOUS->"社区修士/修女";case SCRIBE_TEACHER->"抄写员/教员";case CHAPEL_WATCHMAN->"教堂看守";case TEMPLE_REPRESENTATIVE->"地方教堂协定代表";};

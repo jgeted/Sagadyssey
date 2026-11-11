@@ -1,5 +1,8 @@
 package com.jgeted.sagadyssey.npc.handover;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+import net.minecraft.core.UUIDUtil;
+
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
@@ -37,8 +40,8 @@ public record SupplyPointPolicy(UUID id, UUID containerId, String dimension, Blo
 
     CompoundTag save() {
         CompoundTag tag = new CompoundTag();
-        tag.putUUID("Id", id);
-        tag.putUUID("ContainerId", containerId);
+        tag.store("Id", UUIDUtil.CODEC, id);
+        tag.store("ContainerId", UUIDUtil.CODEC, containerId);
         tag.putString("Dimension", dimension);
         tag.putLong("Position", position.asLong());
         tag.putString("Category", category.name());
@@ -49,25 +52,25 @@ public record SupplyPointPolicy(UUID id, UUID containerId, String dimension, Blo
         beneficiaries.stream().map(UUID::toString).sorted()
                 .forEach(value -> beneficiaryTags.add(StringTag.valueOf(value)));
         tag.put("Beneficiaries", beneficiaryTags);
-        tag.putUUID("EstablishedBy", establishedBy);
+        tag.store("EstablishedBy", UUIDUtil.CODEC, establishedBy);
         tag.putBoolean("Enabled", enabled);
         return tag;
     }
 
     static SupplyPointPolicy load(CompoundTag tag) {
         Set<UUID> beneficiaries = new HashSet<>();
-        ListTag list = tag.getList("Beneficiaries", Tag.TAG_STRING);
+        ListTag list = MinecraftApi.listOfType(tag, "Beneficiaries", Tag.TAG_STRING);
         for (int index = 0; index < list.size(); index++) {
-            try { beneficiaries.add(UUID.fromString(list.getString(index))); }
+            try { beneficiaries.add(UUID.fromString(list.getStringOr(index, ""))); }
             catch (IllegalArgumentException ignored) { }
         }
         SupplyCategory category;
-        try { category = SupplyCategory.valueOf(tag.getString("Category")); }
+        try { category = SupplyCategory.valueOf(tag.getStringOr("Category", "")); }
         catch (IllegalArgumentException ignored) { category = SupplyCategory.MATERIAL; }
-        return new SupplyPointPolicy(tag.getUUID("Id"), tag.getUUID("ContainerId"),
-                tag.getString("Dimension"), BlockPos.of(tag.getLong("Position")), category,
-                tag.getInt("MinimumReserve"), tag.getInt("MaximumPerClaim"),
-                tag.getLong("CooldownTicks"), beneficiaries, tag.getUUID("EstablishedBy"),
-                tag.getBoolean("Enabled"));
+        return new SupplyPointPolicy(tag.read("Id", UUIDUtil.CODEC).orElseThrow(), tag.read("ContainerId", UUIDUtil.CODEC).orElseThrow(),
+                tag.getStringOr("Dimension", ""), BlockPos.of(tag.getLongOr("Position", 0L)), category,
+                tag.getIntOr("MinimumReserve", 0), tag.getIntOr("MaximumPerClaim", 0),
+                tag.getLongOr("CooldownTicks", 0L), beneficiaries, tag.read("EstablishedBy", UUIDUtil.CODEC).orElseThrow(),
+                tag.getBooleanOr("Enabled", false));
     }
 }

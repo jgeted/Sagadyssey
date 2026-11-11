@@ -1,24 +1,26 @@
 package com.jgeted.sagadyssey.npc.brain.command;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.*;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.world.level.saveddata.SavedData;
+import com.jgeted.sagadyssey.worldsim.NbtSavedData;
 import net.minecraft.world.level.storage.LevelResource;
 import java.nio.file.Files;
 import java.util.*;
 
 /** Schema 1: absent old-world file means no imported authority; corrupt file fails closed. */
-public final class NpcCommandData extends SavedData {
+public final class NpcCommandData extends NbtSavedData {
     public static final String NAME="sagadyssey_npc_commands_v3";
     public static final Factory<NpcCommandData> FACTORY=new Factory<>(NpcCommandData::new,NpcCommandData::load);
     private final Map<UUID,NpcCommandIntent> intents=new LinkedHashMap<>();
     private final Map<UUID,UUID> active=new HashMap<>(), queued=new HashMap<>();
     public static NpcCommandData get(MinecraftServer server) {
-        var storage=server.overworld().getDataStorage();var d=storage.get(FACTORY,NAME);if(d!=null)return d;
+        var storage=server.overworld().getDataStorage();var d=storage.get(FACTORY.type(NAME));if(d!=null)return d;
         if(Files.exists(server.getWorldPath(LevelResource.ROOT).resolve("data").resolve(NAME+".dat")))
             throw new IllegalStateException("existing NPC command ledger unreadable; restore consistent backup");
-        d=new NpcCommandData();storage.set(NAME,d);return d;
+        d=new NpcCommandData();storage.set(FACTORY.type(NAME),d);return d;
     }
     public List<NpcCommandIntent> all(){return List.copyOf(intents.values());}
     public List<NpcCommandIntent> known(UUID issuer,UUID character){return intents.values().stream()
@@ -43,8 +45,8 @@ public final class NpcCommandData extends SavedData {
     }
     @Override public CompoundTag save(CompoundTag t,HolderLookup.Provider lookup){t.putInt("Schema",1);var list=new ListTag();intents.values().forEach(i->list.add(i.save()));t.put("Intents",list);return t;}
     public static NpcCommandData load(CompoundTag t,HolderLookup.Provider lookup){
-        if(!t.contains("Schema",Tag.TAG_INT)||t.getInt("Schema")!=1||!(t.get("Intents") instanceof ListTag list)
-                ||list.size()>4096||!list.isEmpty()&&list.getElementType()!=Tag.TAG_COMPOUND)
+        if(!MinecraftApi.containsTag(t, "Schema",Tag.TAG_INT)||t.getIntOr("Schema", 0)!=1||!(t.get("Intents") instanceof ListTag list)
+                ||list.size()>4096||!list.isEmpty()&&MinecraftApi.elementType(list)!=Tag.TAG_COMPOUND)
             throw new IllegalArgumentException("unsupported/corrupt command ledger");
         var d=new NpcCommandData();for(var tag:list){var i=NpcCommandIntent.load((CompoundTag)tag);if(d.find(i.id())!=null)throw new IllegalArgumentException("duplicate command id");d.put(i);}return d;
     }

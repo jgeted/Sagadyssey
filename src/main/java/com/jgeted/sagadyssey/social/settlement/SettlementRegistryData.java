@@ -1,5 +1,7 @@
 package com.jgeted.sagadyssey.social.settlement;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+
 import com.jgeted.sagadyssey.social.history.WorldHistoryData;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
@@ -7,7 +9,7 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.world.level.saveddata.SavedData;
+import com.jgeted.sagadyssey.worldsim.NbtSavedData;
 
 import javax.annotation.Nullable;
 import java.nio.charset.StandardCharsets;
@@ -18,7 +20,7 @@ import java.util.Map;
 import java.util.UUID;
 
 /** 世界级聚落与建筑索引。所有写入都必须发生在服务器主线程。 */
-public final class SettlementRegistryData extends SavedData {
+public final class SettlementRegistryData extends NbtSavedData {
     private static final String DATA_NAME = "sagadyssey_settlements";
     private static final int AUTO_ATTACH_RADIUS = 128;
     private static final Factory<SettlementRegistryData> FACTORY =
@@ -28,7 +30,7 @@ public final class SettlementRegistryData extends SavedData {
     private final Map<String, BuildingRecord> buildings = new HashMap<>();
 
     public static SettlementRegistryData get(MinecraftServer server) {
-        return server.overworld().getDataStorage().computeIfAbsent(FACTORY, DATA_NAME);
+        return server.overworld().getDataStorage().computeIfAbsent(FACTORY.type(DATA_NAME));
     }
 
     public List<SettlementRecord> allSettlements() {
@@ -207,14 +209,14 @@ public final class SettlementRegistryData extends SavedData {
 
     static SettlementRegistryData load(CompoundTag tag, HolderLookup.Provider registries) {
         SettlementRegistryData data = new SettlementRegistryData();
-        ListTag settlementList = tag.getList("Settlements", Tag.TAG_COMPOUND);
+        ListTag settlementList = MinecraftApi.listOfType(tag, "Settlements", Tag.TAG_COMPOUND);
         for (int i = 0; i < settlementList.size(); i++) {
-            SettlementRecord record = SettlementRecord.load(settlementList.getCompound(i));
+            SettlementRecord record = SettlementRecord.load(settlementList.getCompoundOrEmpty(i));
             data.settlements.put(record.id(), record);
         }
-        ListTag buildingList = tag.getList("Buildings", Tag.TAG_COMPOUND);
+        ListTag buildingList = MinecraftApi.listOfType(tag, "Buildings", Tag.TAG_COMPOUND);
         for (int i = 0; i < buildingList.size(); i++) {
-            BuildingRecord record = BuildingRecord.load(buildingList.getCompound(i));
+            BuildingRecord record = BuildingRecord.load(buildingList.getCompoundOrEmpty(i));
             data.buildings.put(record.key(), record);
         }
         return data;

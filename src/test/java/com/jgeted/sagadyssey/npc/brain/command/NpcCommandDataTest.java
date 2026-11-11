@@ -1,5 +1,7 @@
 package com.jgeted.sagadyssey.npc.brain.command;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+
 import com.jgeted.sagadyssey.npc.entity.NpcCommand;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.*;
@@ -20,7 +22,7 @@ class NpcCommandDataTest {
     @Test void absentAuthorityEvidenceRejected(){var t=intent(UUID.randomUUID()).save();t.put("Evidence",new ListTag());assertThrows(IllegalArgumentException.class,()->NpcCommandIntent.load(t));}
     @Test void noImplicitUnlimitedLifetime(){var t=intent(UUID.randomUUID()).save();t.putLong("Expires",24101);assertThrows(IllegalArgumentException.class,()->NpcCommandIntent.load(t));t.putLong("Expires",100);assertThrows(IllegalArgumentException.class,()->NpcCommandIntent.load(t));}
     @Test void unknownSchemaAndMissingCriticalFieldsFailClosed(){var d=new NpcCommandData();var t=d.save(new CompoundTag(),null);t.putInt("Schema",2);assertThrows(IllegalArgumentException.class,()->NpcCommandData.load(t,null));var i=intent(UUID.randomUUID()).save();i.remove("Started");assertThrows(IllegalArgumentException.class,()->NpcCommandIntent.load(i));}
-    @Test void duplicateSavedIdsFailClosed(){var d=new NpcCommandData();d.put(intent(UUID.randomUUID()));var t=d.save(new CompoundTag(),null);var list=t.getList("Intents",Tag.TAG_COMPOUND);list.add(list.get(0).copy());assertThrows(IllegalArgumentException.class,()->NpcCommandData.load(t,null));}
+    @Test void duplicateSavedIdsFailClosed(){var d=new NpcCommandData();d.put(intent(UUID.randomUUID()));var t=d.save(new CompoundTag(),null);var list=MinecraftApi.listOfType(t, "Intents",Tag.TAG_COMPOUND);list.add(list.get(0).copy());assertThrows(IllegalArgumentException.class,()->NpcCommandData.load(t,null));}
     @Test void commandNeverGrantsEquipmentOrPrivateInventoryScope(){assertNull(NpcCommandIntent.scope(NpcCommand.IDLE));assertEquals(com.jgeted.sagadyssey.social.service.AuthorityScope.WORK,NpcCommandIntent.scope(NpcCommand.WORK));assertEquals(com.jgeted.sagadyssey.social.service.AuthorityScope.PATROL,NpcCommandIntent.scope(NpcCommand.PATROL));}
     @Test void ordinaryProjectionContainsOnlyThisIssuersRequestsForThisPerson(){var d=new NpcCommandData();var i=intent(UUID.randomUUID());var other=intent(UUID.randomUUID());d.put(i);d.put(other);assertEquals(List.of(i),d.known(i.issuer(),i.character()));assertTrue(d.known(other.issuer(),i.character()).isEmpty());assertTrue(d.known(i.issuer(),other.character()).isEmpty());assertThrows(UnsupportedOperationException.class,()->d.known(i.issuer(),i.character()).clear());}
 }

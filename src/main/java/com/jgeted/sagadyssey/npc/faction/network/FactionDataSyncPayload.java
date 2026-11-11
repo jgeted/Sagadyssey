@@ -10,7 +10,7 @@ import io.netty.buffer.ByteBuf;
 import io.netty.handler.codec.DecoderException;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
 
 import java.util.HashMap;
@@ -38,7 +38,7 @@ public record FactionDataSyncPayload(
     }
 
     public static final Type<FactionDataSyncPayload> TYPE = new Type<>(
-            ResourceLocation.fromNamespaceAndPath(Sagadyssey.MOD_ID, "faction_data_sync")
+            Identifier.fromNamespaceAndPath(Sagadyssey.MOD_ID, "faction_data_sync")
     );
 
     public static final StreamCodec<ByteBuf, FactionDataSyncPayload> STREAM_CODEC = StreamCodec.of(

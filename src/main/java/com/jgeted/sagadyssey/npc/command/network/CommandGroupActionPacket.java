@@ -18,7 +18,7 @@ import io.netty.buffer.ByteBuf;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
@@ -32,7 +32,7 @@ import java.util.UUID;
 /** 客户端发送的集团管理操作；所有成员和物品权限都在服务端复核。 */
 public record CommandGroupActionPacket(String action) implements CustomPacketPayload {
     public static final Type<CommandGroupActionPacket> TYPE = new Type<>(
-            ResourceLocation.fromNamespaceAndPath(Sagadyssey.MOD_ID, "command_group_action"));
+            Identifier.fromNamespaceAndPath(Sagadyssey.MOD_ID, "command_group_action"));
 
     public static final StreamCodec<ByteBuf, CommandGroupActionPacket> STREAM_CODEC = StreamCodec.of(
             (buf, packet) -> writeString(buf, packet.action),
@@ -181,8 +181,8 @@ public record CommandGroupActionPacket(String action) implements CustomPacketPay
 
     @Nullable
     public static NpcBase findOwnedNpc(ServerPlayer player, UUID characterId) {
-        NpcBase npc = CharacterRegistryData.get(player.server)
-                .findLoadedNpc(player.server, characterId);
+        NpcBase npc = CharacterRegistryData.get(player.level().getServer())
+                .findLoadedNpc(player.level().getServer(), characterId);
         return npc != null && npc.isAlive() && npc.isOwnedBy(player.getUUID()) ? npc : null;
     }
 
@@ -199,9 +199,9 @@ public record CommandGroupActionPacket(String action) implements CustomPacketPay
                                       boolean dangerous) {
         UUID principal = CharacterRegistry.currentId(player);
         if (!player.isAlive() || principal == null) return false;
-        return ServiceRelationshipData.get(player.server).authorize(principal,
+        return ServiceRelationshipData.get(player.level().getServer()).authorize(principal,
                 npc.getCharacterId(), scope, dangerous,
-                player.serverLevel().getGameTime()).allowed();
+                player.level().getGameTime()).allowed();
     }
 
     private static void writeString(ByteBuf buf, String text) {

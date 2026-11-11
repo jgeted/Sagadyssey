@@ -1,5 +1,7 @@
 package com.jgeted.sagadyssey.core.command;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+
 import com.jgeted.sagadyssey.core.LegacyFeatureFlags;
 import com.jgeted.sagadyssey.core.research.ResearchAttachments;
 import com.jgeted.sagadyssey.core.research.ResearchNode;
@@ -61,7 +63,7 @@ public class ResearchCommand {
                         )
                         // /research unlock [科技ID]
                         .then(Commands.literal("unlock")
-                                .requires(src -> src.hasPermission(2))
+                                .requires(src -> MinecraftApi.hasPermission(src, 2))
                                 .then(Commands.argument("nodeId", StringArgumentType.string())
                                         .executes(ctx -> {
                                             ServerPlayer player = ctx.getSource().getPlayerOrException();
@@ -80,7 +82,7 @@ public class ResearchCommand {
                         )
                         // /research give [玩家] [数量]
                         .then(Commands.literal("give")
-                                .requires(src -> src.hasPermission(2))
+                                .requires(src -> MinecraftApi.hasPermission(src, 2))
                                 .then(Commands.argument("player", EntityArgument.player())
                                         .then(Commands.argument("amount", IntegerArgumentType.integer(1))
                                                 .executes(ctx -> {

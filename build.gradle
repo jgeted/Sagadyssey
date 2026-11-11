@@ -1,7 +1,7 @@
 plugins {
     id 'java-library'
     id 'maven-publish'
-    id 'net.neoforged.moddev' version '2.0.141'
+    id 'net.neoforged.moddev' version '2.0.148'
     id 'idea'
 }
 
@@ -34,7 +34,7 @@ base {
     archivesName = mod_id
 }
 
-// Mojang ships Java 21 to end users in 1.21.1, so mods should target Java 21.
+// Mojang ships Java 21 to end users in 1.21.11, so mods should target Java 21.
 java.toolchain.languageVersion = JavaLanguageVersion.of(21)
 
 neoForge {
@@ -97,6 +97,8 @@ neoForge {
         // The gametest system is also enabled by default for other run configs under the /test command.
         gameTestServer {
             type = "gameTestServer"
+            // Evidence emits INFO receipts; suppress per-tick DEBUG chatter only in this test runner.
+            systemProperty 'forge.logging.console.level', 'info'
             systemProperty 'sagadyssey.pickaxe.enabled', providers.gradleProperty('pickaxeBatchOnly').orElse('false').get()
             systemProperty 'sagadyssey.pickaxe.phase', providers.gradleProperty('pickaxeBatchPhase').orElse('disabled').get()
             systemProperty 'sagadyssey.cancelled.enabled', providers.gradleProperty('cancelRecoveryOnly').orElse('false').get()
@@ -117,10 +119,23 @@ neoForge {
             }
             gameDirectory = project.file(phase9RunId == null ? 'run/phase4-gametest'
                     : "run/phase9-gametest/${phase9RunId}")
+            def restartFrom = providers.gradleProperty('gameTestRestartFrom').orNull
+            if (restartFrom != null) {
+                if (phase9RunId == null || !(restartFrom ==~ /[A-Za-z0-9_-]{1,64}/) || restartFrom == phase9RunId) {
+                    throw new GradleException('gameTestRestartFrom requires a separate isolated phase9GameTestRun label')
+                }
+                def runsDirectory = project.file('run/phase9-gametest').canonicalFile.toPath()
+                def stoppedWorld = project.file("run/phase9-gametest/${restartFrom}/gametestserver/gametestworld").canonicalFile
+                if (!stoppedWorld.toPath().startsWith(runsDirectory) || !new File(stoppedWorld, 'level.dat').isFile()) {
+                    throw new GradleException('gameTestRestartFrom requires a stopped 1.21.11 GameTest world')
+                }
+                systemProperty 'sagadyssey.gametest.restartFrom', stoppedWorld.absolutePath
+            }
             systemProperty 'sagadyssey.phase4.requireRestart', providers.gradleProperty('phase4RequireRestart').orElse('false').get()
             systemProperty 'sagadyssey.nearCycle.phase', providers.gradleProperty('nearCyclePhase').orElse('baseline').get()
             systemProperty 'sagadyssey.phase9.soak', providers.gradleProperty('phase9Soak').orElse('false').get()
             systemProperty 'sagadyssey.safety.phase', providers.gradleProperty('safetyPhase').orElse('baseline').get()
+            systemProperty 'sagadyssey.playability.phase', providers.gradleProperty('playabilityPhase').orElse('all').get()
             systemProperty 'sagadyssey.redesign.guardOnly', providers.gradleProperty('redesignGuardOnly').orElse('false').get()
             systemProperty 'sagadyssey.phase10.profile', providers.gradleProperty('phase10Profile').orElse('false').get()
             systemProperty 'sagadyssey.phase10.soak', providers.gradleProperty('phase10Soak').orElse('false').get()
@@ -138,6 +153,7 @@ neoForge {
                     providers.gradleProperty('industriesOnly').orElse('false').get() == 'true' ? 'sagadyssey_industries' :
                     providers.gradleProperty('developmentOnly').orElse('false').get() == 'true' ? 'sagadyssey_development' :
                     providers.gradleProperty('resilienceOnly').orElse('false').get() == 'true' ? 'sagadyssey_resilience' :
+                    providers.gradleProperty('playabilityFixOnly').orElse('false').get() == 'true' ? 'sagadyssey_playability_fix' :
                     providers.gradleProperty('safetyOnly').orElse('false').get() == 'true' ? 'sagadyssey_safety' :
                     providers.gradleProperty('redesignOnly').orElse('false').get() == 'true'
                             ? 'sagadyssey_redesign' :
@@ -545,7 +561,7 @@ tasks.register('verifySocialSystem') {
         def contractEvents = new File(javaRoot, 'social/life/NpcContractEvents.java').getText('UTF-8')
         if (!workContextSource.contains('NpcWorkAuthority.SERVICE, npc.getOwnerCharacterId(), null')
                 || !lifeDataSource.contains('record.recruited')
-                || !interactionSource.contains('NpcLifeData.get(player.getServer()).onRecruited')
+                || !interactionSource.contains('NpcLifeData.get(MinecraftApi.server(player)).onRecruited')
                 || !agencySource.contains('Math.log1p')
                 || !agencySource.contains('probability'))
             throw new GradleException('Exclusive work authority or stochastic home-rest decision wiring is missing')

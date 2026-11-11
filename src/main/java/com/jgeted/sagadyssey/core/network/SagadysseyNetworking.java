@@ -39,8 +39,7 @@ public class SagadysseyNetworking {
             );
             registrar.playToClient(
                     ResearchSyncPayload.TYPE,
-                    ResearchSyncPayload.STREAM_CODEC,
-                    ResearchSyncPayload::handle
+                    ResearchSyncPayload.STREAM_CODEC
             );
         }
 
@@ -67,8 +66,7 @@ public class SagadysseyNetworking {
         // 服务端→客户端：按观察者过滤的 NPC 只读投影
         registrar.playToClient(
                 NpcViewSnapshotPayload.TYPE,
-                NpcViewSnapshotPayload.STREAM_CODEC,
-                NpcViewSnapshotPayload::handle
+                NpcViewSnapshotPayload.STREAM_CODEC
         );
 
         registrar.playToServer(
@@ -78,8 +76,7 @@ public class SagadysseyNetworking {
         );
         registrar.playToClient(
                 HandoverPromptPayload.TYPE,
-                HandoverPromptPayload.STREAM_CODEC,
-                HandoverPromptPayload::handle
+                HandoverPromptPayload.STREAM_CODEC
         );
 
         // 客户端→服务端：NPC 职业切换
@@ -109,8 +106,7 @@ public class SagadysseyNetworking {
         );
         registrar.playToClient(
                 TradeSessionPayload.TYPE,
-                TradeSessionPayload.STREAM_CODEC,
-                TradeSessionPayload::handle
+                TradeSessionPayload.STREAM_CODEC
         );
 
         // === 阵营声望网络包 ===
@@ -118,15 +114,13 @@ public class SagadysseyNetworking {
         // 服务端→客户端：全量声望同步
         registrar.playToClient(
                 FactionDataSyncPayload.TYPE,
-                FactionDataSyncPayload.STREAM_CODEC,
-                FactionDataSyncPayload::handle
+                FactionDataSyncPayload.STREAM_CODEC
         );
 
         // 服务端→客户端：增量声望更新
         registrar.playToClient(
                 FactionStandingsUpdatePayload.TYPE,
-                FactionStandingsUpdatePayload.STREAM_CODEC,
-                FactionStandingsUpdatePayload::handle
+                FactionStandingsUpdatePayload.STREAM_CODEC
         );
 
         // 客户端→服务端：GUI 数据保鲜请求
@@ -144,8 +138,7 @@ public class SagadysseyNetworking {
         );
         registrar.playToClient(
                 CommandGroupSyncPayload.TYPE,
-                CommandGroupSyncPayload.STREAM_CODEC,
-                CommandGroupSyncPayload::handle
+                CommandGroupSyncPayload.STREAM_CODEC
         );
     }
 }

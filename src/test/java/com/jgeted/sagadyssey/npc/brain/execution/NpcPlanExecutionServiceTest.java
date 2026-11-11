@@ -12,7 +12,7 @@ import com.jgeted.sagadyssey.npc.brain.plan.NpcPlanStep;
 import com.jgeted.sagadyssey.npc.brain.plan.NpcPlanStepStatus;
 import com.jgeted.sagadyssey.npc.brain.reservation.NpcReservationKey;
 import com.jgeted.sagadyssey.npc.brain.reservation.NpcReservationService;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayDeque;
@@ -27,11 +27,11 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class NpcPlanExecutionServiceTest {
-    private static final ResourceLocation PROVIDER = ResourceLocation.fromNamespaceAndPath(
+    private static final Identifier PROVIDER = Identifier.fromNamespaceAndPath(
             "sagadyssey", "test_provider");
-    private static final ResourceLocation FIRST_EXECUTOR = ResourceLocation.fromNamespaceAndPath(
+    private static final Identifier FIRST_EXECUTOR = Identifier.fromNamespaceAndPath(
             "sagadyssey", "test_first");
-    private static final ResourceLocation SECOND_EXECUTOR = ResourceLocation.fromNamespaceAndPath(
+    private static final Identifier SECOND_EXECUTOR = Identifier.fromNamespaceAndPath(
             "sagadyssey", "test_second");
 
     @Test
@@ -165,7 +165,7 @@ class NpcPlanExecutionServiceTest {
         Fixture fixture = fixture();
         fixture.executors.register(new NpcTaskExecutor() {
             @Override
-            public ResourceLocation id() {
+            public Identifier id() {
                 return FIRST_EXECUTOR;
             }
 
@@ -224,7 +224,7 @@ class NpcPlanExecutionServiceTest {
     }
 
     private static NpcPlanStep step(int index, NpcPlanPhase phase,
-                                    ResourceLocation executorId, long now) {
+                                    Identifier executorId, long now) {
         return new NpcPlanStep(index, phase, executorId, Map.of(),
                 NpcPlanStepStatus.PENDING, now, "");
     }
@@ -236,20 +236,20 @@ class NpcPlanExecutionServiceTest {
     }
 
     private static final class StubExecutor implements NpcTaskExecutor {
-        private final ResourceLocation id;
+        private final Identifier id;
         private final Deque<TaskTickResult> results;
         private int startCalls;
         private int tickCalls;
         private int recoverCalls;
         private int cancelCalls;
 
-        private StubExecutor(ResourceLocation id, TaskTickResult... results) {
+        private StubExecutor(Identifier id, TaskTickResult... results) {
             this.id = id;
             this.results = new ArrayDeque<>(List.of(results));
         }
 
         @Override
-        public ResourceLocation id() {
+        public Identifier id() {
             return id;
         }
 

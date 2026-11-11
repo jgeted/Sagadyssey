@@ -1,5 +1,7 @@
 package com.jgeted.sagadyssey.npc.trade;
 
+import net.minecraft.core.UUIDUtil;
+
 import net.minecraft.nbt.CompoundTag;
 
 import java.util.UUID;
@@ -43,11 +45,11 @@ public record TradeSession(UUID id, UUID playerId, UUID npcId, UUID playerContai
 
     CompoundTag save() {
         CompoundTag tag = new CompoundTag();
-        tag.putUUID("Id", id);
-        tag.putUUID("PlayerId", playerId);
-        tag.putUUID("NpcId", npcId);
-        tag.putUUID("PlayerContainerId", playerContainerId);
-        tag.putUUID("NpcContainerId", npcContainerId);
+        tag.store("Id", UUIDUtil.CODEC, id);
+        tag.store("PlayerId", UUIDUtil.CODEC, playerId);
+        tag.store("NpcId", UUIDUtil.CODEC, npcId);
+        tag.store("PlayerContainerId", UUIDUtil.CODEC, playerContainerId);
+        tag.store("NpcContainerId", UUIDUtil.CODEC, npcContainerId);
         tag.putString("Status", status.name());
         tag.putInt("Revision", revision);
         tag.putLong("OpenedAt", openedAt);
@@ -58,11 +60,11 @@ public record TradeSession(UUID id, UUID playerId, UUID npcId, UUID playerContai
     }
 
     static TradeSession load(CompoundTag tag) {
-        return new TradeSession(tag.getUUID("Id"), tag.getUUID("PlayerId"),
-                tag.getUUID("NpcId"), tag.getUUID("PlayerContainerId"),
-                tag.getUUID("NpcContainerId"), TradeSessionStatus.valueOf(tag.getString("Status")),
-                tag.getInt("Revision"), tag.getLong("OpenedAt"), tag.getLong("ExpiresAt"),
-                tag.contains("Proposal") ? TradeProposal.load(tag.getCompound("Proposal")) : null,
-                tag.getString("Explanation"));
+        return new TradeSession(tag.read("Id", UUIDUtil.CODEC).orElseThrow(), tag.read("PlayerId", UUIDUtil.CODEC).orElseThrow(),
+                tag.read("NpcId", UUIDUtil.CODEC).orElseThrow(), tag.read("PlayerContainerId", UUIDUtil.CODEC).orElseThrow(),
+                tag.read("NpcContainerId", UUIDUtil.CODEC).orElseThrow(), TradeSessionStatus.valueOf(tag.getStringOr("Status", "")),
+                tag.getIntOr("Revision", 0), tag.getLongOr("OpenedAt", 0L), tag.getLongOr("ExpiresAt", 0L),
+                tag.contains("Proposal") ? TradeProposal.load(tag.getCompoundOrEmpty("Proposal")) : null,
+                tag.getStringOr("Explanation", ""));
     }
 }

@@ -1,5 +1,7 @@
 package com.jgeted.sagadyssey.social.character;
 
+import net.minecraft.core.UUIDUtil;
+
 import com.jgeted.sagadyssey.npc.identity.NpcOffice;
 import com.jgeted.sagadyssey.npc.identity.NpcSocialClass;
 import net.minecraft.nbt.CompoundTag;
@@ -22,7 +24,7 @@ class NpcCharacterIdentityTest {
         UUID oldBody = UUID.randomUUID();
         UUID newBody = UUID.randomUUID();
         CompoundTag entityTag = new CompoundTag();
-        entityTag.putUUID(NpcCharacterIdentityMigration.CHARACTER_ID_KEY, characterId);
+        entityTag.store(NpcCharacterIdentityMigration.CHARACTER_ID_KEY, UUIDUtil.CODEC, characterId);
 
         assertEquals(characterId, NpcCharacterIdentityMigration.resolve(entityTag, oldBody));
         assertEquals(characterId, NpcCharacterIdentityMigration.resolve(entityTag, newBody));

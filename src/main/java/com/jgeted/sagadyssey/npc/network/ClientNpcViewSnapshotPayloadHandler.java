@@ -3,15 +3,12 @@ package com.jgeted.sagadyssey.npc.network;
 import com.jgeted.sagadyssey.npc.entity.NpcBase;
 import com.jgeted.sagadyssey.npc.gui.NpcContextScreen;
 import net.minecraft.client.Minecraft;
-import net.neoforged.api.distmarker.Dist;
-import net.neoforged.api.distmarker.OnlyIn;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
 
-@OnlyIn(Dist.CLIENT)
-final class ClientNpcViewSnapshotPayloadHandler {
+public final class ClientNpcViewSnapshotPayloadHandler {
     private ClientNpcViewSnapshotPayloadHandler() {}
 
-    static void handle(NpcViewSnapshotPayload payload, IPayloadContext context) {
+    public static void handle(NpcViewSnapshotPayload payload, IPayloadContext context) {
         context.enqueueWork(() -> {
             Minecraft minecraft = Minecraft.getInstance();
             int entityId = payload.view().bodyEntityId();

@@ -1,5 +1,7 @@
 package com.jgeted.sagadyssey.npc.ai;
 
+import net.minecraft.core.UUIDUtil;
+
 import com.jgeted.sagadyssey.npc.entity.NpcBase;
 import com.jgeted.sagadyssey.npc.entity.NpcCommand;
 import com.jgeted.sagadyssey.npc.profession.NpcProfession;
@@ -25,14 +27,14 @@ public final class NpcGroundItemRecoveryGoal extends Goal {
     @Override
     public boolean canUse() {
         if (com.jgeted.sagadyssey.npc.brain.execution.NpcBrainRuntime.isPlanned(npc)) return false;
-        if (!npc.isAlive() || npc.level().isClientSide || npc.isPassenger()
+        if (!npc.isAlive() || npc.level().isClientSide() || npc.isPassenger()
                 || npc.getCommand() != NpcCommand.WORK || npc.getTarget() != null
                 || !isProducer() || !NpcSchedulePlanner.allowsWork(npc)
                 || (npc.tickCount - npc.getId()) % 20 != 0) return false;
         UUID id = npc.getCharacterId();
         target = npc.level().getEntitiesOfClass(ItemEntity.class, npc.getBoundingBox().inflate(10.0D),
-                        item -> item.isAlive() && item.getPersistentData().hasUUID(NpcBase.WORK_OUTPUT_OWNER_TAG)
-                                && id.equals(item.getPersistentData().getUUID(NpcBase.WORK_OUTPUT_OWNER_TAG))
+                        item -> item.isAlive() && item.getPersistentData().read(NpcBase.WORK_OUTPUT_OWNER_TAG, UUIDUtil.CODEC).isPresent()
+                                && id.equals(item.getPersistentData().read(NpcBase.WORK_OUTPUT_OWNER_TAG, UUIDUtil.CODEC).orElseThrow())
                                 && npc.isWorkAllowedAt(item.blockPosition())
                                 && npc.hasBagSpaceFor(item.getItem().copy()))
                 .stream().min(Comparator.comparingDouble(npc::distanceToSqr)).orElse(null);

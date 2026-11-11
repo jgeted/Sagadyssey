@@ -1,8 +1,11 @@
 package com.jgeted.sagadyssey.social.production;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+import net.minecraft.core.UUIDUtil;
+
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.Tag;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 
 import java.util.UUID;
 
@@ -24,7 +27,7 @@ public record ProductionMaterialRequest(String idempotencyKey, UUID orderId,
             throw new IllegalArgumentException("material request identity is incomplete");
         }
         String itemId = material.fingerprint().itemId();
-        if (itemId.length() > MAX_ITEM_ID_LENGTH || ResourceLocation.tryParse(itemId) == null) {
+        if (itemId.length() > MAX_ITEM_ID_LENGTH || Identifier.tryParse(itemId) == null) {
             throw new IllegalArgumentException("invalid material item id");
         }
         String expectedKey = keyFor(orderId, material);
@@ -87,8 +90,8 @@ public record ProductionMaterialRequest(String idempotencyKey, UUID orderId,
     CompoundTag save() {
         CompoundTag tag = new CompoundTag();
         tag.putString("Key", idempotencyKey);
-        tag.putUUID("OrderId", orderId);
-        tag.putUUID("ContainerId", containerId);
+        tag.store("OrderId", UUIDUtil.CODEC, orderId);
+        tag.store("ContainerId", UUIDUtil.CODEC, containerId);
         tag.put("Material", material.save());
         tag.putString("Status", status.name());
         tag.putLong("CreatedAt", createdAt);
@@ -101,7 +104,7 @@ public record ProductionMaterialRequest(String idempotencyKey, UUID orderId,
         requireString(tag, "Key");
         requireUuid(tag, "OrderId");
         requireUuid(tag, "ContainerId");
-        if (!tag.contains("Material", Tag.TAG_COMPOUND)) {
+        if (!MinecraftApi.containsTag(tag, "Material", Tag.TAG_COMPOUND)) {
             throw new IllegalArgumentException("missing material");
         }
         requireString(tag, "Status");
@@ -110,15 +113,15 @@ public record ProductionMaterialRequest(String idempotencyKey, UUID orderId,
         requireString(tag, "Detail");
         Status loadedStatus;
         try {
-            loadedStatus = Status.valueOf(tag.getString("Status"));
+            loadedStatus = Status.valueOf(tag.getStringOr("Status", ""));
         } catch (IllegalArgumentException exception) {
             throw new IllegalArgumentException("invalid material request status", exception);
         }
-        return new ProductionMaterialRequest(tag.getString("Key"), tag.getUUID("OrderId"),
-                tag.getUUID("ContainerId"),
-                ProductionMaterial.load(tag.getCompound("Material")), loadedStatus,
-                tag.getLong("CreatedAt"), tag.getLong("UpdatedAt"),
-                tag.getString("Detail"));
+        return new ProductionMaterialRequest(tag.getStringOr("Key", ""), tag.read("OrderId", UUIDUtil.CODEC).orElseThrow(),
+                tag.read("ContainerId", UUIDUtil.CODEC).orElseThrow(),
+                ProductionMaterial.load(tag.getCompoundOrEmpty("Material")), loadedStatus,
+                tag.getLongOr("CreatedAt", 0L), tag.getLongOr("UpdatedAt", 0L),
+                tag.getStringOr("Detail", ""));
     }
 
     private ProductionMaterialRequest transition(Status next, long now, String nextDetail) {
@@ -136,17 +139,17 @@ public record ProductionMaterialRequest(String idempotencyKey, UUID orderId,
     }
 
     private static void requireUuid(CompoundTag tag, String key) {
-        if (!tag.hasUUID(key)) throw new IllegalArgumentException("missing UUID: " + key);
+        if (!tag.read(key, UUIDUtil.CODEC).isPresent()) throw new IllegalArgumentException("missing UUID: " + key);
     }
 
     private static void requireString(CompoundTag tag, String key) {
-        if (!tag.contains(key, Tag.TAG_STRING)) {
+        if (!MinecraftApi.containsTag(tag, key, Tag.TAG_STRING)) {
             throw new IllegalArgumentException("missing string: " + key);
         }
     }
 
     private static void requireLong(CompoundTag tag, String key) {
-        if (!tag.contains(key, Tag.TAG_LONG)) {
+        if (!MinecraftApi.containsTag(tag, key, Tag.TAG_LONG)) {
             throw new IllegalArgumentException("missing long: " + key);
         }
     }

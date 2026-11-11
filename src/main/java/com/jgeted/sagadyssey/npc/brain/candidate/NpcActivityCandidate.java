@@ -3,7 +3,7 @@ package com.jgeted.sagadyssey.npc.brain.candidate;
 import com.jgeted.sagadyssey.npc.brain.context.NpcDecisionContext;
 import com.jgeted.sagadyssey.npc.brain.plan.NpcPlanKind;
 import com.jgeted.sagadyssey.npc.brain.plan.NpcPlanPriority;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 
 import javax.annotation.Nullable;
 import java.util.Locale;
@@ -20,7 +20,7 @@ import java.util.UUID;
  */
 public record NpcActivityCandidate(
         String candidateKey,
-        ResourceLocation providerId,
+        Identifier providerId,
         NpcPlanKind kind,
         NpcPlanPriority priority,
         @Nullable UUID subjectId,

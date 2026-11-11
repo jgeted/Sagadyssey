@@ -10,7 +10,7 @@ import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.world.item.ItemStack;
 import net.neoforged.neoforge.network.PacketDistributor;
 
@@ -286,7 +286,7 @@ public final class NpcNegotiationScreen extends Screen {
         if (!canSubmit()) return;
         awaitingResponse = true;
         localMessage = "正在等待对方核对整份报价……";
-        PacketDistributor.sendToServer(new SubmitTradeProposalPacket(payload.npcEntityId(),
+        net.neoforged.neoforge.client.network.ClientPacketDistributor.sendToServer(new SubmitTradeProposalPacket(payload.npcEntityId(),
                 payload.sessionId(), payload.revision(), offerList(true), offerList(false)));
         rebuildWidgets();
     }
@@ -408,9 +408,9 @@ public final class NpcNegotiationScreen extends Screen {
 
     private static void renderItemIcon(GuiGraphics graphics, ItemFingerprint fingerprint,
                                        int x, int y) {
-        ResourceLocation id = ResourceLocation.tryParse(fingerprint.itemId());
+        Identifier id = Identifier.tryParse(fingerprint.itemId());
         if (id == null || !BuiltInRegistries.ITEM.containsKey(id)) return;
-        graphics.renderItem(new ItemStack(BuiltInRegistries.ITEM.get(id)), x, y);
+        graphics.renderItem(new ItemStack(BuiltInRegistries.ITEM.getValue(id)), x, y);
     }
 
     private void drawPageIndicator(GuiGraphics graphics, int count, int rows, int page,

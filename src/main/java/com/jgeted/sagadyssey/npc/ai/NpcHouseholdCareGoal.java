@@ -86,7 +86,7 @@ public final class NpcHouseholdCareGoal extends Goal {
         household = HouseholdData.get(level.getServer()).forMember(npc.getCharacterId());
         if (ownNeeds.hunger() > DONOR_MAX_HUNGER || household == null
                 || household.members().size() < 2
-                || !household.dimension().equals(level.dimension().location().toString())) return false;
+                || !household.dimension().equals(level.dimension().identifier().toString())) return false;
         HouseholdCareRecord care = HouseholdData.get(level.getServer()).care(household.id());
         if (care != null && care.lastContributionAt() >= 0L
                 && level.getGameTime() - care.lastContributionAt() < CONTRIBUTION_COOLDOWN) return false;
@@ -207,7 +207,7 @@ public final class NpcHouseholdCareGoal extends Goal {
         int slot = NpcFoodItems.findFoodSlot(source, false);
         SubjectRef character = SubjectRef.character(npc.getCharacterId());
         UUID sourceId = ContainerIds.block("private_storage",
-                level.dimension().location().toString(), privateStorage);
+                level.dimension().identifier().toString(), privateStorage);
         UUID targetId = ContainerIds.npcPersonal(npc.getCharacterId());
         TransferReceipt receipt = slot < 0 ? null : moveOne(level, source, slot, sourceId,
                 character, AccessPolicy.PRIVATE, npc.getEquipmentInventory(), targetId,
@@ -240,7 +240,7 @@ public final class NpcHouseholdCareGoal extends Goal {
         SubjectRef family = SubjectRef.household(household.id());
         UUID sourceId = ContainerIds.npcPersonal(npc.getCharacterId());
         UUID targetId = ContainerIds.block("household_storage",
-                level.dimension().location().toString(), pantry);
+                level.dimension().identifier().toString(), pantry);
         TransferReceipt receipt = slot < 0 || target == null ? null : moveOne(level,
                 npc.getEquipmentInventory(), slot, sourceId, character, AccessPolicy.PRIVATE,
                 target, targetId, family, AccessPolicy.HOUSEHOLD, TransferIntent.GIFT,

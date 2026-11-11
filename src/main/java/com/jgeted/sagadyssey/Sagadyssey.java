@@ -85,11 +85,12 @@ public class Sagadyssey {
         modContainer.registerConfig(ModConfig.Type.COMMON, SagadysseyConfig.SPEC);
 
         // 客户端：注册配置界面扩展点（Mods 菜单里的 Config 按钮）
-        if (FMLLoader.getDist() == Dist.CLIENT) {
+        if (FMLLoader.getCurrent().getDist() == Dist.CLIENT) {
             modContainer.registerExtensionPoint(IConfigScreenFactory.class, ConfigurationScreen::new);
         }
 
         // 注册所有内容
+        com.jgeted.sagadyssey.worldsim.ChunkTickets.register(modEventBus);
         ModBlocks.REGISTRY.register(modEventBus);
         ModItems.REGISTRY.register(modEventBus);
         ModMenuTypes.REGISTRY.register(modEventBus);

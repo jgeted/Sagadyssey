@@ -37,7 +37,7 @@ public class StructureStartPlacementMixin implements NaturalVillageRegistration.
                                                   CallbackInfoReturnable<StructureStart> cir) {
         if (cir.getReturnValue() != null && cir.getReturnValue().isValid()) {
             ((NaturalVillageRegistration.Eligibility) (Object) cir.getReturnValue())
-                    .sagadyssey$setRegistrationEligible(tag.getInt(NaturalVillageRegistration.ELIGIBILITY_TAG) == 1);
+                    .sagadyssey$setRegistrationEligible(tag.getIntOr(NaturalVillageRegistration.ELIGIBILITY_TAG, 0) == 1);
         }
     }
 
@@ -45,7 +45,7 @@ public class StructureStartPlacementMixin implements NaturalVillageRegistration.
     private void sagadyssey$saveEligibility(StructurePieceSerializationContext context, ChunkPos chunkPos,
                                            CallbackInfoReturnable<CompoundTag> cir) {
         var start = (StructureStart) (Object) this;
-        var id = context.registryAccess().registryOrThrow(Registries.STRUCTURE).getKey(start.getStructure());
+        var id = context.registryAccess().lookupOrThrow(Registries.STRUCTURE).getKey(start.getStructure());
         if (start.isValid() && sagadyssey$registrationEligible && NaturalVillageBuilding.SUPPORTED.equals(id)) {
             cir.getReturnValue().putInt(NaturalVillageRegistration.ELIGIBILITY_TAG, 1);
         }

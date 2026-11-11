@@ -1,5 +1,7 @@
 package com.jgeted.sagadyssey.social.life;
 
+import net.minecraft.core.UUIDUtil;
+
 import net.minecraft.nbt.CompoundTag;
 
 import java.util.UUID;
@@ -14,7 +16,7 @@ public record NpcScheduleRecord(UUID npcId, NpcScheduleActivity activity,
 
     public CompoundTag save() {
         CompoundTag tag = new CompoundTag();
-        tag.putUUID("Npc", npcId);
+        tag.store("Npc", UUIDUtil.CODEC, npcId);
         tag.putString("Activity", activity.name());
         tag.putString("Reason", reason);
         tag.putLong("UpdatedAt", updatedAt);
@@ -23,8 +25,8 @@ public record NpcScheduleRecord(UUID npcId, NpcScheduleActivity activity,
     }
 
     public static NpcScheduleRecord load(CompoundTag tag) {
-        return new NpcScheduleRecord(tag.getUUID("Npc"),
-                NpcScheduleActivity.parse(tag.getString("Activity")),
-                tag.getString("Reason"), tag.getLong("UpdatedAt"), tag.getLong("ReviewAt"));
+        return new NpcScheduleRecord(tag.read("Npc", UUIDUtil.CODEC).orElseThrow(),
+                NpcScheduleActivity.parse(tag.getStringOr("Activity", "")),
+                tag.getStringOr("Reason", ""), tag.getLongOr("UpdatedAt", 0L), tag.getLongOr("ReviewAt", 0L));
     }
 }

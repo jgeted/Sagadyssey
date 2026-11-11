@@ -2,6 +2,13 @@
 
 ## 1.9.0 - Release candidate
 
+### Minecraft 1.21.11 migration
+
+- Target Minecraft Java 1.21.11 and NeoForge 21.11.48.
+- Port NPC rendering, horse equipment, saved data, world generation, item models, networking, and the in-game test runner.
+- Register client packet handlers on the client to remove NeoForge's startup warning about `@OnlyIn`.
+- Verify new-world persistence across a server restart. Use a new world for this release.
+
 ### Added
 
 - `small_realm` r8 seeds individual long-term goals, persistent background memories and symmetric family/friend/mentor/rival relationships for its residents.
@@ -48,7 +55,7 @@
 - NPC combat prioritizes direct threats to owners and group members and avoids unreachable target fixation.
 - Logistics details and route feedback are visible only to the NPC's owning player.
 - Reduced road scans and convoy target searches and added bounded warehouse, order and event retention.
-- Network protocol is now `8`; all clients and the server must use the same build.
+- Network protocol is now `13`; all clients and the server must use the same build.
 
 ### Fixed
 

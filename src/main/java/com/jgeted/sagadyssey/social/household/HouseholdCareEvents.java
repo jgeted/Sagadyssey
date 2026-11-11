@@ -96,7 +96,7 @@ public final class HouseholdCareEvents {
 
     private static ServerLevel level(MinecraftServer server, String dimension) {
         for (ServerLevel level : server.getAllLevels()) {
-            if (level.dimension().location().toString().equals(dimension)) return level;
+            if (level.dimension().identifier().toString().equals(dimension)) return level;
         }
         return null;
     }

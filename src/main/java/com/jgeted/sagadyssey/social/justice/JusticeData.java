@@ -1,12 +1,14 @@
 package com.jgeted.sagadyssey.social.justice;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+
 import com.jgeted.sagadyssey.worldsim.rights.SubjectRef;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.world.level.saveddata.SavedData;
+import com.jgeted.sagadyssey.worldsim.NbtSavedData;
 
 import javax.annotation.Nullable;
 import java.util.HashMap;
@@ -14,14 +16,14 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
-public final class JusticeData extends SavedData {
+public final class JusticeData extends NbtSavedData {
     private static final String DATA_NAME = "sagadyssey_justice";
     private static final Factory<JusticeData> FACTORY = new Factory<>(JusticeData::new, JusticeData::load);
     private final Map<UUID, DisputeRecord> disputes = new HashMap<>();
     private final Map<UUID, ProtectionOrder> protections = new HashMap<>();
 
     public static JusticeData get(MinecraftServer server) {
-        return server.overworld().getDataStorage().computeIfAbsent(FACTORY, DATA_NAME);
+        return server.overworld().getDataStorage().computeIfAbsent(FACTORY.type(DATA_NAME));
     }
 
     boolean file(DisputeRecord value) {
@@ -62,14 +64,14 @@ public final class JusticeData extends SavedData {
 
     private static JusticeData load(CompoundTag tag, HolderLookup.Provider registries) {
         JusticeData data = new JusticeData();
-        ListTag disputes = tag.getList("Disputes", Tag.TAG_COMPOUND);
+        ListTag disputes = MinecraftApi.listOfType(tag, "Disputes", Tag.TAG_COMPOUND);
         for (int index = 0; index < disputes.size(); index++) {
-            DisputeRecord value = DisputeRecord.load(disputes.getCompound(index));
+            DisputeRecord value = DisputeRecord.load(disputes.getCompoundOrEmpty(index));
             data.disputes.put(value.id(), value);
         }
-        ListTag protections = tag.getList("Protections", Tag.TAG_COMPOUND);
+        ListTag protections = MinecraftApi.listOfType(tag, "Protections", Tag.TAG_COMPOUND);
         for (int index = 0; index < protections.size(); index++) {
-            ProtectionOrder value = ProtectionOrder.load(protections.getCompound(index));
+            ProtectionOrder value = ProtectionOrder.load(protections.getCompoundOrEmpty(index));
             data.protections.put(value.id(), value);
         }
         return data;

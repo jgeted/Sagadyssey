@@ -24,7 +24,7 @@ public class TestNetworkCommand {
                                         .executes(ctx -> {
                                             String researchId = StringArgumentType.getString(ctx, "researchId");
                                             // 客户端→服务端，发送测试数据包
-                                            PacketDistributor.sendToServer(new ResearchUnlockPacket(researchId));
+                                            net.neoforged.neoforge.client.network.ClientPacketDistributor.sendToServer(new ResearchUnlockPacket(researchId));
                                             ctx.getSource().sendSuccess(
                                                     () -> Component.literal("已发送测试数据包：" + researchId),
                                                     false

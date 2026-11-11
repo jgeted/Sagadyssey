@@ -1,13 +1,15 @@
 package com.jgeted.sagadyssey.worldsim.lod;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.*;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.world.level.saveddata.SavedData;
+import com.jgeted.sagadyssey.worldsim.NbtSavedData;
 import java.util.*;
 
 /** Strict schema: a damaged checkpoint must never silently become an empty world. */
-public final class NpcLodData extends SavedData {
+public final class NpcLodData extends NbtSavedData {
     public static final String NAME="sagadyssey_npc_lod_v3";
     public static final int SCHEMA=1, CAPACITY=8192;
     public static final Factory<NpcLodData> FACTORY=new Factory<>(NpcLodData::new,NpcLodData::load);
@@ -15,9 +17,9 @@ public final class NpcLodData extends SavedData {
     private final Map<UUID,UUID> persons=new HashMap<>();
     private final TreeMap<Long,LinkedHashSet<UUID>> due=new TreeMap<>();
     public static NpcLodData get(MinecraftServer s){
-        var storage=s.overworld().getDataStorage();var data=storage.get(FACTORY,NAME);if(data!=null)return data;
+        var storage=s.overworld().getDataStorage();var data=storage.get(FACTORY.type(NAME));if(data!=null)return data;
         if(java.nio.file.Files.exists(s.getWorldPath(net.minecraft.world.level.storage.LevelResource.ROOT).resolve("data").resolve(NAME+".dat")))throw new IllegalStateException("unreadable LOD checkpoint file; preserve and restore a coherent backup");
-        data=new NpcLodData();storage.set(NAME,data);return data;
+        data=new NpcLodData();storage.set(FACTORY.type(NAME),data);return data;
     }
     public LodCheckpoint find(UUID body){return rows.get(body);}
     public UUID bodyForPerson(UUID person){return persons.get(person);}
@@ -40,8 +42,8 @@ public final class NpcLodData extends SavedData {
     private void unschedule(LodCheckpoint r){if(r==null||!r.unloaded())return;var set=due.get(r.summarizedAt()+200);if(set!=null){set.remove(r.body());if(set.isEmpty())due.remove(r.summarizedAt()+200);}}
     @Override public CompoundTag save(CompoundTag tag,HolderLookup.Provider lookup){tag.putInt("Schema",SCHEMA);var list=new ListTag();rows.values().stream().sorted(Comparator.comparing(LodCheckpoint::body)).forEach(r->list.add(r.save()));tag.put("Checkpoints",list);return tag;}
     public static NpcLodData load(CompoundTag t,HolderLookup.Provider lookup){
-        if(!t.contains("Schema",Tag.TAG_INT)||t.getInt("Schema")!=SCHEMA||!t.contains("Checkpoints",Tag.TAG_LIST))throw new IllegalStateException("unreadable LOD schema");
-        var data=new NpcLodData();var list=(ListTag)t.get("Checkpoints");if(list.size()>CAPACITY||!list.isEmpty()&&list.getElementType()!=Tag.TAG_COMPOUND)throw new IllegalStateException("LOD data over capacity or wrong element type");
+        if(!MinecraftApi.containsTag(t, "Schema",Tag.TAG_INT)||t.getIntOr("Schema", 0)!=SCHEMA||!MinecraftApi.containsTag(t, "Checkpoints",Tag.TAG_LIST))throw new IllegalStateException("unreadable LOD schema");
+        var data=new NpcLodData();var list=(ListTag)t.get("Checkpoints");if(list.size()>CAPACITY||!list.isEmpty()&&MinecraftApi.elementType(list)!=Tag.TAG_COMPOUND)throw new IllegalStateException("LOD data over capacity or wrong element type");
         for(var raw:list){var row=LodCheckpoint.load((CompoundTag)raw);if(data.rows.putIfAbsent(row.body(),row)!=null||data.persons.putIfAbsent(row.person(),row.body())!=null)throw new IllegalStateException("duplicate checkpoint body/person");data.schedule(row);}return data;
     }
 }

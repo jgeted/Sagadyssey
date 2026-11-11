@@ -1,5 +1,7 @@
 package com.jgeted.sagadyssey.social.service;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+
 import com.jgeted.sagadyssey.social.life.NpcEmploymentContract;
 import org.junit.jupiter.api.Test;
 
@@ -83,13 +85,13 @@ class ServiceRelationshipDataTest {
         var data = new ServiceRelationshipData();
         var relationship = data.beginVoluntaryEmployment(UUID.randomUUID(), UUID.randomUUID(), 10);
         var tag = data.save(new net.minecraft.nbt.CompoundTag(), null);
-        tag.getList("Relationships", net.minecraft.nbt.Tag.TAG_COMPOUND)
+        MinecraftApi.listOfType(tag, "Relationships", net.minecraft.nbt.Tag.TAG_COMPOUND)
                 .add(new net.minecraft.nbt.CompoundTag());
         var original = tag.copy();
         assertThrows(IllegalArgumentException.class, () -> ServiceRelationshipData.load(tag, null));
         assertEquals(original, tag);
         var auditTag = data.save(new net.minecraft.nbt.CompoundTag(), null);
-        auditTag.getList("Audits", net.minecraft.nbt.Tag.TAG_COMPOUND)
+        MinecraftApi.listOfType(auditTag, "Audits", net.minecraft.nbt.Tag.TAG_COMPOUND)
                 .add(new net.minecraft.nbt.CompoundTag());
         assertThrows(IllegalArgumentException.class, () -> ServiceRelationshipData.load(auditTag, null));
         assertTrue(data.hasHistory(relationship.agentId()));
@@ -103,8 +105,8 @@ class ServiceRelationshipDataTest {
         var restored = ServiceRelationshipData.load(tag, null);
         assertEquals(data.relationships(), restored.relationships());
         assertTrue(restored.hasScope(relationship.principalId(), relationship.agentId(), AuthorityScope.FOLLOW, 11));
-        var list = tag.getList("Relationships", net.minecraft.nbt.Tag.TAG_COMPOUND);
-        list.add(list.getCompound(0).copy());
+        var list = MinecraftApi.listOfType(tag, "Relationships", net.minecraft.nbt.Tag.TAG_COMPOUND);
+        list.add(list.getCompoundOrEmpty(0).copy());
         assertThrows(IllegalArgumentException.class, () -> ServiceRelationshipData.load(tag, null));
     }
 
@@ -113,7 +115,7 @@ class ServiceRelationshipDataTest {
         var data = new ServiceRelationshipData();
         var relationship = data.beginVoluntaryEmployment(UUID.randomUUID(), UUID.randomUUID(), 10);
         var tag = relationship.save();
-        tag.getList("Scopes", net.minecraft.nbt.Tag.TAG_STRING)
+        MinecraftApi.listOfType(tag, "Scopes", net.minecraft.nbt.Tag.TAG_STRING)
                 .add(net.minecraft.nbt.StringTag.valueOf("FUTURE_SCOPE"));
         assertThrows(IllegalArgumentException.class, () -> ServiceRelationship.load(tag));
     }

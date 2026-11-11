@@ -13,10 +13,9 @@ import io.netty.buffer.ByteBuf;
 import io.netty.handler.codec.DecoderException;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.neoforge.network.PacketDistributor;
-import net.neoforged.neoforge.network.handling.IPayloadContext;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -27,7 +26,7 @@ import java.util.function.Function;
 public record NpcViewSnapshotPayload(NpcViewSnapshot view) implements CustomPacketPayload {
     private static final int MAX_LIST = 32;
     public static final Type<NpcViewSnapshotPayload> TYPE = new Type<>(
-            ResourceLocation.fromNamespaceAndPath(Sagadyssey.MOD_ID, "npc_view_snapshot"));
+            Identifier.fromNamespaceAndPath(Sagadyssey.MOD_ID, "npc_view_snapshot"));
 
     public static final StreamCodec<ByteBuf, NpcViewSnapshotPayload> STREAM_CODEC = StreamCodec.of(
             (buffer, payload) -> write(buffer, payload.view),
@@ -35,9 +34,6 @@ public record NpcViewSnapshotPayload(NpcViewSnapshot view) implements CustomPack
 
     @Override public Type<? extends CustomPacketPayload> type() { return TYPE; }
 
-    public static void handle(NpcViewSnapshotPayload payload, IPayloadContext context) {
-        ClientNpcViewSnapshotPayloadHandler.handle(payload, context);
-    }
 
     public static void openFor(ServerPlayer player, NpcBase npc) {
         openFor(player, npc, "");
@@ -49,8 +45,8 @@ public record NpcViewSnapshotPayload(NpcViewSnapshot view) implements CustomPack
         try {
             STREAM_CODEC.encode(encoded, payload);
             if(encoded.readableBytes()>65_536)throw new IllegalStateException("NPC context projection exceeds 64 KiB budget");
-            if(!com.jgeted.sagadyssey.worldsim.lod.NpcLodBudgets.contextBytes(player.server).admit(player.getUUID(),player.server.overworld().getGameTime(),encoded.readableBytes()))return;
-            com.jgeted.sagadyssey.worldsim.lod.LodMetrics.payload(player.server,encoded.readableBytes());
+            if(!com.jgeted.sagadyssey.worldsim.lod.NpcLodBudgets.contextBytes(player.level().getServer()).admit(player.getUUID(),player.level().getServer().overworld().getGameTime(),encoded.readableBytes()))return;
+            com.jgeted.sagadyssey.worldsim.lod.LodMetrics.payload(player.level().getServer(),encoded.readableBytes());
         } finally {encoded.release();}
         PacketDistributor.sendToPlayer(player, payload);
     }

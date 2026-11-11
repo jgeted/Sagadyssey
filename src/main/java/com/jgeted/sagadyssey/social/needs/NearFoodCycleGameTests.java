@@ -1,5 +1,10 @@
 package com.jgeted.sagadyssey.social.needs;
 
+import com.jgeted.sagadyssey.gametest.PortedGameTests.*;
+
+import com.jgeted.sagadyssey.core.MinecraftApi;
+import net.minecraft.core.UUIDUtil;
+
 import com.jgeted.sagadyssey.Sagadyssey;
 import com.jgeted.sagadyssey.npc.brain.execution.*;
 import com.jgeted.sagadyssey.npc.brain.fieldwork.*;
@@ -21,7 +26,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.Container;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.item.*;
-import net.minecraft.world.level.GameRules;
+import net.minecraft.world.level.gamerules.GameRules;
 import net.minecraft.world.level.block.*;
 import net.minecraft.world.level.block.entity.AbstractFurnaceBlockEntity;
 import net.minecraft.world.level.storage.LevelResource;
@@ -41,8 +46,8 @@ public final class NearFoodCycleGameTests {
         previous=null;
         if (!(event.getServer() instanceof GameTestServer)) return;
         try {
-            event.getServer().overworld().getStructureManager().getOrCreate(net.minecraft.resources.ResourceLocation.parse("sagadyssey_cycle:fieldwork_empty"))
-                    .load(event.getServer().overworld().holderLookup(net.minecraft.core.registries.Registries.BLOCK),TagParser.parseTag("{size:[22,10,16],entities:[],blocks:[],palette:[{Name:\"minecraft:air\"}]}"));
+            event.getServer().overworld().getStructureManager().getOrCreate(net.minecraft.resources.Identifier.parse("sagadyssey_cycle:fieldwork_empty"))
+                    .load(event.getServer().overworld().holderLookup(net.minecraft.core.registries.Registries.BLOCK),TagParser.parseCompoundFully("{size:[22,10,16],entities:[],blocks:[],palette:[{Name:\"minecraft:air\"}]}"));
         } catch(Exception e) { throw new IllegalStateException("isolated cycle test template",e); }
         if(!restart()) return;
         try {
@@ -50,9 +55,9 @@ public final class NearFoodCycleGameTests {
             previous=NbtIo.readCompressed(server.getWorldPath(LevelResource.ROOT).resolve(MARKER),NbtAccounter.unlimitedHeap());
             // GameTestServer resets its clock; retain the final saved world time, including later batches.
             var savedWorld=NbtIo.readCompressed(server.getWorldPath(LevelResource.ROOT).resolve("level.dat"),NbtAccounter.unlimitedHeap());
-            long resume=Math.max(previous.getLong("Time"),savedWorld.getCompound("Data").getLong("Time"));
+            long resume=Math.max(previous.getLongOr("Time", 0L),savedWorld.getCompoundOrEmpty("Data").getLongOr("Time", 0L));
             server.getWorldData().overworldData().setGameTime(resume+1);
-            force(server.overworld(),BlockPos.of(previous.getLong("Base")));
+            force(server.overworld(),BlockPos.of(previous.getLongOr("Base", 0L)));
         } catch(Exception e) { throw new IllegalStateException("required original food cycle checkpoint",e); }
     }
     @GameTestGenerator
@@ -98,8 +103,8 @@ public final class NearFoodCycleGameTests {
     private static Fixture setup(GameTestHelper h,boolean fuel,boolean seed) {
         var l=h.getLevel();var server=l.getServer();
         var base=h.absolutePos(new BlockPos(4096,1,4096));force(l,base);
-        l.setDayTime(1000);l.getGameRules().getRule(GameRules.RULE_DAYLIGHT).set(false,server);
-        l.getGameRules().getRule(GameRules.RULE_DOMOBSPAWNING).set(false,server);
+        l.setDayTime(1000);l.getGameRules().set(GameRules.ADVANCE_TIME, false,server);
+        l.getGameRules().set(GameRules.SPAWN_MOBS, false,server);
         for(int x=0;x<22;x++)for(int z=0;z<12;z++)l.setBlockAndUpdate(base.offset(x,-1,z),Blocks.STONE.defaultBlockState());
         var crop=base.offset(4,0,5);l.setBlockAndUpdate(crop.below(),Blocks.FARMLAND.defaultBlockState().setValue(FarmBlock.MOISTURE,7));
         l.setBlockAndUpdate(crop.offset(0,-1,1),Blocks.WATER.defaultBlockState());
@@ -118,7 +123,7 @@ public final class NearFoodCycleGameTests {
         if(seed) farmer.getPersonalInventory().setItem(0,new ItemStack(Items.POTATO,16));
         var courier=actor(l,base.offset(15,0,5),NpcProfession.COURIER);
         var life=NpcLifeData.get(server);life.setHunger(courier.getCharacterId(),seed?340:920,l.getGameTime());
-        String dim=l.dimension().location().toString();
+        String dim=l.dimension().identifier().toString();
         h.assertTrue(life.assignPrivateStorage(server,farmer.getCharacterId(),dim,input,l.getGameTime()),"real configured private input barrel");
         var homes=HouseholdData.get(server);var home=homes.create("near-cycle:"+UUID.randomUUID(),dim,null,courier.getCharacterId(),pantry,l.getGameTime());
         h.assertTrue(homes.assignSharedStorage(home.id(),dim,pantry,pantry),"real household pantry");
@@ -131,10 +136,10 @@ public final class NearFoodCycleGameTests {
         return new Fixture(base,crop,input,furnace,output,pantry,home.id(),farmer,courier,courier.getMoral());
     }
     private static long operations(Fixture f,FieldworkAction.Operation op) {
-        return FieldworkData.get(f.farmer().getServer()).receiptsFor(f.farmer().getUUID()).stream().filter(r->r.action().operation()==op).count();
+        return FieldworkData.get(MinecraftApi.server(f.farmer())).receiptsFor(f.farmer().getUUID()).stream().filter(r->r.action().operation()==op).count();
     }
     private static int delta(Fixture f,String item) {
-        return FieldworkData.get(f.farmer().getServer()).receiptsFor(f.farmer().getUUID()).stream()
+        return FieldworkData.get(MinecraftApi.server(f.farmer())).receiptsFor(f.farmer().getUUID()).stream()
                 .flatMap(r->r.inventoryDeltas().stream()).filter(d->d.fingerprint().equals(item+"#0")).mapToInt(FieldworkActionReceipt.ItemDelta::quantity).sum();
     }
     private static int count(Container c,Item item) { int n=0;for(int i=0;i<c.getContainerSize();i++)if(c.getItem(i).is(item))n+=c.getItem(i).getCount();return n; }
@@ -144,13 +149,13 @@ public final class NearFoodCycleGameTests {
         return n;
     }
     private static int cooked(ServerLevel l,Fixture f) {
-        return l.getBlockEntity(f.furnace()).saveWithoutMetadata(l.registryAccess()).getCompound("RecipesUsed").getInt("minecraft:baked_potato");
+        return l.getBlockEntity(f.furnace()).saveWithoutMetadata(l.registryAccess()).getCompoundOrEmpty("RecipesUsed").getIntOr("minecraft:baked_potato", 0);
     }
     private static List<String> meals(Fixture f) {
         return meals(f.courier());
     }
     private static List<String> meals(NpcBase actor) {
-        var server=actor.getServer();
+        var server=MinecraftApi.server(actor);
         return NpcBrainRuntime.data(server).history(actor.getUUID()).stream()
                 .filter(p->p.providerId().equals(LifePlanFactory.PROVIDER)&&p.status()==NpcPlanStatus.SUCCEEDED
                         &&"EAT".equals(p.steps().getFirst().params().get("operation")))
@@ -166,7 +171,7 @@ public final class NearFoodCycleGameTests {
         tag.putInt("Meals",eaten);tag.putInt("Coal",physical(l,f,Items.COAL));tag.putLong("Harvests",operations(f,FieldworkAction.Operation.HARVEST));
         tag.putLong("Plants",operations(f,FieldworkAction.Operation.PLANT));
         if(finalCheck) {
-            h.assertTrue(tag.getLong("Harvests")>=2&&tag.getLong("Plants")>=2,"two complete growth, harvest and replant cycles");
+            h.assertTrue(tag.getLongOr("Harvests", 0L)>=2&&tag.getLongOr("Plants", 0L)>=2,"two complete growth, harvest and replant cycles");
             h.assertTrue(eaten>=1&&cooked>0,"newly produced food was actually eaten");
             h.assertTrue(NpcLifeData.get(l.getServer()).needs(f.courier().getCharacterId()).hunger()<350,"meal satisfies real hunger");
             for(var route:SupplyFlowData.get(l.getServer()).routes())if(NeedRequestData.get(l.getServer()).request(route.need()).key().requester().equals(f.household()))
@@ -271,7 +276,7 @@ public final class NearFoodCycleGameTests {
         for(int x=0;x<12;x++)for(int z=0;z<12;z++)l.setBlockAndUpdate(base.offset(x,-1,z),Blocks.STONE.defaultBlockState());
         var a=actor(l,base.offset(3,0,4),NpcProfession.COURIER);var b=actor(l,base.offset(5,0,4),NpcProfession.COURIER);
         a.setNoAi(true);b.setNoAi(true);a.setCommand(NpcCommand.STAY);b.setCommand(NpcCommand.STAY);
-        String dim=l.dimension().location().toString();
+        String dim=l.dimension().identifier().toString();
         var town=com.jgeted.sagadyssey.social.settlement.SettlementRegistryData.get(server).create(server,"ration-cycle",com.jgeted.sagadyssey.social.settlement.SettlementType.HAMLET,dim,base,16,"sagadyssey:cycle-test",a.getCharacterId(),l.getGameTime());
         var life=NpcLifeData.get(server);
         for(var n:List.of(a,b)) {life.registerInstitutional(n,dim,town.id(),base,"ration fixture",null,null,NpcWorkShift.FLEXIBLE,l.getGameTime(),true);life.setHunger(n.getCharacterId(),700,l.getGameTime());}
@@ -308,29 +313,29 @@ public final class NearFoodCycleGameTests {
         NpcBrainRuntime.cancel(f.courier(),PlanCancellationReason.MANUAL,"cycle checkpoint after physical settlement");
         var marker=new CompoundTag();marker.putLong("Base",f.base().asLong());marker.putLong("Crop",f.crop().asLong());marker.putLong("Input",f.input().asLong());
         marker.putLong("Furnace",f.furnace().asLong());marker.putLong("Output",f.output().asLong());marker.putLong("Pantry",f.pantry().asLong());
-        marker.putUUID("Farmer",f.farmer().getUUID());marker.putUUID("Courier",f.courier().getUUID());marker.putUUID("FarmerPerson",f.farmer().getCharacterId());
-        marker.putUUID("CourierPerson",f.courier().getCharacterId());marker.putUUID("Household",f.household());marker.put("Totals",totals);marker.putInt("GrowthCalls",growth);
+        marker.store("Farmer", UUIDUtil.CODEC,f.farmer().getUUID());marker.store("Courier", UUIDUtil.CODEC,f.courier().getUUID());marker.store("FarmerPerson", UUIDUtil.CODEC,f.farmer().getCharacterId());
+        marker.store("CourierPerson", UUIDUtil.CODEC,f.courier().getCharacterId());marker.store("Household", UUIDUtil.CODEC,f.household());marker.put("Totals",totals);marker.putInt("GrowthCalls",growth);
         marker.putLong("Time",l.getGameTime());marker.putString("MealReceipt",meals(f).getFirst());
         marker.putString("FarmerInventory",com.jgeted.sagadyssey.worldsim.lod.LodFingerprints.inventory(f.farmer()));
         marker.putString("CourierInventory",com.jgeted.sagadyssey.worldsim.lod.LodFingerprints.inventory(f.courier()));
-        try{NbtIo.writeCompressed(marker,server.getWorldPath(LevelResource.ROOT).resolve(MARKER));server.saveEverything(true,true,true);net.neoforged.neoforge.common.IOUtilities.waitUntilIOWorkerComplete();}
+        try{NbtIo.writeCompressed(marker,server.getWorldPath(LevelResource.ROOT).resolve(MARKER));server.saveEverything(true,true,true);}
         catch(Exception e){throw new IllegalStateException("real cycle save",e);}
     }
     private static void recover(GameTestHelper h) {
         h.assertTrue(previous!=null,"independent baseline checkpoint required");var l=h.getLevel();
         h.succeedWhen(()->{
-            var farmer=l.getEntity(previous.getUUID("Farmer"));var courier=l.getEntity(previous.getUUID("Courier"));
+            var farmer=l.getEntity(previous.read("Farmer", UUIDUtil.CODEC).orElseThrow());var courier=l.getEntity(previous.read("Courier", UUIDUtil.CODEC).orElseThrow());
             if(farmer==null||courier==null)java.util.concurrent.locks.LockSupport.parkNanos(1_000_000L);
             h.assertTrue(farmer instanceof NpcBase&&courier instanceof NpcBase,"original entities from actual region save");
             var a=(NpcBase)farmer;var b=(NpcBase)courier;
-            h.assertTrue(a.getCharacterId().equals(previous.getUUID("FarmerPerson"))&&b.getCharacterId().equals(previous.getUUID("CourierPerson")),"same original people");
-            var f=new Fixture(BlockPos.of(previous.getLong("Base")),BlockPos.of(previous.getLong("Crop")),BlockPos.of(previous.getLong("Input")),BlockPos.of(previous.getLong("Furnace")),BlockPos.of(previous.getLong("Output")),BlockPos.of(previous.getLong("Pantry")),previous.getUUID("Household"),a,b,0);
+            h.assertTrue(a.getCharacterId().equals(previous.read("FarmerPerson", UUIDUtil.CODEC).orElseThrow())&&b.getCharacterId().equals(previous.read("CourierPerson", UUIDUtil.CODEC).orElseThrow()),"same original people");
+            var f=new Fixture(BlockPos.of(previous.getLongOr("Base", 0L)),BlockPos.of(previous.getLongOr("Crop", 0L)),BlockPos.of(previous.getLongOr("Input", 0L)),BlockPos.of(previous.getLongOr("Furnace", 0L)),BlockPos.of(previous.getLongOr("Output", 0L)),BlockPos.of(previous.getLongOr("Pantry", 0L)),previous.read("Household", UUIDUtil.CODEC).orElseThrow(),a,b,0);
             h.assertTrue(com.jgeted.sagadyssey.worldsim.lod.NpcLodRuntime.loaded(a)&&com.jgeted.sagadyssey.worldsim.lod.NpcLodRuntime.loaded(b),"original LOD identities reconcile");
-            h.assertTrue(previous.getString("FarmerInventory").equals(com.jgeted.sagadyssey.worldsim.lod.LodFingerprints.inventory(a))&&previous.getString("CourierInventory").equals(com.jgeted.sagadyssey.worldsim.lod.LodFingerprints.inventory(b)),"no inventory duplication or constructor gear");
-            h.assertTrue("DONE".equals(LifeActivityData.get(l.getServer()).settlement(previous.getString("MealReceipt"))),"original completed meal receipt retained");
+            h.assertTrue(previous.getStringOr("FarmerInventory", "").equals(com.jgeted.sagadyssey.worldsim.lod.LodFingerprints.inventory(a))&&previous.getStringOr("CourierInventory", "").equals(com.jgeted.sagadyssey.worldsim.lod.LodFingerprints.inventory(b)),"no inventory duplication or constructor gear");
+            h.assertTrue("DONE".equals(LifeActivityData.get(l.getServer()).settlement(previous.getStringOr("MealReceipt", ""))),"original completed meal receipt retained");
             // Later batches can advance several days. Hunger may legitimately grow after the saved meal.
-            var totals=account(h,f,false);h.assertTrue(totals.equals(previous.getCompound("Totals")),"unchanged physical and receipt totals across independent process");
-            h.assertTrue(NpcLifeData.get(l.getServer()).needs(b.getCharacterId()).lastAteAt()<=previous.getLong("Time"),"no invented newer meal during save or restart");
+            var totals=account(h,f,false);h.assertTrue(totals.equals(previous.getCompoundOrEmpty("Totals")),"unchanged physical and receipt totals across independent process");
+            h.assertTrue(NpcLifeData.get(l.getServer()).needs(b.getCharacterId()).lastAteAt()<=previous.getLongOr("Time", 0L),"no invented newer meal during save or restart");
             Sagadyssey.LOGGER.info("NEAR_CYCLE ACCEPT independent JVM same actors, completed meal and totals={}",totals);
         });
     }

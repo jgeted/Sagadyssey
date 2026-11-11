@@ -1,5 +1,7 @@
 package com.jgeted.sagadyssey.social.character;
 
+import net.minecraft.core.UUIDUtil;
+
 import net.minecraft.nbt.CompoundTag;
 
 import javax.annotation.Nullable;
@@ -18,15 +20,15 @@ public record CharacterBodyRef(String dimensionId, UUID entityId, long observedG
     public CompoundTag save() {
         CompoundTag tag = new CompoundTag();
         tag.putString("Dimension", dimensionId);
-        tag.putUUID("Entity", entityId);
+        tag.store("Entity", UUIDUtil.CODEC, entityId);
         tag.putLong("ObservedAt", observedGameTime);
         return tag;
     }
 
     @Nullable
     public static CharacterBodyRef load(CompoundTag tag) {
-        if (!tag.hasUUID("Entity") || tag.getString("Dimension").isBlank()) return null;
-        return new CharacterBodyRef(tag.getString("Dimension"), tag.getUUID("Entity"),
-                tag.getLong("ObservedAt"));
+        if (!tag.read("Entity", UUIDUtil.CODEC).isPresent() || tag.getStringOr("Dimension", "").isBlank()) return null;
+        return new CharacterBodyRef(tag.getStringOr("Dimension", ""), tag.read("Entity", UUIDUtil.CODEC).orElseThrow(),
+                tag.getLongOr("ObservedAt", 0L));
     }
 }

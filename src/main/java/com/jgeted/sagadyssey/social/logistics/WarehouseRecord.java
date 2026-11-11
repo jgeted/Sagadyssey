@@ -1,5 +1,7 @@
 package com.jgeted.sagadyssey.social.logistics;
 
+import net.minecraft.core.UUIDUtil;
+
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 
@@ -10,21 +12,21 @@ public record WarehouseRecord(UUID id, UUID settlementId, String name, String di
                               BlockPos position, UUID registeredByCharacter, long registeredGameTime) {
     public CompoundTag save() {
         CompoundTag tag = new CompoundTag();
-        tag.putUUID("Id", id);
-        tag.putUUID("Settlement", settlementId);
+        tag.store("Id", UUIDUtil.CODEC, id);
+        tag.store("Settlement", UUIDUtil.CODEC, settlementId);
         tag.putString("Name", cleanName(name));
         tag.putString("Dimension", dimension);
         tag.putLong("Position", position.asLong());
-        tag.putUUID("RegisteredBy", registeredByCharacter);
+        tag.store("RegisteredBy", UUIDUtil.CODEC, registeredByCharacter);
         tag.putLong("Registered", registeredGameTime);
         return tag;
     }
 
     public static WarehouseRecord load(CompoundTag tag) {
-        return new WarehouseRecord(tag.getUUID("Id"), tag.getUUID("Settlement"),
-                cleanName(tag.getString("Name")), tag.getString("Dimension"),
-                BlockPos.of(tag.getLong("Position")), tag.getUUID("RegisteredBy"),
-                tag.getLong("Registered"));
+        return new WarehouseRecord(tag.read("Id", UUIDUtil.CODEC).orElseThrow(), tag.read("Settlement", UUIDUtil.CODEC).orElseThrow(),
+                cleanName(tag.getStringOr("Name", "")), tag.getStringOr("Dimension", ""),
+                BlockPos.of(tag.getLongOr("Position", 0L)), tag.read("RegisteredBy", UUIDUtil.CODEC).orElseThrow(),
+                tag.getLongOr("Registered", 0L));
     }
 
     public static String cleanName(String name) {

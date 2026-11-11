@@ -80,7 +80,7 @@ public class WorkerWorkGoal extends Goal {
     @Override
     public boolean canUse() {
         if (com.jgeted.sagadyssey.npc.brain.execution.NpcBrainRuntime.isPlanned(npc)) return false;
-        if (!npc.isAlive() || npc.level().isClientSide) return false;
+        if (!npc.isAlive() || npc.level().isClientSide()) return false;
         if (npc.getProfession() != NpcProfession.WORKER) return false;
         if (npc.getCommand() != NpcCommand.WORK) return false;
         if (!com.jgeted.sagadyssey.social.life.NpcSchedulePlanner.allowsWork(npc)) return false;

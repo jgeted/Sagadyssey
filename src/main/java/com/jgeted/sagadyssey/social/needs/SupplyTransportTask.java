@@ -1,5 +1,7 @@
 package com.jgeted.sagadyssey.social.needs;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+
 import com.jgeted.sagadyssey.npc.ai.MovementProgress;
 import com.jgeted.sagadyssey.npc.brain.execution.*;
 import com.jgeted.sagadyssey.npc.brain.fieldwork.*;
@@ -12,14 +14,14 @@ import com.jgeted.sagadyssey.social.logistics.*;
 import com.jgeted.sagadyssey.social.work.NpcWorkContext;
 import com.jgeted.sagadyssey.worldsim.rights.*;
 import com.jgeted.sagadyssey.worldsim.transfer.*;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.world.Container;
 import java.util.*;
 
 /** Persistent travel/pickup/carry/delivery. Real custody survives pauses, failures and world reload. */
 public final class SupplyTransportTask implements NpcTaskExecutor {
-    public static final ResourceLocation ID=ResourceLocation.parse("sagadyssey:supply_transport");
-    public static final ResourceLocation PROVIDER=ResourceLocation.parse("sagadyssey:supply");
+    public static final Identifier ID=Identifier.parse("sagadyssey:supply_transport");
+    public static final Identifier PROVIDER=Identifier.parse("sagadyssey:supply");
     private final Map<UUID,MovementProgress> movement=new HashMap<>();
     private final Map<String,net.minecraft.core.BlockPos> regionalWaypoints=new HashMap<>();
     public static boolean eligible(NpcBase npc){return npc.isAlive()&&NpcBrainRuntime.isPlanned(npc)
@@ -35,19 +37,19 @@ public final class SupplyTransportTask implements NpcTaskExecutor {
             case CHARACTER -> principal.id().equals(npc.getCharacterId())||principal.id().equals(authority.employerCharacterId());
             case INSTITUTION -> principal.id().equals(authority.workplaceSettlementId())
                     || com.jgeted.sagadyssey.social.religion.ReligionTask.canCarrySupply(npc,route);
-            case HOUSEHOLD -> {var home=HouseholdData.get(npc.getServer()).byId(principal.id());yield home!=null&&(home.contains(npc.getCharacterId())||home.headCharacterId().equals(authority.employerCharacterId()));}
+            case HOUSEHOLD -> {var home=HouseholdData.get(MinecraftApi.server(npc)).byId(principal.id());yield home!=null&&(home.contains(npc.getCharacterId())||home.headCharacterId().equals(authority.employerCharacterId()));}
             case CONTAINER -> false;
         };
     }
     public static Optional<NpcPlan> choose(NpcBase npc,long now){
         if(!eligible(npc))return Optional.empty();
-        var flows=SupplyFlowData.get(npc.getServer());
+        var flows=SupplyFlowData.get(MinecraftApi.server(npc));
         var route=flows.routes().stream().filter(r->!r.closed()&&r.retryAt()<=now&&accepts(npc,r))
                 .filter(r->NpcSchedulePlanner.allowsWork(npc)||urgentOwnFood(npc,r)||urgentFamilyFood(npc,r))
-                .filter(r->flows.point(r.source()).dimension().equals(npc.level().dimension().location().toString()))
+                .filter(r->flows.point(r.source()).dimension().equals(npc.level().dimension().identifier().toString()))
                 .sorted(Comparator.comparing((SupplyFlowData.Route r)->r.stage()!=SupplyFlowData.Stage.CARRYING).thenComparing(r->r.id().toString())).findFirst().orElse(null);
         if(route==null)return Optional.empty();route=route.claim(npc.getUUID(),npc.getCharacterId());flows.route(route);
-        LogisticsData.get(npc.getServer()).claimManagedOrder(route.id(),npc.getCharacterId(),now);
+        LogisticsData.get(MinecraftApi.server(npc)).claimManagedOrder(route.id(),npc.getCharacterId(),now);
         var steps=new ArrayList<NpcPlanStep>();
         if(route.stage()==SupplyFlowData.Stage.HELD){step(steps,NpcPlanPhase.TRAVELLING,"source",route,now);step(steps,NpcPlanPhase.ACTING,"pickup",route,now);}
         step(steps,NpcPlanPhase.SETTLING,"destination",route,now);step(steps,NpcPlanPhase.SETTLING,"deliver",route,now);
@@ -57,11 +59,11 @@ public final class SupplyTransportTask implements NpcTaskExecutor {
     /** A starving resident may finish its own household's supported food supply, never unrelated work. */
     private static boolean urgentOwnFood(NpcBase npc,SupplyFlowData.Route route){
         if(!com.jgeted.sagadyssey.core.structure.NaturalVillageLifeData.ordinaryRawDiet(npc))return false;
-        var needs=com.jgeted.sagadyssey.social.life.NpcLifeData.get(npc.getServer()).needs(npc.getCharacterId());
+        var needs=com.jgeted.sagadyssey.social.life.NpcLifeData.get(MinecraftApi.server(npc)).needs(npc.getCharacterId());
         if(needs==null||needs.hunger()<800||route.principal().type()!=SubjectRef.SubjectType.HOUSEHOLD)return false;
         if(SettlementExchangeData.emergencyFood(npc,route))return true;
-        var home=HouseholdData.get(npc.getServer()).byId(route.principal().id());
-        var need=NeedRequestData.get(npc.getServer()).request(route.need());
+        var home=HouseholdData.get(MinecraftApi.server(npc)).byId(route.principal().id());
+        var need=NeedRequestData.get(MinecraftApi.server(npc)).request(route.need());
         return home!=null&&home.contains(npc.getCharacterId())&&need!=null&&need.key().item().itemId().equals("minecraft:carrot");
     }
     private static boolean urgentFamilyFood(NpcBase npc,SupplyFlowData.Route route){
@@ -69,16 +71,16 @@ public final class SupplyTransportTask implements NpcTaskExecutor {
         if(b==null||!npc.getCharacterId().equals(com.jgeted.sagadyssey.core.structure.NaturalVillageLifeData.person(b,1))
                 ||!route.principal().equals(SubjectRef.household(com.jgeted.sagadyssey.core.structure.NaturalVillageLifeData.home(b)))
                 ||!com.jgeted.sagadyssey.core.structure.NaturalFarmRules.foodEmergency(npc))return false;
-        var need=NeedRequestData.get(npc.getServer()).request(route.need());
+        var need=NeedRequestData.get(MinecraftApi.server(npc)).request(route.need());
         return need!=null&&need.key().item().equals(new ItemFingerprint("minecraft:carrot",0));
     }
     /** Read-only admission before waking a sleeper. Calling choose here would claim work too early. */
     public static boolean hasEmergencyRoute(NpcBase npc,long now){
-        if(!eligible(npc))return false;var server=npc.getServer();var flows=SupplyFlowData.get(server);
+        if(!eligible(npc))return false;var server=MinecraftApi.server(npc);var flows=SupplyFlowData.get(server);
         for(var route:flows.routes()){
             if(route.closed()||route.pending()!=null||route.retryAt()>now||!accepts(npc,route)||!urgentFamilyFood(npc,route))continue;
             var source=flows.point(route.source());var destination=flows.point(route.destination());
-            if(!source.dimension().equals(npc.level().dimension().location().toString()))continue;
+            if(!source.dimension().equals(npc.level().dimension().identifier().toString()))continue;
             var target=SupplyFlowService.container(server,destination);
             if(target==null||!SupplyFlowService.validOwner(server,destination)||FieldworkDepositTaskExecutor.capacity(target,new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.CARROT))<route.quantity()
                     ||FieldworkRoutes.plan(npc,destination.position(),false)==null)continue;
@@ -95,12 +97,12 @@ public final class SupplyTransportTask implements NpcTaskExecutor {
     private static void step(List<NpcPlanStep> steps,NpcPlanPhase phase,String op,SupplyFlowData.Route route,long now){
         steps.add(new NpcPlanStep(steps.size(),phase,ID,Map.of("route",route.id().toString(),"operation",op),NpcPlanStepStatus.PENDING,now,"实际搬运与交付"));
     }
-    @Override public ResourceLocation id(){return ID;}
+    @Override public Identifier id(){return ID;}
     @Override public TaskTickResult start(NpcExecutionContext c,NpcPlan p,NpcPlanStep s){return tick(c,p,s);}
     @Override public TaskTickResult recover(NpcExecutionContext c,NpcPlan p,NpcPlanStep s){movement.remove(p.id());return tick(c,p,s);}
     @Override public TaskTickResult tick(NpcExecutionContext raw,NpcPlan plan,NpcPlanStep step){
         if(!(raw instanceof NpcEntityExecutionContext c))return TaskTickResult.failed("运输需要服务端实体");
-        var npc=c.npc();var server=npc.getServer();var flows=SupplyFlowData.get(server);long now=c.gameTime();
+        var npc=c.npc();var server=MinecraftApi.server(npc);var flows=SupplyFlowData.get(server);long now=c.gameTime();
         var route=flows.route(UUID.fromString(step.params().get("route")));
         if(route.stage()==SupplyFlowData.Stage.DONE)return TaskTickResult.stepSucceeded("交付回执已经登记");
         if(!SettlementExchangeData.validRoute(server,route.id()))return defer(c,plan,route,"交换接收方迁居、解散或义务待核对，保留货物",false);
@@ -116,7 +118,7 @@ public final class SupplyTransportTask implements NpcTaskExecutor {
         if(operation.equals("deliver")&&route.stage()==SupplyFlowData.Stage.DONE)return TaskTickResult.stepSucceeded("交付已提交");
         var point=flows.point(operation.equals("source")||operation.equals("pickup")?route.source():route.destination());
         boolean regional=SettlementExchangeData.tradeRoute(server,route.id());
-        if(regional&&point.dimension().equals(c.level().dimension().location().toString())&&npc.blockPosition().distSqr(point.position())>24*24){
+        if(regional&&point.dimension().equals(c.level().dimension().identifier().toString())&&npc.blockPosition().distSqr(point.position())>24*24){
             if(!npc.onGround())return TaskTickResult.running("等待安全落地后继续区域商路");
             String waypointKey=plan.id()+":"+step.index();var waypoint=regionalWaypoints.get(waypointKey);
             if(waypoint==null||npc.blockPosition().distSqr(waypoint)<=16){waypoint=SettlementExchangeData.waypoint(npc,point.position());if(waypoint!=null)regionalWaypoints.put(waypointKey,waypoint);}
@@ -129,7 +131,7 @@ public final class SupplyTransportTask implements NpcTaskExecutor {
         }
         var target=SupplyFlowService.container(server,point);
         if(regional&&target==null)return TaskTickResult.running("等待接收仓储恢复，物资仍在原处或原货舱");
-        if(!point.dimension().equals(c.level().dimension().location().toString())||target==null||!SupplyFlowService.validOwner(server,point))
+        if(!point.dimension().equals(c.level().dimension().identifier().toString())||target==null||!SupplyFlowService.validOwner(server,point))
             return defer(c,plan,route,"目标失效、未加载或所有权变化",false);
         if(!FieldworkRoutes.closeEnough(npc,point.position())){
             if(!npc.onGround())return TaskTickResult.running("等待安全落地后继续搬运");
@@ -163,7 +165,7 @@ public final class SupplyTransportTask implements NpcTaskExecutor {
     }
     private SupplyFlowData.Route reconcile(NpcEntityExecutionContext c,SupplyFlowData.Route route,TransferReceipt receipt){
         var pending=route.pending();if(pending==null||!pending.id().equals(receipt.transferId()))throw new IllegalStateException("transport receipt mismatch");
-        var server=c.npc().getServer();long now=c.gameTime();var flows=SupplyFlowData.get(server);
+        var server=MinecraftApi.server(c.npc());long now=c.gameTime();var flows=SupplyFlowData.get(server);
         if(receipt.successful()){
             var needs=NeedRequestData.get(server);needs.acknowledge(pending.id(),route.need(),pending.pickup()?NeedRequestData.Action.DISPATCH:NeedRequestData.Action.DELIVER,pending.quantity(),now);
             var data=LogisticsData.get(server);var order=data.order(route.id());
@@ -180,7 +182,7 @@ public final class SupplyTransportTask implements NpcTaskExecutor {
         flows.route(route);return route;
     }
     private TaskTickResult defer(NpcEntityExecutionContext c,NpcPlan plan,SupplyFlowData.Route route,String reason,boolean path){
-        movement.remove(plan.id());regionalWaypoints.keySet().removeIf(k->k.startsWith(plan.id()+":"));c.npc().getNavigation().stop();long now=c.gameTime();var server=c.npc().getServer();
+        movement.remove(plan.id());regionalWaypoints.keySet().removeIf(k->k.startsWith(plan.id()+":"));c.npc().getNavigation().stop();long now=c.gameTime();var server=MinecraftApi.server(c.npc());
         int failures=route.failures()+(path?1:0);
         SupplyFlowData.get(server).route(route.progress(route.stage(),route.pending(),now+600,failures,reason));
         if(path&&route.stage()==SupplyFlowData.Stage.HELD&&route.pending()==null&&failures>=3)SupplyFlowService.release(server,route,now,reason);
@@ -189,7 +191,7 @@ public final class SupplyTransportTask implements NpcTaskExecutor {
         c.npc().reportWorkActivity("保管运输物资并等待",null,reason);return TaskTickResult.failed(reason);
     }
     @Override public void cancel(NpcExecutionContext raw,NpcPlan plan,NpcPlanStep step,PlanCancellationReason reason){
-        movement.remove(plan.id());regionalWaypoints.keySet().removeIf(k->k.startsWith(plan.id()+":"));if(raw instanceof NpcEntityExecutionContext c){c.npc().getNavigation().stop();var data=SupplyFlowData.get(c.npc().getServer());var route=data.route(UUID.fromString(step.params().get("route")));
+        movement.remove(plan.id());regionalWaypoints.keySet().removeIf(k->k.startsWith(plan.id()+":"));if(raw instanceof NpcEntityExecutionContext c){c.npc().getNavigation().stop();var data=SupplyFlowData.get(MinecraftApi.server(c.npc()));var route=data.route(UUID.fromString(step.params().get("route")));
             if(!route.closed())data.route(route.progress(route.stage(),route.pending(),c.gameTime()+200,route.failures(),"暂停计划，保留交付义务"));}
     }
 }

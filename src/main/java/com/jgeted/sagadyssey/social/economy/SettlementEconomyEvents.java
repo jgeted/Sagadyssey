@@ -1,5 +1,7 @@
 package com.jgeted.sagadyssey.social.economy;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+
 import com.jgeted.sagadyssey.npc.entity.NpcBase;
 import com.jgeted.sagadyssey.social.history.WorldHistoryData;
 import com.jgeted.sagadyssey.social.life.NpcFoodItems;
@@ -24,7 +26,7 @@ import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceKey;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -118,7 +120,7 @@ public final class SettlementEconomyEvents {
                                                 NpcBase npc) {
         var life = lifeData.record(npc.getCharacterId());
         return life != null
-                && settlement.id().equals(com.jgeted.sagadyssey.core.structure.NaturalVillageLifeData.individualRations(npc.getServer(),npc.getCharacterId())?com.jgeted.sagadyssey.social.household.NaturalHouseholdMigrationData.residentSettlement(npc.getServer(),npc.getCharacterId()):life.originSettlementId())
+                && settlement.id().equals(com.jgeted.sagadyssey.core.structure.NaturalVillageLifeData.individualRations(MinecraftApi.server(npc),npc.getCharacterId())?com.jgeted.sagadyssey.social.household.NaturalHouseholdMigrationData.residentSettlement(MinecraftApi.server(npc),npc.getCharacterId()):life.originSettlementId())
                 && settlement.dimension().equals(life.dimension());
     }
 
@@ -148,7 +150,7 @@ public final class SettlementEconomyEvents {
                                            UUID settlementId, int required) {
         int consumed = 0;
         for (WarehouseRecord warehouse : logistics.warehouses()) {
-            if (!settlementId.equals(warehouse.settlementId()) || !warehouse.dimension().equals(level.dimension().location().toString())
+            if (!settlementId.equals(warehouse.settlementId()) || !warehouse.dimension().equals(level.dimension().identifier().toString())
                     || !level.hasChunkAt(warehouse.position())) continue;
             Container container = WarehouseContainers.asContainer(level.getBlockEntity(warehouse.position()));
             if (container == null) continue;
@@ -247,7 +249,7 @@ public final class SettlementEconomyEvents {
 
     @Nullable
     private static ServerLevel level(MinecraftServer server, String dimension) {
-        ResourceLocation id = ResourceLocation.tryParse(dimension);
+        Identifier id = Identifier.tryParse(dimension);
         if (id == null) return null;
         return server.getLevel(ResourceKey.create(Registries.DIMENSION, id));
     }

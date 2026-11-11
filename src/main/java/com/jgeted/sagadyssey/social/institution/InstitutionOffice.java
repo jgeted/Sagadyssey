@@ -1,5 +1,8 @@
 package com.jgeted.sagadyssey.social.institution;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+import net.minecraft.core.UUIDUtil;
+
 import com.jgeted.sagadyssey.worldsim.rights.SubjectRef;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
@@ -32,8 +35,8 @@ public record InstitutionOffice(UUID id, UUID institutionId, String title,
 
     CompoundTag save() {
         CompoundTag tag = new CompoundTag();
-        tag.putUUID("Id", id);
-        tag.putUUID("Institution", institutionId);
+        tag.store("Id", UUIDUtil.CODEC, id);
+        tag.store("Institution", UUIDUtil.CODEC, institutionId);
         tag.putString("Title", title);
         tag.put("Holder", holder.save());
         ListTag powers = new ListTag();
@@ -52,14 +55,14 @@ public record InstitutionOffice(UUID id, UUID institutionId, String title,
 
     static InstitutionOffice load(CompoundTag tag) {
         Set<OfficeAuthority> powers = new HashSet<>();
-        ListTag values = tag.getList("Authorities", net.minecraft.nbt.Tag.TAG_COMPOUND);
+        ListTag values = MinecraftApi.listOfType(tag, "Authorities", net.minecraft.nbt.Tag.TAG_COMPOUND);
         for (int index = 0; index < values.size(); index++) {
-            try { powers.add(OfficeAuthority.valueOf(values.getCompound(index).getString("Value"))); }
+            try { powers.add(OfficeAuthority.valueOf(values.getCompoundOrEmpty(index).getStringOr("Value", ""))); }
             catch (IllegalArgumentException ignored) { }
         }
-        return new InstitutionOffice(tag.getUUID("Id"), tag.getUUID("Institution"),
-                tag.getString("Title"), SubjectRef.load(tag.getCompound("Holder")), powers,
-                SubjectRef.load(tag.getCompound("AppointedBy")), tag.getLong("StartsAt"),
-                tag.getLong("EndsAt"), tag.getBoolean("Revoked"));
+        return new InstitutionOffice(tag.read("Id", UUIDUtil.CODEC).orElseThrow(), tag.read("Institution", UUIDUtil.CODEC).orElseThrow(),
+                tag.getStringOr("Title", ""), SubjectRef.load(tag.getCompoundOrEmpty("Holder")), powers,
+                SubjectRef.load(tag.getCompoundOrEmpty("AppointedBy")), tag.getLongOr("StartsAt", 0L),
+                tag.getLongOr("EndsAt", 0L), tag.getBooleanOr("Revoked", false));
     }
 }

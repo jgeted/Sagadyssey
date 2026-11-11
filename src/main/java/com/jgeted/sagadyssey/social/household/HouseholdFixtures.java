@@ -19,7 +19,7 @@ public final class HouseholdFixtures {
     @Nullable
     public static BlockPos ensureSharedPantry(ServerLevel level, BlockPos preferred,
                                              HouseholdData households, NpcLifeData lives) {
-        String dimension = level.dimension().location().toString();
+        String dimension = level.dimension().identifier().toString();
         LogisticsData logistics = LogisticsData.get(level.getServer());
         for (int radius = 4; radius <= 18; radius += 2) {
             for (int dx = -radius; dx <= radius; dx += 2) {

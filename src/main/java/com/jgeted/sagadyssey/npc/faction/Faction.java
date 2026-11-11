@@ -2,7 +2,7 @@ package com.jgeted.sagadyssey.npc.faction;
 
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 
 import java.util.List;
 import java.util.Optional;
@@ -33,8 +33,8 @@ public record Faction(
         int defaultStanding,
         boolean canBeHostile,
         boolean canRecruit,
-        ResourceLocation iconTexture,
-        Optional<ResourceLocation> bannerPattern,
+        Identifier iconTexture,
+        Optional<Identifier> bannerPattern,
         Optional<int[]> guiNodePosition,
         float reputationMultiplier,
         boolean decayEnabled,
@@ -49,8 +49,8 @@ public record Faction(
                     Codec.INT.fieldOf("default_standing").forGetter(Faction::defaultStanding),
                     Codec.BOOL.fieldOf("can_be_hostile").forGetter(Faction::canBeHostile),
                     Codec.BOOL.fieldOf("can_recruit").forGetter(Faction::canRecruit),
-                    ResourceLocation.CODEC.fieldOf("icon").forGetter(Faction::iconTexture),
-                    ResourceLocation.CODEC.optionalFieldOf("banner_pattern").forGetter(Faction::bannerPattern),
+                    Identifier.CODEC.fieldOf("icon").forGetter(Faction::iconTexture),
+                    Identifier.CODEC.optionalFieldOf("banner_pattern").forGetter(Faction::bannerPattern),
                     Codec.INT.listOf()
                             .xmap(l -> l.stream().mapToInt(Integer::intValue).toArray(),
                                   a -> java.util.Arrays.stream(a).boxed().toList())
@@ -70,8 +70,8 @@ public record Faction(
     /** Codec factory：处理 decay_target 默认值（未填时使用 defaultStanding） */
     private static Faction create(
             String id, String displayName, int color, int defaultStanding,
-            boolean canBeHostile, boolean canRecruit, ResourceLocation iconTexture,
-            Optional<ResourceLocation> bannerPattern, Optional<int[]> guiNodePos,
+            boolean canBeHostile, boolean canRecruit, Identifier iconTexture,
+            Optional<Identifier> bannerPattern, Optional<int[]> guiNodePos,
             float reputationMultiplier, boolean decayEnabled,
             Optional<Integer> decayTargetOpt, int decayRatePerDay
     ) {

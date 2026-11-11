@@ -1,5 +1,7 @@
 package com.jgeted.sagadyssey.npc.brain.execution;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+
 import com.jgeted.sagadyssey.Sagadyssey;
 import com.jgeted.sagadyssey.npc.brain.blacksmith.BlacksmithForgeTaskExecutor;
 import com.jgeted.sagadyssey.npc.brain.blacksmith.BlacksmithOrderPlanFactory;
@@ -32,7 +34,7 @@ import com.jgeted.sagadyssey.social.production.ProductionCommitmentService;
 import com.jgeted.sagadyssey.social.production.ProductionMaterialRequestData;
 import com.jgeted.sagadyssey.worldsim.rights.RightsStateData;
 import com.jgeted.sagadyssey.social.life.NpcSchedulePlanner;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
@@ -49,8 +51,8 @@ import java.util.Optional;
 
 /** 服务端实体桥的集中装配点；未知 NPC 始终保持旧行为模式。 */
 public final class NpcBrainRuntime {
-    private static final ResourceLocation DIAGNOSTIC_PROVIDER =
-            ResourceLocation.fromNamespaceAndPath("sagadyssey", "diagnostic");
+    private static final Identifier DIAGNOSTIC_PROVIDER =
+            Identifier.fromNamespaceAndPath("sagadyssey", "diagnostic");
     private static final NpcTaskExecutorRegistry EXECUTORS = createExecutors();
     private static final Map<MinecraftServer, RuntimeState> STATES = new WeakHashMap<>();
 
@@ -58,12 +60,12 @@ public final class NpcBrainRuntime {
     }
 
     public static boolean isPlanned(NpcBase npc) {
-        MinecraftServer server = npc.getServer();
+        MinecraftServer server = MinecraftApi.server(npc);
         return server != null && NpcBrainData.get(server).isPlanned(npc.getUUID());
     }
 
     public static NpcBehaviorMode mode(NpcBase npc) {
-        MinecraftServer server = npc.getServer();
+        MinecraftServer server = MinecraftApi.server(npc);
         return server == null ? NpcBehaviorMode.LEGACY
                 : NpcBrainData.get(server).mode(npc.getUUID());
     }
@@ -92,7 +94,7 @@ public final class NpcBrainRuntime {
     public static NpcPlanExecutionUpdate tick(NpcBase npc) {
         long started=System.nanoTime();
         try {return tickInternal(npc);}
-        finally {if(npc.getServer()!=null)NpcPlanningMetrics.record(npc.getServer(),System.nanoTime()-started);}
+        finally {if(MinecraftApi.server(npc)!=null)NpcPlanningMetrics.record(MinecraftApi.server(npc),System.nanoTime()-started);}
     }
 
     private static NpcPlanExecutionUpdate tickInternal(NpcBase npc) {
@@ -251,7 +253,7 @@ public final class NpcBrainRuntime {
         if (state.data.active(npc.getUUID()).isEmpty()) {
             if (npc.getCommand() == NpcCommand.WORK && npc.getProfession() == NpcProfession.BLACKSMITH) {
                 state.lifecycle.save(BlacksmithRestPlanFactory.create(npc.getUUID(),
-                        npc.level().dimension().location().toString(), npc.blockPosition(), now));
+                        npc.level().dimension().identifier().toString(), npc.blockPosition(), now));
                 npc.reportWorkActivity("铁匠休整", null, "没有当前可执行订单或生活安排，短暂休整后重新核验");
             }
         }
@@ -271,7 +273,7 @@ public final class NpcBrainRuntime {
         state.execution.suspend(npc.getUUID());
         state.data.active(npc.getUUID()).ifPresent(p -> state.reservations.releasePlan(p.id()));
         state.reconciledHistory.remove(npc.getUUID());
-        com.jgeted.sagadyssey.worldsim.lod.NpcLodBudgets.planning(npc.getServer()).forget(npc.getUUID());
+        com.jgeted.sagadyssey.worldsim.lod.NpcLodBudgets.planning(MinecraftApi.server(npc)).forget(npc.getUUID());
     }
 
     /** 为测试入口或其他服务把指定生产订单绑定为当前铁匠计划。 */
@@ -296,7 +298,7 @@ public final class NpcBrainRuntime {
             }
             order = workstation == null
                     ? order.claim(npc.getCharacterId(), now, "铁匠领取生产订单")
-                    : order.claim(npc.getCharacterId(), npc.level().dimension().location().toString(),
+                    : order.claim(npc.getCharacterId(), npc.level().dimension().identifier().toString(),
                     workstation, now, "铁匠领取生产订单并选择工作站");
             orders.put(order);
         }
@@ -458,7 +460,7 @@ public final class NpcBrainRuntime {
         if (order == null) {
             for (ProductionOrder candidate : orders.openOrders()) {
                 if(!blacksmithDispatchable(candidate)||!mayWorkOrder(npc,candidate,now)) continue;
-                String currentDimension = npc.level().dimension().location().toString();
+                String currentDimension = npc.level().dimension().identifier().toString();
                 if (!candidate.targetContainerDimension().equals(currentDimension)
                         || (candidate.workstationDimension() != null
                         && !candidate.workstationDimension().equals(currentDimension))) continue;
@@ -485,6 +487,7 @@ public final class NpcBrainRuntime {
                 com.jgeted.sagadyssey.social.industry.workshop.WorkshopTask.BED,
                 com.jgeted.sagadyssey.social.industry.workshop.WorkshopTask.PLANKS,
                 com.jgeted.sagadyssey.social.industry.workshop.WorkshopTask.STICKS,
+                com.jgeted.sagadyssey.social.industry.workshop.WorkshopTask.FISHING_ROD,
                 com.jgeted.sagadyssey.social.industry.common.FurnaceWorkAdapter.RECIPE,
                 com.jgeted.sagadyssey.social.industry.common.FurnaceWorkAdapter.BOUND_IRON,
                 com.jgeted.sagadyssey.social.industry.common.FurnaceWorkAdapter.BOUND_POTATO).contains(order.recipeId());
@@ -501,13 +504,13 @@ public final class NpcBrainRuntime {
         return switch(issuer.type()) {
             case CHARACTER -> issuer.id().equals(npc.getCharacterId())
                     || issuer.id().equals(context.employerCharacterId())
-                    && com.jgeted.sagadyssey.social.service.ServiceRelationshipData.get(npc.getServer())
+                    && com.jgeted.sagadyssey.social.service.ServiceRelationshipData.get(MinecraftApi.server(npc))
                     .activeForAgent(npc.getCharacterId(),now).stream().anyMatch(r->r.principalId().equals(issuer.id())
                     &&r.scopes().contains(com.jgeted.sagadyssey.social.service.AuthorityScope.WORK)
-                    &&(r.limits().dimension().isBlank()||r.limits().dimension().equals(npc.level().dimension().location().toString()))
+                    &&(r.limits().dimension().isBlank()||r.limits().dimension().equals(npc.level().dimension().identifier().toString()))
                     &&(r.limits().workplaceSettlementId()==null||r.limits().workplaceSettlementId().equals(context.workplaceSettlementId())));
             case INSTITUTION -> issuer.id().equals(context.workplaceSettlementId());
-            case HOUSEHOLD -> {var home=com.jgeted.sagadyssey.social.household.HouseholdData.get(npc.getServer()).byId(issuer.id());yield home!=null&&home.contains(npc.getCharacterId());}
+            case HOUSEHOLD -> {var home=com.jgeted.sagadyssey.social.household.HouseholdData.get(MinecraftApi.server(npc)).byId(issuer.id());yield home!=null&&home.contains(npc.getCharacterId());}
             case CONTAINER -> false;
         };
     }
@@ -522,7 +525,7 @@ public final class NpcBrainRuntime {
     private static BlockPos findBlacksmithWorkstation(ServerLevel level,
                                                        ProductionOrder order) {
         BlockPos center = order.targetContainerDimension()
-                .equals(level.dimension().location().toString())
+                .equals(level.dimension().identifier().toString())
                 ? order.targetContainerPosition() : BlockPos.ZERO;
         BlockPos best = null;
         double bestDistance = Double.MAX_VALUE;
@@ -567,7 +570,7 @@ public final class NpcBrainRuntime {
     }
 
     private static MinecraftServer requireServer(NpcBase npc) {
-        MinecraftServer server = npc.getServer();
+        MinecraftServer server = MinecraftApi.server(npc);
         if (server == null) throw new IllegalStateException("NPC is not attached to a server");
         return server;
     }

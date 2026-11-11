@@ -1,5 +1,8 @@
 package com.jgeted.sagadyssey.social.production;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+import net.minecraft.core.UUIDUtil;
+
 import com.jgeted.sagadyssey.worldsim.rights.SubjectRef;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
@@ -47,11 +50,11 @@ public record ProductionBatch(UUID id, String recipeId, UUID workerId, SubjectRe
 
     CompoundTag save() {
         CompoundTag tag = new CompoundTag();
-        tag.putUUID("Id", id);
+        tag.store("Id", UUIDUtil.CODEC, id);
         tag.putString("Recipe", recipeId);
-        tag.putUUID("Worker", workerId);
+        tag.store("Worker", UUIDUtil.CODEC, workerId);
         tag.put("OutputOwner", outputOwner.save());
-        tag.putUUID("Container", containerId);
+        tag.store("Container", UUIDUtil.CODEC, containerId);
         ListTag inputTags = new ListTag();
         inputs.forEach(input -> inputTags.add(input.save()));
         tag.put("Inputs", inputTags);
@@ -66,15 +69,15 @@ public record ProductionBatch(UUID id, String recipeId, UUID workerId, SubjectRe
 
     static ProductionBatch load(CompoundTag tag) {
         List<ProductionMaterial> inputs = new ArrayList<>();
-        ListTag list = tag.getList("Inputs", Tag.TAG_COMPOUND);
+        ListTag list = MinecraftApi.listOfType(tag, "Inputs", Tag.TAG_COMPOUND);
         for (int index = 0; index < list.size(); index++) {
-            inputs.add(ProductionMaterial.load(list.getCompound(index)));
+            inputs.add(ProductionMaterial.load(list.getCompoundOrEmpty(index)));
         }
-        return new ProductionBatch(tag.getUUID("Id"), tag.getString("Recipe"),
-                tag.getUUID("Worker"), SubjectRef.load(tag.getCompound("OutputOwner")),
-                tag.getUUID("Container"), inputs,
-                ProductionMaterial.load(tag.getCompound("Output")), tag.getInt("RequiredWork"),
-                tag.getLong("Started"), tag.getLong("Finished"),
-                ProductionBatchStatus.valueOf(tag.getString("Status")), tag.getString("Explanation"));
+        return new ProductionBatch(tag.read("Id", UUIDUtil.CODEC).orElseThrow(), tag.getStringOr("Recipe", ""),
+                tag.read("Worker", UUIDUtil.CODEC).orElseThrow(), SubjectRef.load(tag.getCompoundOrEmpty("OutputOwner")),
+                tag.read("Container", UUIDUtil.CODEC).orElseThrow(), inputs,
+                ProductionMaterial.load(tag.getCompoundOrEmpty("Output")), tag.getIntOr("RequiredWork", 0),
+                tag.getLongOr("Started", 0L), tag.getLongOr("Finished", 0L),
+                ProductionBatchStatus.valueOf(tag.getStringOr("Status", "")), tag.getStringOr("Explanation", ""));
     }
 }

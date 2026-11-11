@@ -1,5 +1,7 @@
 package com.jgeted.sagadyssey.social.institution;
 
+import net.minecraft.core.UUIDUtil;
+
 import net.minecraft.nbt.CompoundTag;
 
 import javax.annotation.Nullable;
@@ -25,11 +27,11 @@ public record InstitutionRecord(UUID id, String name, InstitutionKind kind,
 
     CompoundTag save() {
         CompoundTag tag = new CompoundTag();
-        tag.putUUID("Id", id);
+        tag.store("Id", UUIDUtil.CODEC, id);
         tag.putString("Name", name);
         tag.putString("Kind", kind.name());
-        if (settlementId != null) tag.putUUID("Settlement", settlementId);
-        tag.putUUID("Treasury", treasuryContainerId);
+        if (settlementId != null) tag.store("Settlement", UUIDUtil.CODEC, settlementId);
+        tag.store("Treasury", UUIDUtil.CODEC, treasuryContainerId);
         tag.putLong("FoundedAt", foundedAt);
         tag.putBoolean("Active", active);
         tag.putString("Charter", charter);
@@ -37,10 +39,10 @@ public record InstitutionRecord(UUID id, String name, InstitutionKind kind,
     }
 
     static InstitutionRecord load(CompoundTag tag) {
-        return new InstitutionRecord(tag.getUUID("Id"), tag.getString("Name"),
-                InstitutionKind.valueOf(tag.getString("Kind")),
-                tag.hasUUID("Settlement") ? tag.getUUID("Settlement") : null,
-                tag.getUUID("Treasury"), tag.getLong("FoundedAt"),
-                tag.getBoolean("Active"), tag.getString("Charter"));
+        return new InstitutionRecord(tag.read("Id", UUIDUtil.CODEC).orElseThrow(), tag.getStringOr("Name", ""),
+                InstitutionKind.valueOf(tag.getStringOr("Kind", "")),
+                tag.read("Settlement", UUIDUtil.CODEC).isPresent() ? tag.read("Settlement", UUIDUtil.CODEC).orElseThrow() : null,
+                tag.read("Treasury", UUIDUtil.CODEC).orElseThrow(), tag.getLongOr("FoundedAt", 0L),
+                tag.getBooleanOr("Active", false), tag.getStringOr("Charter", ""));
     }
 }

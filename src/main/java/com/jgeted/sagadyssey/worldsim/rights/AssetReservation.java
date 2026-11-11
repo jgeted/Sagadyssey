@@ -1,5 +1,7 @@
 package com.jgeted.sagadyssey.worldsim.rights;
 
+import net.minecraft.core.UUIDUtil;
+
 import net.minecraft.nbt.CompoundTag;
 
 import java.util.UUID;
@@ -33,8 +35,8 @@ public record AssetReservation(UUID id, UUID containerId, ItemFingerprint finger
 
     public CompoundTag save() {
         CompoundTag tag = new CompoundTag();
-        tag.putUUID("Id", id);
-        tag.putUUID("Container", containerId);
+        tag.store("Id", UUIDUtil.CODEC, id);
+        tag.store("Container", UUIDUtil.CODEC, containerId);
         tag.put("Fingerprint", fingerprint.save());
         tag.putInt("Quantity", quantity);
         tag.put("ReservedFor", reservedFor.save());
@@ -46,9 +48,9 @@ public record AssetReservation(UUID id, UUID containerId, ItemFingerprint finger
     }
 
     public static AssetReservation load(CompoundTag tag) {
-        return new AssetReservation(tag.getUUID("Id"), tag.getUUID("Container"),
-                ItemFingerprint.load(tag.getCompound("Fingerprint")), tag.getInt("Quantity"),
-                SubjectRef.load(tag.getCompound("ReservedFor")), tag.getString("Token"),
-                tag.getString("Purpose"), tag.getLong("CreatedAt"), tag.getLong("ExpiresAt"));
+        return new AssetReservation(tag.read("Id", UUIDUtil.CODEC).orElseThrow(), tag.read("Container", UUIDUtil.CODEC).orElseThrow(),
+                ItemFingerprint.load(tag.getCompoundOrEmpty("Fingerprint")), tag.getIntOr("Quantity", 0),
+                SubjectRef.load(tag.getCompoundOrEmpty("ReservedFor")), tag.getStringOr("Token", ""),
+                tag.getStringOr("Purpose", ""), tag.getLongOr("CreatedAt", 0L), tag.getLongOr("ExpiresAt", 0L));
     }
 }

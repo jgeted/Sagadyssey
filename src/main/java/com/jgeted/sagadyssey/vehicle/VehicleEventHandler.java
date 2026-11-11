@@ -7,8 +7,9 @@ import com.jgeted.sagadyssey.npc.profession.NpcProfession;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.Leashable;
-import net.minecraft.world.entity.animal.horse.AbstractHorse;
+import net.minecraft.world.entity.animal.equine.AbstractHorse;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -53,7 +54,7 @@ public class VehicleEventHandler {
                 for (int i = 0; i < npc.getEquipmentInventory().getContainerSize(); i++) {
                     if (npc.getEquipmentInventory().getItem(i).isEmpty()) {
                         npc.getEquipmentInventory().setItem(i, new ItemStack(Items.LEAD));
-                        if (!player.level().isClientSide) {
+                        if (!player.level().isClientSide()) {
                             player.displayClientMessage(
                                     Component.literal("§a" + npc.getNpcName() + " 拿到了一根栓绳"), true);
                         }
@@ -65,7 +66,7 @@ public class VehicleEventHandler {
                     }
                 }
                 // NPC 背包满了
-                if (!player.level().isClientSide) {
+                if (!player.level().isClientSide()) {
                     player.displayClientMessage(
                             Component.literal("§c" + npc.getNpcName() + " 背包已满"), true);
                 }
@@ -73,7 +74,7 @@ public class VehicleEventHandler {
             } else {
                 // 情况 B：玩家牵着马右键 NPC → 绑定坐骑
                 if (npc.hasMount()) {
-                    if (!player.level().isClientSide) {
+                    if (!player.level().isClientSide()) {
                         player.displayClientMessage(
                                 Component.literal("§c" + npc.getNpcName() + " 已有坐骑"), true);
                     }
@@ -86,8 +87,8 @@ public class VehicleEventHandler {
                 double nearestDist = 10.0;
                 for (AbstractHorse horse : npc.level().getEntitiesOfClass(AbstractHorse.class,
                         npc.getBoundingBox().inflate(10))) {
-                    if (horse.isTamed() && horse.getOwnerUUID() != null
-                            && horse.getOwnerUUID().equals(player.getUUID())) {
+                    if (horse.isTamed() && com.jgeted.sagadyssey.core.MinecraftApi.ownerId(horse) != null
+                            && com.jgeted.sagadyssey.core.MinecraftApi.ownerId(horse).equals(player.getUUID())) {
                         // 优先选中玩家牵着的马
                         if (horse instanceof Leashable l && l.isLeashed() && l.getLeashHolder() == player) {
                             nearestHorse = horse;
@@ -102,7 +103,7 @@ public class VehicleEventHandler {
                 }
 
                 if (nearestHorse != null) {
-                    if (!player.level().isClientSide) {
+                    if (!player.level().isClientSide()) {
                         npc.bindMount(nearestHorse);
                         // bindMount 内已尝试上马，这里兜底：距离稍远时也强制骑
                         if (!npc.isPassenger() && nearestHorse.isSaddled()
@@ -133,7 +134,7 @@ public class VehicleEventHandler {
         if (npc.getRandom().nextFloat() >= SagadysseyConfig.MOUNT_SPAWN_CHANCE.get()) return;
 
         EntityType<?> mountType = selectMountFor(npc);
-        Entity mount = mountType.create(npc.level());
+        Entity mount = mountType.create(npc.level(), net.minecraft.world.entity.EntitySpawnReason.COMMAND);
         if (mount == null) return;
 
         mount.setPos(npc.getX(), npc.getY(), npc.getZ());
@@ -142,8 +143,8 @@ public class VehicleEventHandler {
         if (mount instanceof net.minecraft.world.entity.Mob mob) {
             mob.finalizeSpawn(
                     (net.minecraft.server.level.ServerLevel) npc.level(),
-                    npc.level().getCurrentDifficultyAt(npc.blockPosition()),
-                    net.minecraft.world.entity.MobSpawnType.COMMAND,
+                    com.jgeted.sagadyssey.core.MinecraftApi.serverLevel(npc).getCurrentDifficultyAt(npc.blockPosition()),
+                    net.minecraft.world.entity.EntitySpawnReason.COMMAND,
                     null
             );
         }
@@ -151,25 +152,12 @@ public class VehicleEventHandler {
         npc.level().addFreshEntity(mount);
 
         if (mount instanceof AbstractHorse horse) {
-            // 设马鞍物品
-            horse.getInventory().setItem(0, new ItemStack(Items.SADDLE));
-            // 确保 saddled flag 被设置（setItem 不一定会触发 flag）
-            try {
-                var flagField = AbstractHorse.class.getDeclaredField("DATA_ID_FLAGS");
-                flagField.setAccessible(true);
-                @SuppressWarnings("unchecked")
-                net.minecraft.network.syncher.EntityDataAccessor<Byte> DATA_FLAGS =
-                        (net.minecraft.network.syncher.EntityDataAccessor<Byte>) flagField.get(null);
-                byte flags = horse.getEntityData().get(DATA_FLAGS);
-                horse.getEntityData().set(DATA_FLAGS, (byte) (flags | 4)); // bit 2 = saddled
-            } catch (Exception ignored) {}
-
             horse.setTamed(true);
             Player owner = npc.getActiveOwner();
             if (owner != null) {
                 horse.tameWithName(owner);
             }
-            horse.getInventory().setItem(0, new ItemStack(Items.SADDLE));
+            horse.setItemSlot(EquipmentSlot.SADDLE, new ItemStack(Items.SADDLE));
 
             // bindMount 会自动配栓绳
             npc.bindMount(horse);

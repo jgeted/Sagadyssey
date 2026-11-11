@@ -1,5 +1,9 @@
 package com.jgeted.sagadyssey.social.industry;
 
+import com.jgeted.sagadyssey.gametest.PortedGameTests.*;
+
+import com.jgeted.sagadyssey.core.MinecraftApi;
+
 import com.jgeted.sagadyssey.npc.brain.execution.NpcBrainRuntime;
 import com.jgeted.sagadyssey.npc.brain.fieldwork.*;
 import com.jgeted.sagadyssey.npc.brain.persistence.NpcBehaviorMode;
@@ -24,7 +28,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.Container;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.item.*;
-import net.minecraft.world.level.GameRules;
+import net.minecraft.world.level.gamerules.GameRules;
 import net.minecraft.world.level.block.*;
 import net.neoforged.neoforge.gametest.*;
 import java.util.*;
@@ -45,9 +49,9 @@ public final class IndustryIntegrationGameTests {
         return new TestFunction("industries","industry."+name,"sagadyssey_industries:empty",ticks,0,true,body);
     }
     @BeforeBatch(batch="industries") public static void conditions(ServerLevel l) {
-        l.setDayTime(1000);l.getGameRules().getRule(GameRules.RULE_DAYLIGHT).set(false,l.getServer());
-        l.getGameRules().getRule(GameRules.RULE_DOMOBSPAWNING).set(false,l.getServer());
-        l.getGameRules().getRule(GameRules.RULE_RANDOMTICKING).set(0,l.getServer());
+        l.setDayTime(1000);l.getGameRules().set(GameRules.ADVANCE_TIME, false,l.getServer());
+        l.getGameRules().set(GameRules.SPAWN_MOBS, false,l.getServer());
+        l.getGameRules().set(GameRules.RANDOM_TICK_SPEED, 0,l.getServer());
         // Mature initial crop blocks are finite fixture inputs; no claim of a natural crop-growth cycle.
     }
     private static void floor(GameTestHelper h) { for(int x=0;x<24;x++)for(int z=0;z<12;z++)h.setBlock(x,0,z,Blocks.STONE); }
@@ -55,13 +59,13 @@ public final class IndustryIntegrationGameTests {
         var n=h.spawn(NpcEntityTypes.NPC_BASE.get(),p);n.setProfession(role);n.setCommand(NpcCommand.WORK);
         n.getPersonalInventory().clearContent();n.getTransportInventory().clearContent();
         n.setItemSlot(EquipmentSlot.MAINHAND,ItemStack.EMPTY);n.setItemSlot(EquipmentSlot.OFFHAND,ItemStack.EMPTY);
-        n.setPersistenceRequired();NpcLifeData.get(n.getServer()).ensureRegistered(n,h.getLevel().getGameTime());
+        n.setPersistenceRequired();NpcLifeData.get(MinecraftApi.server(n)).ensureRegistered(n,h.getLevel().getGameTime());
         var owner=SubjectRef.character(n.getCharacterId());
-        RightsStateData.get(n.getServer()).ensureContext(ContainerIds.npcPersonal(n.getCharacterId()),"npc:"+n.getCharacterId()+":personal",owner,owner,AccessPolicy.PRIVATE);
+        RightsStateData.get(MinecraftApi.server(n)).ensureContext(ContainerIds.npcPersonal(n.getCharacterId()),"npc:"+n.getCharacterId()+":personal",owner,owner,AccessPolicy.PRIVATE);
         NpcBrainRuntime.setMode(n,NpcBehaviorMode.PLANNED);return n;
     }
     private static HouseholdRecord family(GameTestHelper h,List<NpcBase> people) {
-        var s=h.getLevel().getServer();long now=h.getLevel().getGameTime();String dim=h.getLevel().dimension().location().toString();
+        var s=h.getLevel().getServer();long now=h.getLevel().getGameTime();String dim=h.getLevel().dimension().identifier().toString();
         var site=SettlementRegistryData.get(s).create(s,"industry fixture",SettlementType.VILLAGE,dim,
                 h.absolutePos(new BlockPos(12,1,6)),32,"sagadyssey:kingdom",people.getFirst().getCharacterId(),now);
         var homes=HouseholdData.get(s);var home=homes.create("industry household",dim,site.id(),people.getFirst().getCharacterId(),h.absolutePos(new BlockPos(20,1,9)),now);
@@ -70,15 +74,15 @@ public final class IndustryIntegrationGameTests {
         return homes.byId(home.id());
     }
     private static Container privateStore(GameTestHelper h,NpcBase n,BlockPos p) {
-        h.setBlock(p,Blocks.BARREL);var abs=h.absolutePos(p);String dim=h.getLevel().dimension().location().toString();
-        h.assertTrue(NpcLifeData.get(n.getServer()).assignPrivateStorage(n.getServer(),n.getCharacterId(),dim,abs,h.getLevel().getGameTime()),"private storage configured by existing API");
-        var id=ProductionContainerIds.resolve(n.getServer(),dim,abs);var owner=SubjectRef.character(n.getCharacterId());
-        RightsStateData.get(n.getServer()).ensureContext(id,dim+":"+abs.asLong(),owner,owner,AccessPolicy.PRIVATE);
-        FieldworkData.get(n.getServer()).bindTestStorage(n.getUUID(),new FieldworkStorage(dim,abs,id,owner,AccessPolicy.PRIVATE,TransferIntent.DELIVERY,"industry-fixture"));
+        h.setBlock(p,Blocks.BARREL);var abs=h.absolutePos(p);String dim=h.getLevel().dimension().identifier().toString();
+        h.assertTrue(NpcLifeData.get(MinecraftApi.server(n)).assignPrivateStorage(MinecraftApi.server(n),n.getCharacterId(),dim,abs,h.getLevel().getGameTime()),"private storage configured by existing API");
+        var id=ProductionContainerIds.resolve(MinecraftApi.server(n),dim,abs);var owner=SubjectRef.character(n.getCharacterId());
+        RightsStateData.get(MinecraftApi.server(n)).ensureContext(id,dim+":"+abs.asLong(),owner,owner,AccessPolicy.PRIVATE);
+        FieldworkData.get(MinecraftApi.server(n)).bindTestStorage(n.getUUID(),new FieldworkStorage(dim,abs,id,owner,AccessPolicy.PRIVATE,TransferIntent.DELIVERY,"industry-fixture"));
         return (Container)h.getLevel().getBlockEntity(abs);
     }
     private static FieldworkStorage point(GameTestHelper h,BlockPos p,SubjectRef owner) {
-        h.setBlock(p,Blocks.BARREL);var abs=h.absolutePos(p);String dim=h.getLevel().dimension().location().toString();
+        h.setBlock(p,Blocks.BARREL);var abs=h.absolutePos(p);String dim=h.getLevel().dimension().identifier().toString();
         var id=ProductionContainerIds.resolve(h.getLevel().getServer(),dim,abs);
         RightsStateData.get(h.getLevel().getServer()).ensureContext(id,dim+":"+abs.asLong(),owner,owner,AccessPolicy.PRIVATE);
         var f=new FieldworkStorage(dim,abs,id,owner,AccessPolicy.PRIVATE,TransferIntent.DELIVERY,"industry-fixture");
@@ -128,7 +132,7 @@ public final class IndustryIntegrationGameTests {
         floor(h);var courier=npc(h,NpcProfession.COURIER,new BlockPos(3,1,5));family(h,List.of(courier));
         var owner=SubjectRef.character(courier.getCharacterId());var source=point(h,new BlockPos(4,1,5),owner);
         var a=point(h,new BlockPos(14,1,4),owner);var b=point(h,new BlockPos(14,1,8),owner);
-        box(h,source).setItem(0,new ItemStack(Items.COAL,6));var server=courier.getServer();long now=h.getLevel().getGameTime();
+        box(h,source).setItem(0,new ItemStack(Items.COAL,6));var server=MinecraftApi.server(courier);long now=h.getLevel().getGameTime();
         SupplyFlowData.get(server).reveal(owner,source.containerId());
         var one=SupplyFlowService.request(server,owner,"industry:first",a,new ItemFingerprint("minecraft:coal",0),3,now,now+12000);
         var two=SupplyFlowService.request(server,owner,"industry:second",b,new ItemFingerprint("minecraft:coal",0),3,now,now+12000);
@@ -143,7 +147,7 @@ public final class IndustryIntegrationGameTests {
     }
     private static void workshop(GameTestHelper h) {
         floor(h);var smith=npc(h,NpcProfession.BLACKSMITH,new BlockPos(12,1,5));var courier=npc(h,NpcProfession.COURIER,new BlockPos(3,1,5));family(h,List.of(smith,courier));
-        var server=smith.getServer();long now=h.getLevel().getGameTime();NpcLifeData.get(server).onRecruited(courier,smith.getCharacterId(),now);
+        var server=MinecraftApi.server(smith);long now=h.getLevel().getGameTime();NpcLifeData.get(server).onRecruited(courier,smith.getCharacterId(),now);
         var owner=SubjectRef.character(smith.getCharacterId());var source=point(h,new BlockPos(4,1,5),owner);
         var a=point(h,new BlockPos(14,1,4),owner);var b=point(h,new BlockPos(17,1,8),owner);h.setBlock(12,1,6,Blocks.ANVIL);
         box(h,source).setItem(0,new ItemStack(Items.IRON_INGOT,6));box(h,source).setItem(1,new ItemStack(Items.COAL,2));
@@ -168,7 +172,7 @@ public final class IndustryIntegrationGameTests {
         floor(h);var courier=npc(h,NpcProfession.COURIER,new BlockPos(3,1,5));var home=family(h,List.of(courier));
         var owner=SubjectRef.character(courier.getCharacterId());var stranger=SubjectRef.character(UUID.randomUUID());
         var source=point(h,new BlockPos(4,1,5),stranger);var target=point(h,new BlockPos(14,1,5),owner);
-        box(h,source).setItem(0,new ItemStack(Items.COAL,3));long now=h.getLevel().getGameTime();var server=courier.getServer();
+        box(h,source).setItem(0,new ItemStack(Items.COAL,3));long now=h.getLevel().getGameTime();var server=MinecraftApi.server(courier);
         courier.setItemSlot(EquipmentSlot.MAINHAND,new ItemStack(Items.IRON_PICKAXE));
         var rights=RightsStateData.get(server);var bag=ContainerIds.npcPersonal(courier.getCharacterId());
         rights.putClaim(new AssetClaim(UUID.randomUUID(),bag,courier.getPersonalInventory().getContainerSize(),

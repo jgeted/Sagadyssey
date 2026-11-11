@@ -1,6 +1,6 @@
 package com.jgeted.sagadyssey.npc.brain.plan;
 
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -12,9 +12,9 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.*;
 
 class NpcPlanStateTest {
-    private static final ResourceLocation PROVIDER = ResourceLocation.fromNamespaceAndPath(
+    private static final Identifier PROVIDER = Identifier.fromNamespaceAndPath(
             "sagadyssey", "test_provider");
-    private static final ResourceLocation EXECUTOR = ResourceLocation.fromNamespaceAndPath(
+    private static final Identifier EXECUTOR = Identifier.fromNamespaceAndPath(
             "sagadyssey", "test_executor");
 
     @Test

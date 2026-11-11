@@ -10,7 +10,7 @@ import com.jgeted.sagadyssey.npc.brain.plan.NpcPlanStatus;
 import com.jgeted.sagadyssey.npc.brain.plan.NpcPlanStep;
 import com.jgeted.sagadyssey.npc.brain.plan.NpcPlanStepStatus;
 import com.jgeted.sagadyssey.npc.brain.reservation.NpcReservation;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 
 import javax.annotation.Nullable;
 import java.util.Comparator;
@@ -78,7 +78,7 @@ public record NpcBrainSnapshot(UUID npcId, NpcBehaviorMode behaviorMode,
     }
 
     /** 当前活动计划摘要；步骤摘要只包含当前步骤。 */
-    public record PlanSummary(UUID planId, String candidateKey, ResourceLocation providerId,
+    public record PlanSummary(UUID planId, String candidateKey, Identifier providerId,
                               NpcPlanKind kind, NpcPlanPriority priority, NpcPlanStatus status,
                               NpcPlanPhase phase, int currentStepIndex, int stepCount,
                               StepSummary currentStep, @Nullable BlockerSummary blocker,
@@ -111,7 +111,7 @@ public record NpcBrainSnapshot(UUID npcId, NpcBehaviorMode behaviorMode,
     }
 
     /** 当前步骤的执行器与状态。参数不进入管理员聊天，避免泄漏或刷屏。 */
-    public record StepSummary(int index, NpcPlanPhase phase, ResourceLocation executorId,
+    public record StepSummary(int index, NpcPlanPhase phase, Identifier executorId,
                               NpcPlanStepStatus status, long updatedAt, String detail) {
         public StepSummary {
             if (index < 0 || phase == null || executorId == null || status == null) {

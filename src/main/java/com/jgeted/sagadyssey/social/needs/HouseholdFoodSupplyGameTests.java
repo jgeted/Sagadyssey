@@ -1,5 +1,7 @@
 package com.jgeted.sagadyssey.social.needs;
 
+import com.jgeted.sagadyssey.gametest.PortedGameTests.*;
+
 import static com.jgeted.sagadyssey.social.needs.HouseholdStockReconciliationGameTests.*;
 import com.jgeted.sagadyssey.npc.brain.execution.NpcBrainRuntime;
 import com.jgeted.sagadyssey.npc.brain.fieldwork.FieldworkStorage;
@@ -37,13 +39,13 @@ public final class HouseholdFoodSupplyGameTests {
     private record Site(FieldworkStorage point,Container inventory) {}
     private static Site site(GameTestHelper h,Fixture f,BlockPos relative,ItemStack stock,SubjectRef owner,boolean known) {
         h.setBlock(relative,Blocks.BARREL);var server=h.getLevel().getServer();var pos=h.absolutePos(relative);
-        String dimension=h.getLevel().dimension().location().toString();
+        String dimension=h.getLevel().dimension().identifier().toString();
         var id=ProductionContainerIds.resolve(server,dimension,pos);
         RightsStateData.get(server).ensureContext(id,dimension+":"+pos.asLong(),owner,owner,AccessPolicy.PRIVATE);
         var point=new FieldworkStorage(dimension,pos,id,owner,AccessPolicy.PRIVATE,TransferIntent.DELIVERY,"food-selection-test");
         var flows=SupplyFlowData.get(server);flows.register(point);
         if(known)flows.reveal(SubjectRef.household(f.household()),id);
-        var inventory=(Container)h.getBlockEntity(relative);inventory.setItem(0,stock);
+        var inventory=(Container)com.jgeted.sagadyssey.gametest.PortedGameTests.blockEntity(h, relative);inventory.setItem(0,stock);
         return new Site(point,inventory);
     }
     private static void aggregate(GameTestHelper h) {SupplyFlowService.aggregate(h.getLevel().getServer(),h.getLevel().getGameTime());}
@@ -115,7 +117,7 @@ public final class HouseholdFoodSupplyGameTests {
         var unsupported=site(h,f,new BlockPos(6,1,8),new ItemStack(Items.HONEY_BOTTLE,6),owner,true);
         unsupported.inventory().setItem(1,new ItemStack(Items.CARROT,6));
         unsupported.inventory().setItem(2,new ItemStack(Items.ROTTEN_FLESH,6));
-        var far=h.absolutePos(new BlockPos(1000000,1,1000000));String dim=h.getLevel().dimension().location().toString();
+        var far=h.absolutePos(new BlockPos(1000000,1,1000000));String dim=h.getLevel().dimension().identifier().toString();
         h.assertTrue(!h.getLevel().hasChunkAt(far),"negative control really is unloaded");
         UUID farId=ContainerIds.block("food-unloaded",dim,far);
         RightsStateData.get(server).ensureContext(farId,dim+":"+far.asLong(),owner,owner,AccessPolicy.PRIVATE);
@@ -241,10 +243,10 @@ public final class HouseholdFoodSupplyGameTests {
         bread.inventory().clearContent();apple.inventory().clearContent();aggregate(h);
         var waiting=only(h,f);h.assertTrue(waiting.id().equals(selected.id())&&waiting.status()==NeedRequestStatus.WAITING_EXTERNAL,"zero supply waits on same identity");
         try {
-            var storage=server.overworld().getDataStorage();storage.save();net.neoforged.neoforge.common.IOUtilities.waitUntilIOWorkerComplete();
-            int version=net.minecraft.SharedConstants.getCurrentVersion().getDataVersion().getVersion();
-            storage.set(NeedRequestData.NAME,NeedRequestData.load(storage.readTagFromDisk(NeedRequestData.NAME,null,version).getCompound("data"),server.registryAccess()));
-            storage.set(SupplyFlowData.NAME,SupplyFlowData.load(storage.readTagFromDisk(SupplyFlowData.NAME,null,version).getCompound("data"),server.registryAccess()));
+            var storage=server.overworld().getDataStorage();storage.saveAndJoin();
+            int version=net.minecraft.SharedConstants.getCurrentVersion().dataVersion().version();
+            storage.set(NeedRequestData.FACTORY.type(NeedRequestData.NAME),NeedRequestData.load(storage.readTagFromDisk(NeedRequestData.NAME,null,version).getCompoundOrEmpty("data"),server.registryAccess()));
+            storage.set(SupplyFlowData.FACTORY.type(SupplyFlowData.NAME),SupplyFlowData.load(storage.readTagFromDisk(SupplyFlowData.NAME,null,version).getCompoundOrEmpty("data"),server.registryAccess()));
         }catch(Exception e){throw new IllegalStateException("actual food ledger reload",e);}
         for(int i=0;i<5;i++)aggregate(h);
         h.assertTrue(only(h,f).equals(waiting),"actual disk reload and repeated no-supply scheduling retain one unchanged request");

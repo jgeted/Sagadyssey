@@ -1,18 +1,20 @@
 package com.jgeted.sagadyssey.worldsim.verifier;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.world.level.saveddata.SavedData;
+import com.jgeted.sagadyssey.worldsim.NbtSavedData;
 
 import javax.annotation.Nullable;
 import java.util.LinkedHashMap;
 import java.util.List;
 
 /** World-persistent storage for a small, bounded set of operator verification snapshots. */
-public final class VerifierSnapshotStore extends SavedData {
+public final class VerifierSnapshotStore extends NbtSavedData {
     public static final String DATA_NAME = "sagadyssey_verifier_snapshots_v1";
     public static final Factory<VerifierSnapshotStore> FACTORY =
             new Factory<>(VerifierSnapshotStore::new, VerifierSnapshotStore::load);
@@ -20,7 +22,7 @@ public final class VerifierSnapshotStore extends SavedData {
     private final LinkedHashMap<String, VerifierSnapshot> snapshots = new LinkedHashMap<>();
 
     public static VerifierSnapshotStore get(MinecraftServer server) {
-        return server.overworld().getDataStorage().computeIfAbsent(FACTORY, DATA_NAME);
+        return server.overworld().getDataStorage().computeIfAbsent(FACTORY.type(DATA_NAME));
     }
 
     public static void put(MinecraftServer server, VerifierSnapshot snapshot) {
@@ -59,10 +61,10 @@ public final class VerifierSnapshotStore extends SavedData {
 
     private static VerifierSnapshotStore load(CompoundTag tag, HolderLookup.Provider registries) {
         VerifierSnapshotStore data = new VerifierSnapshotStore();
-        ListTag list = tag.getList("Snapshots", Tag.TAG_COMPOUND);
+        ListTag list = MinecraftApi.listOfType(tag, "Snapshots", Tag.TAG_COMPOUND);
         for (int index = 0; index < list.size(); index++) {
             try {
-                VerifierSnapshot snapshot = VerifierSnapshot.load(list.getCompound(index));
+                VerifierSnapshot snapshot = VerifierSnapshot.load(list.getCompoundOrEmpty(index));
                 data.snapshots.remove(snapshot.name());
                 data.snapshots.put(snapshot.name(), snapshot);
                 if (data.snapshots.size() > MAX_SNAPSHOTS) {

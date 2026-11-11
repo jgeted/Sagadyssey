@@ -9,7 +9,7 @@ import io.netty.buffer.ByteBuf;
 import net.minecraft.core.RegistryAccess;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.item.ItemStack;
 import net.neoforged.neoforge.network.PacketDistributor;
@@ -62,7 +62,7 @@ public record NpcStatsPayload(
 ) implements CustomPacketPayload {
 
     public static final Type<NpcStatsPayload> TYPE = new Type<>(
-            ResourceLocation.fromNamespaceAndPath(Sagadyssey.MOD_ID, "npc_stats")
+            Identifier.fromNamespaceAndPath(Sagadyssey.MOD_ID, "npc_stats")
     );
 
     public static final StreamCodec<ByteBuf, NpcStatsPayload> STREAM_CODEC = StreamCodec.of(
@@ -242,7 +242,7 @@ public record NpcStatsPayload(
         String mountName = "无";
         if (hasMount) {
             var mount = npc.getMount();
-            if (mount instanceof net.minecraft.world.entity.animal.horse.AbstractHorse h) {
+            if (mount instanceof net.minecraft.world.entity.animal.equine.AbstractHorse h) {
                 var type = h.getType();
                 if (type == net.minecraft.world.entity.EntityType.DONKEY) {
                     mountType = 2;

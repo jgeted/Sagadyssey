@@ -1,5 +1,8 @@
 package com.jgeted.sagadyssey.worldsim.rights;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+import net.minecraft.core.UUIDUtil;
+
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.StringTag;
@@ -27,8 +30,8 @@ public record AssetClaim(UUID claimId, UUID containerId, int slot, ItemFingerpri
 
     public CompoundTag save() {
         CompoundTag tag = new CompoundTag();
-        tag.putUUID("Id", claimId);
-        tag.putUUID("Container", containerId);
+        tag.store("Id", UUIDUtil.CODEC, claimId);
+        tag.store("Container", UUIDUtil.CODEC, containerId);
         tag.putInt("Slot", slot);
         tag.put("Fingerprint", fingerprint.save());
         tag.putInt("Quantity", quantity);
@@ -42,12 +45,12 @@ public record AssetClaim(UUID claimId, UUID containerId, int slot, ItemFingerpri
     }
 
     public static AssetClaim load(CompoundTag tag) {
-        return new AssetClaim(tag.getUUID("Id"), tag.getUUID("Container"), tag.getInt("Slot"),
-                ItemFingerprint.load(tag.getCompound("Fingerprint")), tag.getInt("Quantity"),
-                SubjectRef.load(tag.getCompound("Owner")), SubjectRef.load(tag.getCompound("Custodian")),
-                strings(tag.getList("Encumbrances", Tag.TAG_STRING)),
-                strings(tag.getList("Reservations", Tag.TAG_STRING)),
-                tag.getString("Provenance"), tag.getLong("Revision"));
+        return new AssetClaim(tag.read("Id", UUIDUtil.CODEC).orElseThrow(), tag.read("Container", UUIDUtil.CODEC).orElseThrow(), tag.getIntOr("Slot", 0),
+                ItemFingerprint.load(tag.getCompoundOrEmpty("Fingerprint")), tag.getIntOr("Quantity", 0),
+                SubjectRef.load(tag.getCompoundOrEmpty("Owner")), SubjectRef.load(tag.getCompoundOrEmpty("Custodian")),
+                strings(MinecraftApi.listOfType(tag, "Encumbrances", Tag.TAG_STRING)),
+                strings(MinecraftApi.listOfType(tag, "Reservations", Tag.TAG_STRING)),
+                tag.getStringOr("Provenance", ""), tag.getLongOr("Revision", 0L));
     }
 
     private static ListTag stringList(Set<String> values) {
@@ -58,7 +61,7 @@ public record AssetClaim(UUID claimId, UUID containerId, int slot, ItemFingerpri
 
     private static Set<String> strings(ListTag list) {
         Set<String> values = new TreeSet<>();
-        for (int i = 0; i < list.size(); i++) values.add(list.getString(i));
+        for (int i = 0; i < list.size(); i++) values.add(list.getStringOr(i, ""));
         return values;
     }
 }

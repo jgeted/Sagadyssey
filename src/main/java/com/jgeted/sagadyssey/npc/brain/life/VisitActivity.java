@@ -1,11 +1,11 @@
 package com.jgeted.sagadyssey.npc.brain.life;
 
 import com.google.gson.JsonObject;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import java.util.Objects;
 
 /** Data-driven intent only: never grants location knowledge, access, food or relationships. */
-public record VisitActivity(ResourceLocation id, Kind kind, ResourceLocation facility,
+public record VisitActivity(Identifier id, Kind kind, Identifier facility,
                             int durationTicks, int capacity, int windowStart, int windowEnd) {
     public enum Kind { TALK, VISIT, TAVERN, READ, OBSERVE, WAIT }
 
@@ -28,9 +28,9 @@ public record VisitActivity(ResourceLocation id, Kind kind, ResourceLocation fac
                 : time >= windowStart || time < windowEnd;
     }
 
-    public static VisitActivity parse(ResourceLocation id, JsonObject json) {
+    public static VisitActivity parse(Identifier id, JsonObject json) {
         return new VisitActivity(id, Kind.valueOf(json.get("kind").getAsString()),
-                ResourceLocation.parse(json.get("facility").getAsString()),
+                Identifier.parse(json.get("facility").getAsString()),
                 integer(json, "duration_ticks"), integer(json, "capacity"),
                 integer(json, "window_start"), integer(json, "window_end"));
     }

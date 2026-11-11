@@ -1,5 +1,7 @@
 package com.jgeted.sagadyssey.social.character;
 
+import net.minecraft.core.UUIDUtil;
+
 import net.minecraft.nbt.CompoundTag;
 
 import java.util.UUID;
@@ -11,6 +13,6 @@ public final class NpcCharacterIdentityMigration {
     private NpcCharacterIdentityMigration() {}
 
     public static UUID resolve(CompoundTag tag, UUID entityId) {
-        return tag.hasUUID(CHARACTER_ID_KEY) ? tag.getUUID(CHARACTER_ID_KEY) : entityId;
+        return tag.read(CHARACTER_ID_KEY, UUIDUtil.CODEC).isPresent() ? tag.read(CHARACTER_ID_KEY, UUIDUtil.CODEC).orElseThrow() : entityId;
     }
 }

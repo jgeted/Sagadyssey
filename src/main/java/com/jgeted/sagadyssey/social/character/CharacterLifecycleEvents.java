@@ -59,7 +59,7 @@ public final class CharacterLifecycleEvents {
         characters.ensureNpcCharacter(
                 characterId, npc.getName().getString(), npc.getSocialClass(), npc.getOffice(),
                 factionId, level.getGameTime());
-        characters.bindNpcBody(characterId, level.dimension().location().toString(),
+        characters.bindNpcBody(characterId, level.dimension().identifier().toString(),
                 npc.getUUID(), level.getGameTime());
         RightsStateData assetRights = RightsStateData.get(level.getServer());
         SubjectRef npcSubject = SubjectRef.character(characterId);
@@ -100,8 +100,8 @@ public final class CharacterLifecycleEvents {
         int cost = rescueCost(record);
         if (countEmeralds(player) >= cost) {
             removeEmeralds(player, cost);
-            CharacterRegistryData.get(player.server).markRescued(player.getUUID());
-            WorldHistoryData.get(player.server).append(player.serverLevel().getGameTime(),
+            CharacterRegistryData.get(player.level().getServer()).markRescued(player.getUUID());
+            WorldHistoryData.get(player.level().getServer()).append(player.level().getGameTime(),
                     "character_rescued", record.id(), record.name(), event.getSource().getMsgId(),
                     Math.min(100, 12 + record.precedence() * 5));
             event.setCanceled(true);
@@ -114,23 +114,23 @@ public final class CharacterLifecycleEvents {
 
         // 先让所有已加载的旧版 NPC 绑定到上一世，再解除账号的当前人物绑定。
         sealLoadedLegacyOwnership(player);
-        CharacterRecord dead = CharacterRegistryData.get(player.server).markCurrentDead(
-                player.getUUID(), player.serverLevel().getGameTime(), event.getSource().getMsgId());
+        CharacterRecord dead = CharacterRegistryData.get(player.level().getServer()).markCurrentDead(
+                player.getUUID(), player.level().getGameTime(), event.getSource().getMsgId());
         PlayerIdentityAttachments.get(player).resetForNewCharacter();
         FactionAttachments.getStandings(player).resetForNewCharacter();
         CommandGroupAttachments.get(player).resetForNewCharacter();
         if (dead != null) {
-            HouseholdData.get(player.server).handleCharacterDeath(player.server, dead.id(),
-                    player.serverLevel().getGameTime());
-            NpcLifeData.get(player.server).onAuthorityDeath(player.server, dead.id(),
-                    player.serverLevel().getGameTime());
-            ServiceRelationshipData.get(player.server).endActiveForPrincipal(dead.id(),
+            HouseholdData.get(player.level().getServer()).handleCharacterDeath(player.level().getServer(), dead.id(),
+                    player.level().getGameTime());
+            NpcLifeData.get(player.level().getServer()).onAuthorityDeath(player.level().getServer(), dead.id(),
+                    player.level().getGameTime());
+            ServiceRelationshipData.get(player.level().getServer()).endActiveForPrincipal(dead.id(),
                     ServiceStatus.CANCELLED, "委托人物永久死亡，服务关系不由下一世继承",
-                    player.serverLevel().getGameTime());
-            PoliticalStateData.get(player.server).handleCharacterDeath(player.server,
-                    dead.id(), dead.name(), player.serverLevel().getGameTime());
-            refreshOnlinePoliticalIdentities(player.server);
-            WorldHistoryData.get(player.server).append(player.serverLevel().getGameTime(),
+                    player.level().getGameTime());
+            PoliticalStateData.get(player.level().getServer()).handleCharacterDeath(player.level().getServer(),
+                    dead.id(), dead.name(), player.level().getGameTime());
+            refreshOnlinePoliticalIdentities(player.level().getServer());
+            WorldHistoryData.get(player.level().getServer()).append(player.level().getGameTime(),
                     "character_died", dead.id(), dead.name(), dead.deathCause(),
                     dead.historicalImportance());
             player.sendSystemMessage(Component.translatable(
@@ -162,14 +162,14 @@ public final class CharacterLifecycleEvents {
         if (!(event.getEntity() instanceof ServerPlayer player)) return;
         if (!player.isAlive() || CharacterRegistry.current(player) != null) return;
 
-        CharacterRecord record = CharacterRegistryData.get(player.server).createFreshLife(player);
+        CharacterRecord record = CharacterRegistryData.get(player.level().getServer()).createFreshLife(player);
         PlayerIdentityAttachments.get(player).resetForNewCharacter();
         syncCompatibilityIdentity(player, record);
         FactionAttachments.getStandings(player).resetForNewCharacter();
         CommandGroupAttachments.get(player).resetForNewCharacter();
         FactionAttachments.syncToClient(player);
         CommandGroupAttachments.sync(player, false);
-        WorldHistoryData.get(player.server).append(player.serverLevel().getGameTime(),
+        WorldHistoryData.get(player.level().getServer()).append(player.level().getGameTime(),
                 "character_appeared", record.id(), record.name(), "", 5);
         player.sendSystemMessage(Component.translatable(
                 "message.sagadyssey.character.new_life", record.name(), record.id().toString()));
@@ -201,28 +201,28 @@ public final class CharacterLifecycleEvents {
     }
 
     private static void rescueAtSpawn(ServerPlayer player) {
-        ServerLevel level = player.server.overworld();
-        BlockPos spawn = level.getSharedSpawnPos();
+        ServerLevel level = player.level().getServer().overworld();
+        BlockPos spawn = level.getRespawnData().pos();
         player.teleportTo(level, spawn.getX() + 0.5D, spawn.getY() + 1.0D, spawn.getZ() + 0.5D,
-                player.getYRot(), player.getXRot());
+                java.util.Set.of(), player.getYRot(), player.getXRot(), true);
         player.setDeltaMovement(0.0D, 0.0D, 0.0D);
         player.fallDistance = 0.0F;
         player.clearFire();
         player.setHealth(Math.max(1.0F, player.getMaxHealth() * 0.35F));
         player.addEffect(new MobEffectInstance(MobEffects.REGENERATION, 100, 1));
-        player.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 100, 2));
+        player.addEffect(new MobEffectInstance(MobEffects.RESISTANCE, 100, 2));
     }
 
     private static void sealLoadedLegacyOwnership(ServerPlayer player) {
-        for (ServerLevel level : player.server.getAllLevels()) {
+        for (ServerLevel level : player.level().getServer().getAllLevels()) {
             for (var entity : level.getAllEntities()) {
                 if (entity instanceof NpcBase npc
                         && player.getUUID().equals(npc.getOwnerUUID())
                         && npc.getOwnerCharacterId() == null) {
                     npc.bindLegacyOwnerToCurrent(player);
-                    ServiceRelationshipData.get(player.server).ensureLegacyRecruitment(
+                    ServiceRelationshipData.get(player.level().getServer()).ensureLegacyRecruitment(
                             npc.getOwnerCharacterId(), npc.getCharacterId(),
-                            player.serverLevel().getGameTime());
+                            player.level().getGameTime());
                 }
             }
         }
@@ -260,7 +260,7 @@ public final class CharacterLifecycleEvents {
 
     /** 政治表是职务的权威来源；继承后即使继承人离线，再登录也会得到正确称谓和权限。 */
     private static void reconcilePoliticalIdentity(ServerPlayer player, CharacterRecord record) {
-        PoliticalStateData politics = PoliticalStateData.get(player.server);
+        PoliticalStateData politics = PoliticalStateData.get(player.level().getServer());
         NpcSocialClass socialClass = record.socialClass();
         NpcOffice office = record.office();
         String faction = record.factionId();
@@ -276,7 +276,7 @@ public final class CharacterLifecycleEvents {
                     ? NpcSocialClass.NOBLE : socialClass;
             office = NpcOffice.LOCAL_RULER;
             var title = politics.titlesOf(record.id()).iterator().next();
-            var settlement = SettlementRegistryData.get(player.server).byId(title);
+            var settlement = SettlementRegistryData.get(player.level().getServer()).byId(title);
             if (settlement != null) faction = settlement.factionId();
         } else if (politics.liegeOf(record.id()) != null) {
             office = NpcOffice.SWORN;
@@ -287,7 +287,7 @@ public final class CharacterLifecycleEvents {
 
         if (socialClass != record.socialClass() || office != record.office()
                 || !faction.equals(record.factionId())) {
-            CharacterRegistryData.get(player.server).updateIdentity(player.getUUID(), socialClass, office, faction);
+            CharacterRegistryData.get(player.level().getServer()).updateIdentity(player.getUUID(), socialClass, office, faction);
         }
     }
 

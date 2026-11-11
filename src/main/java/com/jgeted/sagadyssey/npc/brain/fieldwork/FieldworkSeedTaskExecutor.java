@@ -1,5 +1,7 @@
 package com.jgeted.sagadyssey.npc.brain.fieldwork;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+
 import com.jgeted.sagadyssey.core.structure.*;
 import com.jgeted.sagadyssey.npc.ai.MovementProgress;
 import com.jgeted.sagadyssey.npc.brain.execution.*;
@@ -13,14 +15,14 @@ import com.jgeted.sagadyssey.social.needs.SupplyFlowData;
 import com.jgeted.sagadyssey.social.needs.SupplyFlowService;
 import com.jgeted.sagadyssey.worldsim.rights.*;
 import com.jgeted.sagadyssey.worldsim.transfer.*;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.world.item.*;
 import java.util.*;
 
 /** Existing household wheat pickup, plus one carrot from a frozen authorized source for the v3 farmer. */
 public final class FieldworkSeedTaskExecutor implements NpcTaskExecutor {
     private final Map<UUID,MovementProgress> movement=new HashMap<>();
-    @Override public ResourceLocation id(){return FieldworkPlanFactory.SEED;}
+    @Override public Identifier id(){return FieldworkPlanFactory.SEED;}
     @Override public void forget(UUID body,UUID plan){movement.remove(plan);}
     @Override public TaskTickResult start(NpcExecutionContext c,NpcPlan p,NpcPlanStep s){return take(c,p,s);}
     @Override public TaskTickResult tick(NpcExecutionContext c,NpcPlan p,NpcPlanStep s){return take(c,p,s);}
@@ -41,9 +43,9 @@ public final class FieldworkSeedTaskExecutor implements NpcTaskExecutor {
     /** Selection reads registered knowledge and existing rights; it never grants access or reserves stock. */
     static FieldworkStorage carrotSource(NpcBase npc,UUID household,long now){
         if(!NaturalFarmRules.isFarmer(npc))return null;
-        var home=HouseholdData.get(npc.getServer()).forMember(npc.getCharacterId());
+        var home=HouseholdData.get(MinecraftApi.server(npc)).forMember(npc.getCharacterId());
         if(home==null||!home.id().equals(household))return null;
-        var b=NaturalFarmRules.forResident(npc);var flows=SupplyFlowData.get(npc.getServer());
+        var b=NaturalFarmRules.forResident(npc);var flows=SupplyFlowData.get(MinecraftApi.server(npc));
         for(var position:List.of(NaturalVillageLayout.RAW,NaturalVillageLayout.PANTRY)){
             boolean raw=position.equals(NaturalVillageLayout.RAW);
             var at=NaturalVillageLayout.at(b,position);
@@ -51,7 +53,7 @@ public final class FieldworkSeedTaskExecutor implements NpcTaskExecutor {
             if(!flows.known(SubjectRef.household(home.id())).contains(id))continue;
             var point=flows.point(id);
             if(!validCarrotSource(npc,home.id(),point))continue;
-            var inventory=SupplyFlowService.container(npc.getServer(),point);
+            var inventory=SupplyFlowService.container(MinecraftApi.server(npc),point);
             if(inventory!=null&&!usableSeed(npc,point,inventory,Items.CARROT,true,now).isEmpty())return point;
         }
         return null;
@@ -59,7 +61,7 @@ public final class FieldworkSeedTaskExecutor implements NpcTaskExecutor {
 
     private static boolean validCarrotSource(NpcBase npc,UUID household,FieldworkStorage point){
         if(!NaturalFarmRules.isFarmer(npc))return false;
-        var server=npc.getServer();var b=NaturalFarmRules.forResident(npc);
+        var server=MinecraftApi.server(npc);var b=NaturalFarmRules.forResident(npc);
         var home=HouseholdData.get(server).forMember(npc.getCharacterId());
         if(home==null||!home.id().equals(household)||!Objects.equals(home.settlementId(),b.settlementId())
                 ||!home.dimension().equals(b.dimension())||!point.dimension().equals(b.dimension())
@@ -80,14 +82,14 @@ public final class FieldworkSeedTaskExecutor implements NpcTaskExecutor {
 
     private static ItemStack usableSeed(NpcBase npc,FieldworkStorage source,net.minecraft.world.Container inventory,
                                         Item wanted,boolean strict,long now){
-        var service=new RightsService(RightsStateData.get(npc.getServer()));
+        var service=new RightsService(RightsStateData.get(MinecraftApi.server(npc)));
         var actor=SubjectRef.character(npc.getCharacterId());
         for(int slot=0;slot<inventory.getContainerSize();slot++){
             var item=inventory.getItem(slot);if(!item.is(wanted))continue;var fp=ItemFingerprint.of(item);
             if(service.can(actor,AssetRight.ACCESS,source.containerId(),slot,fp,now).status()!=RightsVerdict.Status.ALLOW
                     ||service.can(actor,AssetRight.CONSUME,source.containerId(),slot,fp,now).status()!=RightsVerdict.Status.ALLOW
                     ||strict&&service.can(actor,AssetRight.TRANSFER,source.containerId(),slot,fp,now).status()!=RightsVerdict.Status.ALLOW
-                    ||SupplyFlowService.available(npc.getServer(),source,actor,fp,now)<1)continue;
+                    ||SupplyFlowService.available(MinecraftApi.server(npc),source,actor,fp,now)<1)continue;
             return item;
         }
         return ItemStack.EMPTY;
@@ -95,7 +97,7 @@ public final class FieldworkSeedTaskExecutor implements NpcTaskExecutor {
 
     private TaskTickResult take(NpcExecutionContext raw,NpcPlan plan,NpcPlanStep step){
         if(!(raw instanceof NpcEntityExecutionContext c))return TaskTickResult.failed("领取种子需要服务端实体");
-        var npc=c.npc();var server=npc.getServer();long now=c.gameTime();
+        var npc=c.npc();var server=MinecraftApi.server(npc);long now=c.gameTime();
         var ledger=TransferLedgerData.get(server);var previous=ledger.receipt(plan.id());
         if(previous!=null)return previous.successful()?done(npc,plan,"已提交同一种子领取，未重复取物"):stop(npc,plan,"本次领取未提交，稍后重查条件");
         var target=FieldworkTarget.position(step.params());
@@ -106,7 +108,7 @@ public final class FieldworkSeedTaskExecutor implements NpcTaskExecutor {
         if(shortageTarget(npc,target)==null)return done(npc,plan,"无需再领种用物资");
         var home=HouseholdData.get(server).forMember(npc.getCharacterId());
         if(home==null||home.sharedStorage()==null||!home.id().toString().equals(step.params().get("household"))
-                ||!home.dimension().equals(c.level().dimension().location().toString()))return stop(npc,plan,"家庭或种子仓关联已变化");
+                ||!home.dimension().equals(c.level().dimension().identifier().toString()))return stop(npc,plan,"家庭或种子仓关联已变化");
         FieldworkStorage source;
         if(carrot){
             try{

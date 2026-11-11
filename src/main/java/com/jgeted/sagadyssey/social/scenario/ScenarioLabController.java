@@ -16,7 +16,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.world.Container;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.EntityType;
-import net.minecraft.world.entity.monster.Zombie;
+import net.minecraft.world.entity.monster.zombie.Zombie;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Block;
@@ -369,7 +369,7 @@ public final class ScenarioLabController {
         guard.setPos(deployment.anchor().getX() - 3.5D, deployment.anchor().getY(),
                 deployment.anchor().getZ() + 0.5D);
         guard.setCommand(NpcCommand.PATROL);
-        Zombie zombie = EntityType.ZOMBIE.create(level);
+        Zombie zombie = EntityType.ZOMBIE.create(level, net.minecraft.world.entity.EntitySpawnReason.COMMAND);
         if (zombie == null) {
             warnings.add("无法创建训练僵尸");
             return;

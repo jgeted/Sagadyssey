@@ -1,5 +1,8 @@
 package com.jgeted.sagadyssey.worldsim.transfer;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+import net.minecraft.core.UUIDUtil;
+
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
@@ -19,7 +22,7 @@ public record TransferReceipt(UUID transferId, Status status, boolean lawful, St
 
     public CompoundTag save() {
         CompoundTag tag = new CompoundTag();
-        tag.putUUID("Id", transferId);
+        tag.store("Id", UUIDUtil.CODEC, transferId);
         tag.putString("Status", status.name());
         tag.putBoolean("Lawful", lawful);
         tag.putString("Reason", reason);
@@ -27,7 +30,7 @@ public record TransferReceipt(UUID transferId, Status status, boolean lawful, St
         ListTag revisions = new ListTag();
         finalRevisions.forEach((id, revision) -> {
             CompoundTag entry = new CompoundTag();
-            entry.putUUID("Container", id);
+            entry.store("Container", UUIDUtil.CODEC, id);
             entry.putLong("Revision", revision);
             revisions.add(entry);
         });
@@ -37,14 +40,14 @@ public record TransferReceipt(UUID transferId, Status status, boolean lawful, St
 
     public static TransferReceipt load(CompoundTag tag) {
         Map<UUID, Long> revisions = new HashMap<>();
-        ListTag list = tag.getList("Revisions", Tag.TAG_COMPOUND);
+        ListTag list = MinecraftApi.listOfType(tag, "Revisions", Tag.TAG_COMPOUND);
         for (int i = 0; i < list.size(); i++) {
-            CompoundTag entry = list.getCompound(i);
-            if (entry.hasUUID("Container")) revisions.put(entry.getUUID("Container"), entry.getLong("Revision"));
+            CompoundTag entry = list.getCompoundOrEmpty(i);
+            if (entry.read("Container", UUIDUtil.CODEC).isPresent()) revisions.put(entry.read("Container", UUIDUtil.CODEC).orElseThrow(), entry.getLongOr("Revision", 0L));
         }
-        return new TransferReceipt(tag.getUUID("Id"), Status.valueOf(tag.getString("Status")),
-                tag.getBoolean("Lawful"), tag.getString("Reason"), revisions,
-                tag.getLong("CompletedAt"));
+        return new TransferReceipt(tag.read("Id", UUIDUtil.CODEC).orElseThrow(), Status.valueOf(tag.getStringOr("Status", "")),
+                tag.getBooleanOr("Lawful", false), tag.getStringOr("Reason", ""), revisions,
+                tag.getLongOr("CompletedAt", 0L));
     }
 
     public enum Status {

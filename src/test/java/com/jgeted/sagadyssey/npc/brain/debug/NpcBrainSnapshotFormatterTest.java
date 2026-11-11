@@ -6,7 +6,7 @@ import com.jgeted.sagadyssey.npc.brain.plan.NpcPlanPhase;
 import com.jgeted.sagadyssey.npc.brain.plan.NpcPlanPriority;
 import com.jgeted.sagadyssey.npc.brain.plan.NpcPlanStatus;
 import com.jgeted.sagadyssey.npc.brain.plan.NpcPlanStepStatus;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -24,12 +24,12 @@ class NpcBrainSnapshotFormatterTest {
         UUID planId = UUID.randomUUID();
         NpcBrainSnapshot.StepSummary step = new NpcBrainSnapshot.StepSummary(
                 0, NpcPlanPhase.ACTING,
-                ResourceLocation.fromNamespaceAndPath("sagadyssey", "smith_work"),
+                Identifier.fromNamespaceAndPath("sagadyssey", "smith_work"),
                 NpcPlanStepStatus.BLOCKED, 80L, "动作第一行\n伪造下一行");
         NpcBrainSnapshot.BlockerSummary blocker = new NpcBrainSnapshot.BlockerSummary(
                 "WORKSTATION_BUSY", "铁砧被占用", 120L, "forge:main");
         NpcBrainSnapshot.PlanSummary plan = new NpcBrainSnapshot.PlanSummary(
-                planId, "work:blacksmith", ResourceLocation.fromNamespaceAndPath(
+                planId, "work:blacksmith", Identifier.fromNamespaceAndPath(
                 "sagadyssey", "blacksmith"), NpcPlanKind.WORK, NpcPlanPriority.NORMAL,
                 NpcPlanStatus.BLOCKED, NpcPlanPhase.ACTING, 0, 2, step, blocker,
                 80L, 200L, "等待");

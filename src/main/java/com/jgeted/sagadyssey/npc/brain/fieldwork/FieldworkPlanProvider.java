@@ -1,5 +1,7 @@
 package com.jgeted.sagadyssey.npc.brain.fieldwork;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+
 import com.jgeted.sagadyssey.npc.brain.execution.NpcBrainRuntime;
 import com.jgeted.sagadyssey.npc.brain.plan.NpcPlan;
 import com.jgeted.sagadyssey.npc.brain.reservation.NpcReservationKey;
@@ -28,15 +30,15 @@ public final class FieldworkPlanProvider {
     }
 
     public static Optional<NpcPlan> choose(NpcBase npc, long now) {
-        if(com.jgeted.sagadyssey.social.politics.NaturalPolityData.paused(npc.getServer(),npc.getCharacterId()))return Optional.empty();
+        if(com.jgeted.sagadyssey.social.politics.NaturalPolityData.paused(MinecraftApi.server(npc),npc.getCharacterId()))return Optional.empty();
         if (!FieldworkDiscovery.producer(npc) || npc.getCommand() != NpcCommand.WORK || npc.getTarget() != null) return Optional.empty();
         // 导航在落地前不能给出可靠路径；这不是工作区不可达，不能写入长时失败记忆。
         if (!npc.onGround()) {
             npc.reportWorkActivity("调整站位", null, "等待安全落地后检查工作区域");
             return Optional.empty();
         }
-        var data = FieldworkData.get(npc.getServer());
-        String dimension = npc.level().dimension().location().toString();
+        var data = FieldworkData.get(MinecraftApi.server(npc));
+        String dimension = npc.level().dimension().identifier().toString();
         for (var scaffold : data.outstandingScaffolds(npc.getUUID())) {
             if (!scaffold.action().dimension().equals(dimension)) continue;
             if (data.unreachable(npc.getUUID(), dimension, scaffold.action().target(), now).isPresent()) continue;
@@ -71,7 +73,7 @@ public final class FieldworkPlanProvider {
             boolean missingSeed=false;
             if(target==null&&seedPass){target=FieldworkSeedTaskExecutor.shortageTarget(npc,pos);missingSeed=target!=null;}
             if (target == null) return FieldworkScan.ProbeResult.NONE;
-            if (NpcBrainRuntime.reservations(npc.getServer()).find(new NpcReservationKey("fieldwork_block", dimension + ':' + pos.asLong()), now).isPresent()) {
+            if (NpcBrainRuntime.reservations(MinecraftApi.server(npc)).find(new NpcReservationKey("fieldwork_block", dimension + ':' + pos.asLong()), now).isPresent()) {
                 return FieldworkScan.ProbeResult.DEFERRED;
             }
             var candidateRoute = FieldworkRoutes.plan(npc, pos, npc.getProfession() == com.jgeted.sagadyssey.npc.profession.NpcProfession.WORKER);
@@ -86,7 +88,7 @@ public final class FieldworkPlanProvider {
         if (result.status() == FieldworkScan.Status.FOUND) {
             if(seedPass)data.search(npc.getUUID(),profile,computedArea);
             if(seedShortage[0]){
-                var home=com.jgeted.sagadyssey.social.household.HouseholdData.get(npc.getServer()).forMember(npc.getCharacterId());
+                var home=com.jgeted.sagadyssey.social.household.HouseholdData.get(MinecraftApi.server(npc)).forMember(npc.getCharacterId());
                 data.saveScan(npc.getUUID(),FieldworkScan.Cursor.begin(result.cursor().area()));
                 if(com.jgeted.sagadyssey.core.structure.NaturalFarmRules.isFarmer(npc)){
                     var source=home==null?null:FieldworkSeedTaskExecutor.carrotSource(npc,home.id(),now);
@@ -100,7 +102,7 @@ public final class FieldworkPlanProvider {
             }
             if (found[0].operation()==FieldworkAction.Operation.MINE && FieldworkDiscovery.mineTarget(found[0].before())
                     && !FieldworkToolTaskExecutor.hasUsablePickaxe(npc,found[0].before(),now)) {
-                var home=com.jgeted.sagadyssey.social.household.HouseholdData.get(npc.getServer()).forMember(npc.getCharacterId());
+                var home=com.jgeted.sagadyssey.social.household.HouseholdData.get(MinecraftApi.server(npc)).forMember(npc.getCharacterId());
                 // Retry this real target after replenishment; discovery must not silently skip it.
                 data.saveScan(npc.getUUID(),FieldworkScan.Cursor.begin(result.cursor().area()));
                 return Optional.of(home==null||home.sharedStorage()==null
@@ -135,21 +137,21 @@ public final class FieldworkPlanProvider {
                 ||!com.jgeted.sagadyssey.core.structure.NaturalFarmRules.foodEmergency(npc)
                 ||npc.getCommand()!=NpcCommand.WORK||npc.getTarget()!=null||!npc.isAlive()
                 ||!npc.onGround()&&!npc.isSleeping()
-                ||com.jgeted.sagadyssey.social.politics.NaturalPolityData.paused(npc.getServer(),npc.getCharacterId()))return Optional.empty();
-        var data=FieldworkData.get(npc.getServer());
+                ||com.jgeted.sagadyssey.social.politics.NaturalPolityData.paused(MinecraftApi.server(npc),npc.getCharacterId()))return Optional.empty();
+        var data=FieldworkData.get(MinecraftApi.server(npc));
         if(!data.outstandingScaffolds(npc.getUUID()).isEmpty())return Optional.empty();
         if(FieldworkDepositTaskExecutor.hasDeliverableCargo(npc,data)&&data.deliveryRetryAt(npc.getUUID())<=now)
             return Optional.of(FieldworkPlanFactory.deposit(npc.getUUID(),now));
         var b=com.jgeted.sagadyssey.core.structure.NaturalFarmRules.forResident(npc);
-        String dimension=npc.level().dimension().location().toString();
-        var cells=com.jgeted.sagadyssey.social.growth.SettlementDevelopmentData.residentVillage(npc.getServer(),npc.getCharacterId())!=null
+        String dimension=npc.level().dimension().identifier().toString();
+        var cells=com.jgeted.sagadyssey.social.growth.SettlementDevelopmentData.residentVillage(MinecraftApi.server(npc),npc.getCharacterId())!=null
                 ?com.jgeted.sagadyssey.social.growth.SettlementDevelopmentData.farmCells(npc)
                 :com.jgeted.sagadyssey.core.structure.NaturalVillageLayout.crops().stream().map(local->com.jgeted.sagadyssey.core.structure.NaturalVillageLayout.at(b,local)).toList();
         for(var pos:cells){
             if(!npc.level().hasChunkAt(pos)||data.unreachable(npc.getUUID(),dimension,pos,now).isPresent())continue;
             var target=FieldworkDiscovery.inspect(npc,pos);
             if(target==null||target.operation()!=FieldworkAction.Operation.HARVEST||!target.before().is(net.minecraft.world.level.block.Blocks.CARROTS))continue;
-            if(NpcBrainRuntime.reservations(npc.getServer()).find(new NpcReservationKey("fieldwork_block",dimension+':'+pos.asLong()),now).isPresent())continue;
+            if(NpcBrainRuntime.reservations(MinecraftApi.server(npc)).find(new NpcReservationKey("fieldwork_block",dimension+':'+pos.asLong()),now).isPresent())continue;
             var route=FieldworkRoutes.plan(npc,pos,false);if(route==null)continue;
             return Optional.of(FieldworkPlanFactory.work(npc.getUUID(),target,route,dimension,now));
         }

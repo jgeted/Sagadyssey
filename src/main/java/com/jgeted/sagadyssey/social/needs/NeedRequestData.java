@@ -1,15 +1,18 @@
 package com.jgeted.sagadyssey.social.needs;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+import net.minecraft.core.UUIDUtil;
+
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.*;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.world.level.saveddata.SavedData;
+import com.jgeted.sagadyssey.worldsim.NbtSavedData;
 import net.minecraft.world.level.storage.LevelResource;
 import java.nio.file.Files;
 import java.util.*;
 
 /** Server truth only. This ledger neither discovers stock nor grants authority to take it. */
-public final class NeedRequestData extends SavedData {
+public final class NeedRequestData extends NbtSavedData {
     public static final String NAME = "sagadyssey_need_requests_v3";
     public static final int MAX_REQUESTS = 4_096;
     public static final int MAX_RECEIPTS = 65_536;
@@ -24,11 +27,11 @@ public final class NeedRequestData extends SavedData {
 
     public static NeedRequestData get(MinecraftServer server) {
         var storage = server.overworld().getDataStorage();
-        var data = storage.get(FACTORY, NAME);
+        var data = storage.get(FACTORY.type(NAME));
         if (data != null) return data;
         if (Files.exists(server.getWorldPath(LevelResource.ROOT).resolve("data").resolve(NAME + ".dat")))
             throw new IllegalStateException("unreadable demand ledger; manual recovery required");
-        data = new NeedRequestData(); storage.set(NAME, data); return data;
+        data = new NeedRequestData(); storage.set(FACTORY.type(NAME), data); return data;
     }
 
     public synchronized NeedRequest openOrUpdate(NeedRequest.Key key, int quantity, int maxAttempts, long now) {
@@ -142,6 +145,41 @@ public final class NeedRequestData extends SavedData {
         receipts.put(receiptId, receipt); return put(next);
     }
 
+    /** Read-only identity check; missing evidence is not a successful receipt. */
+    synchronized boolean hasReceipt(UUID id, UUID request, Action action, int quantity) {
+        var previous = receipts.get(id);
+        if (previous == null) return false;
+        if (!previous.equals(new Receipt(request, action, quantity)))
+            throw new IllegalStateException("asset receipt identity conflict");
+        return true;
+    }
+
+    /** A copy, used to detect orphaned reserve receipts before considering another route. */
+    synchronized Map<UUID, Integer> reserveReceipts(UUID request) {
+        require(request);
+        var result = new LinkedHashMap<UUID, Integer>();
+        receipts.forEach((id, r) -> { if (r.request().equals(request) && r.action() == Action.RESERVE)
+            result.put(id, r.quantity()); });
+        return Map.copyOf(result);
+    }
+
+    synchronized int acknowledgedQuantity(UUID request, Action action) {
+        require(request);
+        return Math.toIntExact(receipts.values().stream().filter(r -> r.request().equals(request) && r.action() == action)
+                .mapToLong(Receipt::quantity).sum());
+    }
+
+    synchronized NeedRequest acknowledgeExistingStockReserveAndPublish(UUID receiptId, UUID requestId,
+                                                                         int quantity, long now, Runnable publisher) {
+        Objects.requireNonNull(receiptId); Objects.requireNonNull(publisher);
+        if (hasReceipt(receiptId, requestId, Action.RESERVE, quantity)) return require(requestId);
+        if (receipts.size() >= MAX_RECEIPTS) throw new IllegalStateException("demand receipt ledger full; archiving required");
+        var next = require(requestId).reserveExistingStock(quantity, now);
+        publisher.run();
+        receipts.put(receiptId, new Receipt(requestId, Action.RESERVE, quantity));
+        return put(next);
+    }
+
     /** Cyclic dependencies never get installed, and block further matching. */
     public synchronized boolean dependOn(UUID requestId, UUID prerequisite, long now) {
         var request = require(requestId); require(prerequisite);
@@ -182,44 +220,44 @@ public final class NeedRequestData extends SavedData {
         tag.putInt("Schema", 1);
         var entries = new ListTag(); requests.values().forEach(r -> entries.add(r.save())); tag.put("Requests", entries);
         var edges = new ListTag(); dependencies.forEach((id, linked) -> linked.forEach(to -> {
-            var edge = new CompoundTag(); edge.putUUID("From", id); edge.putUUID("To", to); edges.add(edge);
+            var edge = new CompoundTag(); edge.store("From", UUIDUtil.CODEC, id); edge.store("To", UUIDUtil.CODEC, to); edges.add(edge);
         })); tag.put("Dependencies", edges);
         var journal = new ListTag(); receipts.forEach((id, receipt) -> {
-            var entry = new CompoundTag(); entry.putUUID("Id", id); entry.putUUID("Request", receipt.request());
+            var entry = new CompoundTag(); entry.store("Id", UUIDUtil.CODEC, id); entry.store("Request", UUIDUtil.CODEC, receipt.request());
             entry.putString("Action", receipt.action().name()); entry.putInt("Quantity", receipt.quantity()); journal.add(entry);
         }); tag.put("Receipts", journal); return tag;
     }
 
     public static NeedRequestData load(CompoundTag tag, HolderLookup.Provider lookup) {
-        if (!tag.contains("Schema", Tag.TAG_INT) || tag.getInt("Schema") != 1)
+        if (!MinecraftApi.containsTag(tag, "Schema", Tag.TAG_INT) || tag.getIntOr("Schema", 0) != 1)
             throw new IllegalArgumentException("unknown demand ledger schema");
         for (String name : List.of("Requests", "Dependencies", "Receipts"))
-            if (!(tag.get(name) instanceof ListTag list) || (!list.isEmpty() && list.getElementType() != Tag.TAG_COMPOUND))
+            if (!(tag.get(name) instanceof ListTag list) || (!list.isEmpty() && MinecraftApi.elementType(list) != Tag.TAG_COMPOUND))
                 throw new IllegalArgumentException("invalid demand ledger list " + name);
         var data = new NeedRequestData();
-        for (Tag value : tag.getList("Requests", Tag.TAG_COMPOUND)) {
+        for (Tag value : MinecraftApi.listOfType(tag, "Requests", Tag.TAG_COMPOUND)) {
             var request = NeedRequest.load((CompoundTag) value);
             if (data.requests.size() >= MAX_REQUESTS || data.requests.putIfAbsent(request.id(), request) != null
                     || data.keys.putIfAbsent(request.key(), request.id()) != null)
                 throw new IllegalArgumentException("duplicate or excessive demand identity");
         }
-        for (Tag value : tag.getList("Dependencies", Tag.TAG_COMPOUND)) {
+        for (Tag value : MinecraftApi.listOfType(tag, "Dependencies", Tag.TAG_COMPOUND)) {
             var entry = (CompoundTag) value;
-            if (!entry.hasUUID("From") || !entry.hasUUID("To")) throw new IllegalArgumentException("invalid dependency");
-            UUID from = entry.getUUID("From"), to = entry.getUUID("To"); data.require(from); data.require(to);
+            if (!entry.read("From", UUIDUtil.CODEC).isPresent() || !entry.read("To", UUIDUtil.CODEC).isPresent()) throw new IllegalArgumentException("invalid dependency");
+            UUID from = entry.read("From", UUIDUtil.CODEC).orElseThrow(), to = entry.read("To", UUIDUtil.CODEC).orElseThrow(); data.require(from); data.require(to);
             if (from.equals(to) || data.reaches(to, from)
                     || data.dependencies.getOrDefault(from, Set.of()).size() >= MAX_DEPENDENCIES
                     || !data.dependencies.computeIfAbsent(from, ignored -> new HashSet<>()).add(to))
                 throw new IllegalArgumentException("cyclic or duplicate demand dependency");
         }
-        for (Tag value : tag.getList("Receipts", Tag.TAG_COMPOUND)) {
+        for (Tag value : MinecraftApi.listOfType(tag, "Receipts", Tag.TAG_COMPOUND)) {
             var entry = (CompoundTag) value;
-            if (!entry.hasUUID("Id") || !entry.hasUUID("Request") || !entry.contains("Action", Tag.TAG_STRING)
-                    || !entry.contains("Quantity", Tag.TAG_INT) || entry.getInt("Quantity") <= 0)
+            if (!entry.read("Id", UUIDUtil.CODEC).isPresent() || !entry.read("Request", UUIDUtil.CODEC).isPresent() || !MinecraftApi.containsTag(entry, "Action", Tag.TAG_STRING)
+                    || !MinecraftApi.containsTag(entry, "Quantity", Tag.TAG_INT) || entry.getIntOr("Quantity", 0) <= 0)
                 throw new IllegalArgumentException("invalid demand receipt");
-            data.require(entry.getUUID("Request"));
-            var receipt = new Receipt(entry.getUUID("Request"), Action.valueOf(entry.getString("Action")), entry.getInt("Quantity"));
-            if (data.receipts.size() >= MAX_RECEIPTS || data.receipts.putIfAbsent(entry.getUUID("Id"), receipt) != null)
+            data.require(entry.read("Request", UUIDUtil.CODEC).orElseThrow());
+            var receipt = new Receipt(entry.read("Request", UUIDUtil.CODEC).orElseThrow(), Action.valueOf(entry.getStringOr("Action", "")), entry.getIntOr("Quantity", 0));
+            if (data.receipts.size() >= MAX_RECEIPTS || data.receipts.putIfAbsent(entry.read("Id", UUIDUtil.CODEC).orElseThrow(), receipt) != null)
                 throw new IllegalArgumentException("duplicate or excessive demand receipt");
         }
         return data;

@@ -1,5 +1,9 @@
 package com.jgeted.sagadyssey.npc.brain.command;
 
+import com.jgeted.sagadyssey.gametest.PortedGameTests.*;
+
+import com.jgeted.sagadyssey.core.MinecraftApi;
+
 import com.jgeted.sagadyssey.npc.brain.blacksmith.BlacksmithRestPlanFactory;
 import com.jgeted.sagadyssey.npc.brain.execution.*;
 import com.jgeted.sagadyssey.npc.entity.NpcCommand;
@@ -22,14 +26,14 @@ public final class BlacksmithRestGameTests {
         ProductionOrder[] second = {null};
         long[] queuedAt = {-1};
         h.succeedWhen(() -> {
-            var orders = ProductionOrderData.get(smith.getServer());
+            var orders = ProductionOrderData.get(MinecraftApi.server(smith));
             h.assertTrue(orders.byId(first.id()).orElseThrow().status() == ProductionOrderStatus.COMPLETED, "original forge must actually finish");
             var box = (Container) h.getLevel().getBlockEntity(first.targetContainerPosition());
             if (second[0] == null) {
-                h.assertTrue(NpcBrainRuntime.data(smith.getServer()).active(smith.getUUID()).isPresent(), "next tick selects post-work rest");
-                var rest = NpcBrainRuntime.data(smith.getServer()).active(smith.getUUID()).orElseThrow();
+                h.assertTrue(NpcBrainRuntime.data(MinecraftApi.server(smith)).active(smith.getUUID()).isPresent(), "next tick selects post-work rest");
+                var rest = NpcBrainRuntime.data(MinecraftApi.server(smith)).active(smith.getUUID()).orElseThrow();
                 h.assertTrue(rest.providerId().equals(BlacksmithRestPlanFactory.PROVIDER), "finished work gets explicit finite rest without invented facilities");
-                h.assertTrue(RightsStateData.get(smith.getServer()).reservationsForToken("production:" + first.batchId(), h.getLevel().getGameTime()).isEmpty(), "completed inputs released before rest");
+                h.assertTrue(RightsStateData.get(MinecraftApi.server(smith)).reservationsForToken("production:" + first.batchId(), h.getLevel().getGameTime()).isEmpty(), "completed inputs released before rest");
                 box.setItem(0, new ItemStack(Items.IRON_INGOT, 3));
                 box.setItem(1, new ItemStack(Items.COAL));
                 long now = h.getLevel().getGameTime();
@@ -39,7 +43,7 @@ public final class BlacksmithRestGameTests {
             h.assertTrue(orders.byId(second[0].id()).orElseThrow().status() == ProductionOrderStatus.COMPLETED, "new order automatically discovered after rest, not explicitly assigned by test");
             h.assertTrue(h.getLevel().getGameTime() - queuedAt[0] <= 220, "finite rest cannot starve a new order");
             int picks = 0; for (int i = 0; i < box.getContainerSize(); i++) if (box.getItem(i).is(Items.IRON_PICKAXE)) picks += box.getItem(i).getCount();
-            h.assertTrue(picks == 2 && ProductionLaborData.get(smith.getServer()).worked(second[0].id()) == 80, "exactly two actual products and actual work; rest created no assets");
+            h.assertTrue(picks == 2 && ProductionLaborData.get(MinecraftApi.server(smith)).worked(second[0].id()) == 80, "exactly two actual products and actual work; rest created no assets");
         });
     }
 
@@ -47,13 +51,13 @@ public final class BlacksmithRestGameTests {
     public static void restRepeatsWithFiniteHistoryAndStopsOnCommandChange(GameTestHelper h) {
         var smith = NpcDutyGameTests.npc(h, NpcProfession.BLACKSMITH, 4); smith.setCommand(NpcCommand.WORK);
         h.runAtTickTime(260, () -> {
-            var data = NpcBrainRuntime.data(smith.getServer());
+            var data = NpcBrainRuntime.data(MinecraftApi.server(smith));
             h.assertTrue(data.active(smith.getUUID()).orElseThrow().providerId().equals(BlacksmithRestPlanFactory.PROVIDER), "still explicitly resting beyond old 200-tick warning threshold");
             h.assertTrue(data.history(smith.getUUID()).stream().filter(p -> p.providerId().equals(BlacksmithRestPlanFactory.PROVIDER) && p.status() == com.jgeted.sagadyssey.npc.brain.plan.NpcPlanStatus.SUCCEEDED).count() >= 2, "rest ended and was reselected, not one immortal wait");
             smith.setCommand(NpcCommand.STAY);
         });
         h.runAtTickTime(280, () -> {
-            h.assertTrue(NpcBrainRuntime.data(smith.getServer()).active(smith.getUUID()).stream().noneMatch(p -> p.providerId().equals(BlacksmithRestPlanFactory.PROVIDER)), "manual STAY cancels occupational rest");
+            h.assertTrue(NpcBrainRuntime.data(MinecraftApi.server(smith)).active(smith.getUUID()).stream().noneMatch(p -> p.providerId().equals(BlacksmithRestPlanFactory.PROVIDER)), "manual STAY cancels occupational rest");
             h.assertTrue(smith.getPersonalInventory().isEmpty(), "rest does not invent food or output"); h.succeed();
         });
     }
@@ -63,11 +67,11 @@ public final class BlacksmithRestGameTests {
         var smith = NpcDutyGameTests.npc(h, NpcProfession.BLACKSMITH, 4); smith.setCommand(NpcCommand.WORK);
         smith.getPersonalInventory().setItem(0, new ItemStack(Items.BREAD));
         h.runAtTickTime(10, () -> {
-            h.assertTrue(NpcBrainRuntime.data(smith.getServer()).active(smith.getUUID()).orElseThrow().providerId().equals(BlacksmithRestPlanFactory.PROVIDER), "precondition: actual rest running");
-            NpcLifeData.get(smith.getServer()).setHunger(smith.getCharacterId(), 850, h.getLevel().getGameTime());
+            h.assertTrue(NpcBrainRuntime.data(MinecraftApi.server(smith)).active(smith.getUUID()).orElseThrow().providerId().equals(BlacksmithRestPlanFactory.PROVIDER), "precondition: actual rest running");
+            NpcLifeData.get(MinecraftApi.server(smith)).setHunger(smith.getCharacterId(), 850, h.getLevel().getGameTime());
         });
         h.succeedWhen(() -> {
-            h.assertTrue(h.getTick() > 30 && NpcLifeData.get(smith.getServer()).needs(smith.getCharacterId()).hunger() < 800, "finite rest cannot block urgent survival");
+            h.assertTrue(h.getTick() > 30 && NpcLifeData.get(MinecraftApi.server(smith)).needs(smith.getCharacterId()).hunger() < 800, "finite rest cannot block urgent survival");
             h.assertTrue(smith.getPersonalInventory().count(s -> s.is(Items.BREAD)) == 0, "one actual bread consumed");
         });
     }

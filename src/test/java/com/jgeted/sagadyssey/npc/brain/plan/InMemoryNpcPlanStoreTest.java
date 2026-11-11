@@ -1,6 +1,6 @@
 package com.jgeted.sagadyssey.npc.brain.plan;
 
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -10,9 +10,9 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.*;
 
 class InMemoryNpcPlanStoreTest {
-    private static final ResourceLocation PROVIDER = ResourceLocation.fromNamespaceAndPath(
+    private static final Identifier PROVIDER = Identifier.fromNamespaceAndPath(
             "sagadyssey", "store_test");
-    private static final ResourceLocation EXECUTOR = ResourceLocation.fromNamespaceAndPath(
+    private static final Identifier EXECUTOR = Identifier.fromNamespaceAndPath(
             "sagadyssey", "wait");
 
     @Test
@@ -70,7 +70,7 @@ class InMemoryNpcPlanStoreTest {
         assertThrows(IllegalStateException.class, () -> store.save(changedPriority));
 
         NpcPlanStep changedStep = new NpcPlanStep(0, NpcPlanPhase.ACTING,
-                ResourceLocation.fromNamespaceAndPath("sagadyssey", "other"), Map.of(),
+                Identifier.fromNamespaceAndPath("sagadyssey", "other"), Map.of(),
                 NpcPlanStepStatus.PENDING, 11L, "changed");
         NpcPlan changedExecutor = new NpcPlan(original.id(), npcId, original.candidateKey(),
                 original.providerId(), original.kind(), original.priority(), original.status(),

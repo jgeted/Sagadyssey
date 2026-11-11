@@ -1,9 +1,12 @@
 package com.jgeted.sagadyssey.social.needs;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+import net.minecraft.core.UUIDUtil;
+
 import com.jgeted.sagadyssey.worldsim.rights.ItemFingerprint;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.Tag;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import java.util.Objects;
 import java.util.UUID;
 
@@ -17,7 +20,7 @@ public record NeedRequest(UUID id, Key key, int originalRequested, int requested
             Objects.requireNonNull(requester); Objects.requireNonNull(destination);
             Objects.requireNonNull(item);
             if (purpose == null || purpose.isBlank() || purpose.length() > 512
-                    || item.itemId().length() > 256 || ResourceLocation.tryParse(item.itemId()) == null
+                    || item.itemId().length() > 256 || Identifier.tryParse(item.itemId()) == null
                     || windowStart < 0 || deadline <= windowStart)
                 throw new IllegalArgumentException("invalid demand identity");
         }
@@ -81,6 +84,26 @@ public record NeedRequest(UUID id, Key key, int originalRequested, int requested
                 || (status != NeedRequestStatus.OPEN && status != NeedRequestStatus.WAITING_EXTERNAL
                 && status != NeedRequestStatus.UNREACHABLE))
             throw new IllegalStateException("exhausted natural food request cannot take emergency reserve");
+        return copy(requested, quantity, 0, delivered, NeedRequestStatus.MATCHED, now, attempts, detail);
+    }
+
+    /** Existing-stock recovery does not renew the general manufacturing retry budget. */
+    boolean existingStockRecoveryEligible(long now) {
+        boolean scoped = key.purpose().matches("(?:CHARACTER|HOUSEHOLD|INSTITUTION):production:[0-9a-fA-F-]{36}")
+                || key.purpose().startsWith("HOUSEHOLD:household:");
+        return scoped && !key.purpose().equals("HOUSEHOLD:household:food")
+                && !key.purpose().startsWith("HOUSEHOLD:household:natural-diet:") && attempts == 32 && maxAttempts == 32 && now >= updatedAt
+                && now < key.deadline() && reserved == 0 && inTransit == 0 && remaining() > 0
+                && !detail.startsWith("PRODUCTION_REVIEW:")
+                && (status == NeedRequestStatus.OPEN || status == NeedRequestStatus.WAITING_EXTERNAL
+                    || status == NeedRequestStatus.UNREACHABLE);
+    }
+
+    /** Package-private: caller must prove a live material obligation or a completed supplier first. */
+    NeedRequest reserveExistingStock(int quantity, long now) {
+        positive(quantity);
+        if (!existingStockRecoveryEligible(now) || quantity > remaining())
+            throw new IllegalStateException("original demand cannot recover from existing stock");
         return copy(requested, quantity, 0, delivered, NeedRequestStatus.MATCHED, now, attempts, detail);
     }
 
@@ -149,9 +172,9 @@ public record NeedRequest(UUID id, Key key, int originalRequested, int requested
 
     public CompoundTag save() {
         var tag = new CompoundTag();
-        tag.putUUID("Id", id); tag.putUUID("Requester", key.requester());
+        tag.store("Id", UUIDUtil.CODEC, id); tag.store("Requester", UUIDUtil.CODEC, key.requester());
         tag.putString("Purpose", key.purpose()); tag.put("Item", key.item().save());
-        tag.putUUID("Destination", key.destination()); tag.putLong("WindowStart", key.windowStart());
+        tag.store("Destination", UUIDUtil.CODEC, key.destination()); tag.putLong("WindowStart", key.windowStart());
         tag.putLong("Deadline", key.deadline()); tag.putInt("OriginalRequested", originalRequested);
         tag.putInt("Requested", requested);
         tag.putInt("Reserved", reserved); tag.putInt("InTransit", inTransit);
@@ -163,21 +186,21 @@ public record NeedRequest(UUID id, Key key, int originalRequested, int requested
 
     public static NeedRequest load(CompoundTag tag) {
         for (String name : new String[]{"Id", "Requester", "Destination"})
-            if (!tag.hasUUID(name)) throw new IllegalArgumentException("missing demand UUID " + name);
+            if (!tag.read(name, UUIDUtil.CODEC).isPresent()) throw new IllegalArgumentException("missing demand UUID " + name);
         for (String name : new String[]{"Purpose", "Status", "Detail"}) require(tag, name, Tag.TAG_STRING);
         for (String name : new String[]{"WindowStart", "Deadline", "CreatedAt", "UpdatedAt"}) require(tag, name, Tag.TAG_LONG);
         for (String name : new String[]{"OriginalRequested", "Requested", "Reserved", "InTransit", "Delivered", "Attempts", "MaxAttempts"}) require(tag, name, Tag.TAG_INT);
         require(tag, "Item", Tag.TAG_COMPOUND);
-        var item = tag.getCompound("Item");
+        var item = tag.getCompoundOrEmpty("Item");
         require(item, "Item", Tag.TAG_STRING); require(item, "Components", Tag.TAG_INT);
-        return new NeedRequest(tag.getUUID("Id"), new Key(tag.getUUID("Requester"),
-                tag.getString("Purpose"), ItemFingerprint.load(item), tag.getUUID("Destination"),
-                tag.getLong("WindowStart"), tag.getLong("Deadline")), tag.getInt("OriginalRequested"), tag.getInt("Requested"),
-                tag.getInt("Reserved"), tag.getInt("InTransit"), tag.getInt("Delivered"),
-                NeedRequestStatus.valueOf(tag.getString("Status")), tag.getLong("CreatedAt"),
-                tag.getLong("UpdatedAt"), tag.getInt("Attempts"), tag.getInt("MaxAttempts"), tag.getString("Detail"));
+        return new NeedRequest(tag.read("Id", UUIDUtil.CODEC).orElseThrow(), new Key(tag.read("Requester", UUIDUtil.CODEC).orElseThrow(),
+                tag.getStringOr("Purpose", ""), ItemFingerprint.load(item), tag.read("Destination", UUIDUtil.CODEC).orElseThrow(),
+                tag.getLongOr("WindowStart", 0L), tag.getLongOr("Deadline", 0L)), tag.getIntOr("OriginalRequested", 0), tag.getIntOr("Requested", 0),
+                tag.getIntOr("Reserved", 0), tag.getIntOr("InTransit", 0), tag.getIntOr("Delivered", 0),
+                NeedRequestStatus.valueOf(tag.getStringOr("Status", "")), tag.getLongOr("CreatedAt", 0L),
+                tag.getLongOr("UpdatedAt", 0L), tag.getIntOr("Attempts", 0), tag.getIntOr("MaxAttempts", 0), tag.getStringOr("Detail", ""));
     }
     private static void require(CompoundTag tag, String name, int type) {
-        if (!tag.contains(name, type)) throw new IllegalArgumentException("missing demand field " + name);
+        if (!MinecraftApi.containsTag(tag, name, type)) throw new IllegalArgumentException("missing demand field " + name);
     }
 }

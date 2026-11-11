@@ -92,7 +92,7 @@ class BlacksmithPlanTerminationTest {
         reservations.acquire(new NpcReservationKey("workstation", "forge"), plan.id(), plan.npcId(), 12L, 1000L);
         NpcTaskExecutorRegistry registry = new NpcTaskExecutorRegistry();
         registry.register(new NpcTaskExecutor() {
-            public net.minecraft.resources.ResourceLocation id() { return BlacksmithTaskIds.RESERVE_ORDER; }
+            public net.minecraft.resources.Identifier id() { return BlacksmithTaskIds.RESERVE_ORDER; }
             public TaskTickResult start(NpcExecutionContext context, NpcPlan current, NpcPlanStep step) {
                 return TaskTickResult.blocked("缺煤", new NpcPlanBlocker("MISSING_INPUT", "缺煤", 1000L, order.id().toString()));
             }

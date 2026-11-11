@@ -1,5 +1,7 @@
 package com.jgeted.sagadyssey.social.religion;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+
 import com.jgeted.sagadyssey.knowledge.*;
 import com.jgeted.sagadyssey.npc.entity.NpcBase;
 import com.jgeted.sagadyssey.social.character.*;
@@ -24,8 +26,8 @@ public final class ReligionService{
         var registry=CharacterRegistryData.get(server);var npc=registry.findLoadedNpc(server,character);if(npc!=null&&npc.isAlive())return npc;
         for(var p:server.getPlayerList().getPlayers())if(p.isAlive()&&character.equals(CharacterRegistry.currentId(p)))return p;return null;
     }
-    public static boolean near(LivingEntity e,TempleRecord t){return e.isAlive()&&e.level().dimension().location().toString().equals(t.alms().dimension())&&e.distanceToSqr(t.counter().getX()+.5,t.counter().getY(),t.counter().getZ()+.5)<=64;}
-    public static boolean authorized(NpcBase npc,UUID temple,OfficeAuthority power){return InstitutionData.get(npc.getServer()).authority(SubjectRef.character(npc.getCharacterId()),temple,power,npc.level().getGameTime()).allowed();}
+    public static boolean near(LivingEntity e,TempleRecord t){return e.isAlive()&&e.level().dimension().identifier().toString().equals(t.alms().dimension())&&e.distanceToSqr(t.counter().getX()+.5,t.counter().getY(),t.counter().getZ()+.5)<=64;}
+    public static boolean authorized(NpcBase npc,UUID temple,OfficeAuthority power){return InstitutionData.get(MinecraftApi.server(npc)).authority(SubjectRef.character(npc.getCharacterId()),temple,power,npc.level().getGameTime()).allowed();}
     public static DonationRecord donate(MinecraftServer server,UUID id,LivingEntity donor,TempleRecord temple,ItemFingerprint item,int quantity,DonationRecord.Purpose purpose){
         UUID character=character(donor),source=personalContainer(donor);var target=purpose==DonationRecord.Purpose.ALMS?temple.alms():temple.treasury();long now=server.overworld().getGameTime();var d=ReligionData.get(server);
         var previous=d.donation(id);
@@ -60,7 +62,7 @@ public final class ReligionService{
         KnowledgeStateData.get(server).selfReport(character,character,new FactKey(temple.id(),"religion.own_request",id.toString()),"自己的救济申请已提交，尚未批准",PrecisionBand.CATEGORY,1,now,0,DisclosurePolicy.PRIVATE);return value;
     }
     public static AlmsCase review(NpcBase clergy,AlmsCase c){
-        var server=clergy.getServer();long now=clergy.level().getGameTime();var t=ReligionData.get(server).temple(c.temple());var applicant=body(server,c.recipient());
+        var server=MinecraftApi.server(clergy);long now=clergy.level().getGameTime();var t=ReligionData.get(server).temple(c.temple());var applicant=body(server,c.recipient());
         if(!authorized(clergy,t.id(),OfficeAuthority.REVIEW_ALMS)||!near(clergy,t)||applicant==null||!near(applicant,t)||clergy.distanceToSqr(applicant)>36||!clergy.hasLineOfSight(applicant))throw new IllegalStateException("valid reviewing office and actual applicant presence required");
         if(c.stage()!=AlmsCase.Stage.REQUESTED)throw new IllegalStateException("case not awaiting review");
         // Evaluate declared purpose and the public per-case rule; no remote hunger/wealth scan.
@@ -83,7 +85,7 @@ public final class ReligionService{
     }
     public static boolean witness(ServerPlayer viewer,NpcBase deacon,AlmsCase c,long now){
         UUID observer=currentCharacter(viewer);if(observer==null)return false;
-        var server=deacon.getServer();var d=ReligionData.get(server);var authoritative=d.aid(c.id());var id=d.receipt(c.id(),false);var receipt=id==null?null:TransferLedgerData.get(server).receipt(id);
+        var server=MinecraftApi.server(deacon);var d=ReligionData.get(server);var authoritative=d.aid(c.id());var id=d.receipt(c.id(),false);var receipt=id==null?null:TransferLedgerData.get(server).receipt(id);
         var recipient=body(server,c.recipient());
         if(c.stage()!=AlmsCase.Stage.ISSUED||receipt==null||!receipt.successful()||now<receipt.completedAt()||now-receipt.completedAt()>40
                 ||!authoritative.equals(c)||!deacon.getCharacterId().equals(c.workerCharacter())

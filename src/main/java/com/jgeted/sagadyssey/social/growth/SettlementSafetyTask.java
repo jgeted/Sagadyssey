@@ -1,28 +1,30 @@
 package com.jgeted.sagadyssey.social.growth;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+
 import com.jgeted.sagadyssey.npc.brain.execution.*;
 import com.jgeted.sagadyssey.npc.brain.plan.*;
 import com.jgeted.sagadyssey.npc.entity.NpcBase;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import java.util.*;
 
 /** Work/withdrawal use the existing single NPC plan executor. */
 public final class SettlementSafetyTask implements NpcTaskExecutor {
-    public static final ResourceLocation ID=ResourceLocation.parse("sagadyssey:settlement_safety");
+    public static final Identifier ID=Identifier.parse("sagadyssey:settlement_safety");
     public static Optional<NpcPlan> choose(NpcBase n,long now,boolean urgentOnly) {
-        var d=SettlementSafetyData.existing(n.getServer());if(d==null||d.resident(n)==null)return Optional.empty();
+        var d=SettlementSafetyData.existing(MinecraftApi.server(n));if(d==null||d.resident(n)==null)return Optional.empty();
         boolean retreat=SettlementSafetyRuntime.withdrawal(n,now),night=SettlementSafetyRuntime.nightOutside(n);
-        var needs=com.jgeted.sagadyssey.social.life.NpcLifeData.get(n.getServer()).needs(n.getCharacterId());
+        var needs=com.jgeted.sagadyssey.social.life.NpcLifeData.get(MinecraftApi.server(n)).needs(n.getCharacterId());
         if(!retreat&&night&&needs!=null&&needs.hunger()>=800)return Optional.empty();
         String key;
         if(retreat||night)key="REFUGE";
-        else {if(urgentOnly)return Optional.empty();var task=d.choose(n,now);if(task==null)return Optional.empty();key=task.getString("Id");}
+        else {if(urgentOnly)return Optional.empty();var task=d.choose(n,now);if(task==null)return Optional.empty();key=task.getStringOr("Id", "");}
         var step=new NpcPlanStep(0,NpcPlanPhase.ACTING,ID,Map.of("safety",key),NpcPlanStepStatus.PENDING,now,"核验实际威胁、光照与原材料");
         return Optional.of(new NpcPlan(UUID.randomUUID(),n.getUUID(),"safety:"+n.getCharacterId()+":"+key,ID,
                 NpcPlanKind.COMMITMENT,retreat?NpcPlanPriority.CRITICAL:NpcPlanPriority.NORMAL,NpcPlanStatus.SELECTED,
                 List.of(step),0,now,now,now,now+400,null,"有限安全工作，不改变原人物、库存或义务"));
     }
-    @Override public ResourceLocation id(){return ID;}
+    @Override public Identifier id(){return ID;}
     @Override public TaskTickResult start(NpcExecutionContext c,NpcPlan p,NpcPlanStep s){return tick(c,p,s);}
     @Override public TaskTickResult recover(NpcExecutionContext c,NpcPlan p,NpcPlanStep s){return tick(c,p,s);}
     @Override public void cancel(NpcExecutionContext c,NpcPlan p,NpcPlanStep s,PlanCancellationReason reason){
@@ -30,7 +32,7 @@ public final class SettlementSafetyTask implements NpcTaskExecutor {
     }
     @Override public TaskTickResult tick(NpcExecutionContext c,NpcPlan plan,NpcPlanStep step){
         if(!(c instanceof NpcEntityExecutionContext e))return TaskTickResult.failed("安全工作需要原居民实体");
-        var n=e.npc();var d=SettlementSafetyData.existing(n.getServer());
+        var n=e.npc();var d=SettlementSafetyData.existing(MinecraftApi.server(n));
         if(d==null||c.gameTime()-plan.createdAt()>=SettlementSafetyPolicy.WORK_SLICE){n.getNavigation().stop();return TaskTickResult.stepSucceeded("保留安全责任，返回生活调度");}
         if(step.params().get("safety").equals("REFUGE")) {
             boolean retreat=SettlementSafetyRuntime.withdrawal(n,c.gameTime());

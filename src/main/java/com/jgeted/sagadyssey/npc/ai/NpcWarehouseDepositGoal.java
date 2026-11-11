@@ -73,7 +73,7 @@ public final class NpcWarehouseDepositGoal extends Goal {
         int outputs = outputCount();
         if (outputs <= 0 || (outputs < 4 && npc.getBagFreeSlots() > 2)) return false;
         warehouse = LogisticsData.get(level.getServer()).warehouses().stream()
-                .filter(record -> record.dimension().equals(level.dimension().location().toString()))
+                .filter(record -> record.dimension().equals(level.dimension().identifier().toString()))
                 .filter(record -> canUseWarehouse(level, record))
                 .filter(record -> record.position().distSqr(npc.blockPosition()) <= SEARCH_RANGE * SEARCH_RANGE)
                 .filter(record -> level.hasChunkAt(record.position())
@@ -237,20 +237,20 @@ public final class NpcWarehouseDepositGoal extends Goal {
             authority = "work_output:" + warehouse.settlementId();
         } else if (householdStorage != null && householdId != null) {
             targetId = ContainerIds.block("household_storage",
-                    level.dimension().location().toString(), targetPosition);
+                    level.dimension().identifier().toString(), targetPosition);
             targetOwner = SubjectRef.household(householdId);
             targetPolicy = AccessPolicy.HOUSEHOLD;
             intent = TransferIntent.GIFT;
             authority = "household_contribution:" + householdId;
         } else {
             targetId = ContainerIds.block("private_storage",
-                    level.dimension().location().toString(), targetPosition);
+                    level.dimension().identifier().toString(), targetPosition);
             targetOwner = producer;
             targetPolicy = AccessPolicy.PRIVATE;
             intent = TransferIntent.DELIVERY;
             authority = "personal_storage";
         }
-        rights.ensureContext(targetId, level.dimension().location() + ":" + targetPosition.asLong(),
+        rights.ensureContext(targetId, level.dimension().identifier() + ":" + targetPosition.asLong(),
                 targetOwner, targetOwner, targetPolicy);
 
         ReserveBudget reserve = createReserveBudget();

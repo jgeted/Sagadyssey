@@ -1,5 +1,8 @@
 package com.jgeted.sagadyssey.social.politics;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+import net.minecraft.core.UUIDUtil;
+
 import com.jgeted.sagadyssey.social.history.WorldHistoryData;
 import com.jgeted.sagadyssey.social.world.WorldScenarioData;
 import com.jgeted.sagadyssey.social.world.WorldScenarioType;
@@ -8,7 +11,7 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.world.level.saveddata.SavedData;
+import com.jgeted.sagadyssey.worldsim.NbtSavedData;
 
 import javax.annotation.Nullable;
 import java.util.HashMap;
@@ -17,7 +20,7 @@ import java.util.Set;
 import java.util.UUID;
 
 /** 世界政治状态：阵营关系、合法性和实际人物担任的统治者。 */
-public final class PoliticalStateData extends SavedData {
+public final class PoliticalStateData extends NbtSavedData {
     private static final String DATA_NAME = "sagadyssey_politics";
     private static final Factory<PoliticalStateData> FACTORY =
             new Factory<>(PoliticalStateData::new, PoliticalStateData::load);
@@ -33,7 +36,7 @@ public final class PoliticalStateData extends SavedData {
     private final Map<UUID, UUID> designatedHeirs = new HashMap<>();
 
     public static PoliticalStateData get(MinecraftServer server) {
-        PoliticalStateData data = server.overworld().getDataStorage().computeIfAbsent(FACTORY, DATA_NAME);
+        PoliticalStateData data = server.overworld().getDataStorage().computeIfAbsent(FACTORY.type(DATA_NAME));
         data.ensureInitialized(server);
         return data;
     }
@@ -314,31 +317,31 @@ public final class PoliticalStateData extends SavedData {
             entry.putInt("Legitimacy", value);
             entry.putBoolean("Vacant", officeVacant.getOrDefault(faction, true));
             UUID ruler = rulers.get(faction);
-            if (ruler != null) entry.putUUID("Ruler", ruler);
+            if (ruler != null) entry.store("Ruler", UUIDUtil.CODEC, ruler);
             factionList.add(entry);
         });
         tag.put("Factions", factionList);
         ListTag titleList = new ListTag();
         titleHolders.forEach((settlement, holder) -> {
             CompoundTag entry = new CompoundTag();
-            entry.putUUID("Settlement", settlement);
-            entry.putUUID("Holder", holder);
+            entry.store("Settlement", UUIDUtil.CODEC, settlement);
+            entry.store("Holder", UUIDUtil.CODEC, holder);
             titleList.add(entry);
         });
         tag.put("Titles", titleList);
         ListTag fealtyList = new ListTag();
         lieges.forEach((vassal, liege) -> {
             CompoundTag entry = new CompoundTag();
-            entry.putUUID("Vassal", vassal);
-            entry.putUUID("Liege", liege);
+            entry.store("Vassal", UUIDUtil.CODEC, vassal);
+            entry.store("Liege", UUIDUtil.CODEC, liege);
             fealtyList.add(entry);
         });
         tag.put("Fealty", fealtyList);
         ListTag heirList = new ListTag();
         designatedHeirs.forEach((holder, heir) -> {
             CompoundTag entry = new CompoundTag();
-            entry.putUUID("Holder", holder);
-            entry.putUUID("Heir", heir);
+            entry.store("Holder", UUIDUtil.CODEC, holder);
+            entry.store("Heir", UUIDUtil.CODEC, heir);
             heirList.add(entry);
         });
         tag.put("Heirs", heirList);
@@ -347,37 +350,37 @@ public final class PoliticalStateData extends SavedData {
 
     private static PoliticalStateData load(CompoundTag tag, HolderLookup.Provider registries) {
         PoliticalStateData data = new PoliticalStateData();
-        data.initialized = tag.getBoolean("Initialized");
-        ListTag relations = tag.getList("Relations", Tag.TAG_COMPOUND);
+        data.initialized = tag.getBooleanOr("Initialized", false);
+        ListTag relations = MinecraftApi.listOfType(tag, "Relations", Tag.TAG_COMPOUND);
         for (int i = 0; i < relations.size(); i++) {
-            CompoundTag entry = relations.getCompound(i);
-            data.relations.put(entry.getString("Pair"), entry.getString("Relation"));
+            CompoundTag entry = relations.getCompoundOrEmpty(i);
+            data.relations.put(entry.getStringOr("Pair", ""), entry.getStringOr("Relation", ""));
         }
-        ListTag factions = tag.getList("Factions", Tag.TAG_COMPOUND);
+        ListTag factions = MinecraftApi.listOfType(tag, "Factions", Tag.TAG_COMPOUND);
         for (int i = 0; i < factions.size(); i++) {
-            CompoundTag entry = factions.getCompound(i);
-            String faction = normalize(entry.getString("Faction"));
-            data.legitimacy.put(faction, entry.getInt("Legitimacy"));
-            data.officeVacant.put(faction, entry.getBoolean("Vacant"));
-            if (entry.hasUUID("Ruler")) data.rulers.put(faction, entry.getUUID("Ruler"));
+            CompoundTag entry = factions.getCompoundOrEmpty(i);
+            String faction = normalize(entry.getStringOr("Faction", ""));
+            data.legitimacy.put(faction, entry.getIntOr("Legitimacy", 0));
+            data.officeVacant.put(faction, entry.getBooleanOr("Vacant", false));
+            if (entry.read("Ruler", UUIDUtil.CODEC).isPresent()) data.rulers.put(faction, entry.read("Ruler", UUIDUtil.CODEC).orElseThrow());
         }
-        ListTag titles = tag.getList("Titles", Tag.TAG_COMPOUND);
+        ListTag titles = MinecraftApi.listOfType(tag, "Titles", Tag.TAG_COMPOUND);
         for (int i = 0; i < titles.size(); i++) {
-            CompoundTag entry = titles.getCompound(i);
-            if (entry.hasUUID("Settlement") && entry.hasUUID("Holder"))
-                data.titleHolders.put(entry.getUUID("Settlement"), entry.getUUID("Holder"));
+            CompoundTag entry = titles.getCompoundOrEmpty(i);
+            if (entry.read("Settlement", UUIDUtil.CODEC).isPresent() && entry.read("Holder", UUIDUtil.CODEC).isPresent())
+                data.titleHolders.put(entry.read("Settlement", UUIDUtil.CODEC).orElseThrow(), entry.read("Holder", UUIDUtil.CODEC).orElseThrow());
         }
-        ListTag fealty = tag.getList("Fealty", Tag.TAG_COMPOUND);
+        ListTag fealty = MinecraftApi.listOfType(tag, "Fealty", Tag.TAG_COMPOUND);
         for (int i = 0; i < fealty.size(); i++) {
-            CompoundTag entry = fealty.getCompound(i);
-            if (entry.hasUUID("Vassal") && entry.hasUUID("Liege"))
-                data.lieges.put(entry.getUUID("Vassal"), entry.getUUID("Liege"));
+            CompoundTag entry = fealty.getCompoundOrEmpty(i);
+            if (entry.read("Vassal", UUIDUtil.CODEC).isPresent() && entry.read("Liege", UUIDUtil.CODEC).isPresent())
+                data.lieges.put(entry.read("Vassal", UUIDUtil.CODEC).orElseThrow(), entry.read("Liege", UUIDUtil.CODEC).orElseThrow());
         }
-        ListTag heirs = tag.getList("Heirs", Tag.TAG_COMPOUND);
+        ListTag heirs = MinecraftApi.listOfType(tag, "Heirs", Tag.TAG_COMPOUND);
         for (int i = 0; i < heirs.size(); i++) {
-            CompoundTag entry = heirs.getCompound(i);
-            if (entry.hasUUID("Holder") && entry.hasUUID("Heir"))
-                data.designatedHeirs.put(entry.getUUID("Holder"), entry.getUUID("Heir"));
+            CompoundTag entry = heirs.getCompoundOrEmpty(i);
+            if (entry.read("Holder", UUIDUtil.CODEC).isPresent() && entry.read("Heir", UUIDUtil.CODEC).isPresent())
+                data.designatedHeirs.put(entry.read("Holder", UUIDUtil.CODEC).orElseThrow(), entry.read("Heir", UUIDUtil.CODEC).orElseThrow());
         }
         return data;
     }

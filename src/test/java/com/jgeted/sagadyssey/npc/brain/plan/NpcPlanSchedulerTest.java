@@ -5,7 +5,7 @@ import com.jgeted.sagadyssey.npc.brain.candidate.NpcActivityCandidate;
 import com.jgeted.sagadyssey.npc.brain.candidate.NpcPlanStepTemplate;
 import com.jgeted.sagadyssey.npc.brain.context.NpcDecisionContext;
 import com.jgeted.sagadyssey.npc.brain.context.NpcPerceptionSnapshot;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -143,7 +143,7 @@ class NpcPlanSchedulerTest {
                 urgent, earliest, latest, 20L, prerequisites, blockers, Map.of());
     }
 
-    private static ResourceLocation id(String path) {
-        return ResourceLocation.fromNamespaceAndPath("sagadyssey", path);
+    private static Identifier id(String path) {
+        return Identifier.fromNamespaceAndPath("sagadyssey", path);
     }
 }

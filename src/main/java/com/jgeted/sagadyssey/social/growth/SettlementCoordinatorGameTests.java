@@ -1,5 +1,9 @@
 package com.jgeted.sagadyssey.social.growth;
 
+import com.jgeted.sagadyssey.gametest.PortedGameTests.*;
+
+import net.minecraft.core.UUIDUtil;
+
 import com.jgeted.sagadyssey.core.structure.NaturalVillageLifeData;
 import com.jgeted.sagadyssey.core.structure.NaturalVillageR1GameTests;
 import com.jgeted.sagadyssey.core.structure.NaturalVillageBuilding;
@@ -14,18 +18,13 @@ import com.jgeted.sagadyssey.social.life.NpcLifeData;
 import com.jgeted.sagadyssey.social.needs.NeedRequestData;
 import com.jgeted.sagadyssey.social.needs.SupplyFlowData;
 import com.jgeted.sagadyssey.worldsim.rights.RightsStateData;
-import net.minecraft.gametest.framework.BeforeBatch;
-import net.minecraft.gametest.framework.GameTestGenerator;
 import net.minecraft.gametest.framework.GameTestHelper;
-import net.minecraft.gametest.framework.TestFunction;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtUtils;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
-import net.neoforged.neoforge.gametest.GameTestHolder;
-import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -45,10 +44,10 @@ public final class SettlementCoordinatorGameTests {
         var level = event.getServer().overworld();
         try {
             for (String name : List.of("fieldwork_empty", "empty")) {
-                level.getStructureManager().getOrCreate(net.minecraft.resources.ResourceLocation
+                level.getStructureManager().getOrCreate(net.minecraft.resources.Identifier
                         .fromNamespaceAndPath("sagadyssey_redesign", name)).load(
                         level.holderLookup(net.minecraft.core.registries.Registries.BLOCK),
-                        net.minecraft.nbt.TagParser.parseTag("{size:[96,10,16],entities:[],blocks:[],palette:[{Name:\"minecraft:air\"}]}"));
+                        net.minecraft.nbt.TagParser.parseCompoundFully("{size:[96,10,16],entities:[],blocks:[],palette:[{Name:\"minecraft:air\"}]}"));
             }
         } catch (Exception failure) { throw new IllegalStateException(failure); }
     }
@@ -104,16 +103,16 @@ public final class SettlementCoordinatorGameTests {
         level.setBlock(point, Blocks.STONE.defaultBlockState(), 3);
         var row = initial.copy();
         var observation = new CompoundTag();
-        observation.putUUID("Observer", worker.getCharacterId());
+        observation.store("Observer", UUIDUtil.CODEC, worker.getCharacterId());
         observation.putString("State", NbtUtils.writeBlockState(level.getBlockState(point)).toString());
-        row.getCompound("ObservedResources").put(Long.toString(point.asLong()), observation);
+        row.getCompoundOrEmpty("ObservedResources").put(Long.toString(point.asLong()), observation);
         helper.assertTrue(SettlementResourceSurvey.allowed(worker, row, point), "authorized, observed natural point is eligible");
         var unlicensed = row.copy(); unlicensed.remove("Parcel");
         helper.assertTrue(!SettlementResourceSurvey.allowed(worker, unlicensed, point), "observation alone does not grant land permission");
         helper.assertTrue(!SettlementResourceSurvey.inParcel(row, NaturalVillageLayout.at(village, new BlockPos(48, 0, 19)))
                 && !SettlementResourceSurvey.inParcel(row, NaturalVillageLayout.at(village, new BlockPos(37, -4, 19)))
                 && !SettlementResourceSurvey.inParcel(row, NaturalVillageLayout.at(village, new BlockPos(37, 6, 19))), "horizontal and vertical limits remain bounded");
-        var edited = row.copy(); edited.getCompound("ProtectedEdits").putLong(Long.toString(point.asLong()), level.getGameTime());
+        var edited = row.copy(); edited.getCompoundOrEmpty("ProtectedEdits").putLong(Long.toString(point.asLong()), level.getGameTime());
         helper.assertTrue(!SettlementResourceSurvey.allowed(worker, edited, point), "later protected player edit revokes the old observation");
         level.setBlock(point, Blocks.COBBLESTONE.defaultBlockState(), 3);
         helper.assertTrue(!SettlementResourceSurvey.allowed(worker, row, point), "artificial replacement is not the previously observed ore");
@@ -149,7 +148,7 @@ public final class SettlementCoordinatorGameTests {
             if (completed[0]) return;
             var server = helper.getLevel().getServer();
             var life = NaturalVillageLifeData.get(server).village(village.buildingKey());
-            if (life == null || !life.getBoolean("Ready")) return;
+            if (life == null || !life.getBooleanOr("Ready", false)) return;
             if (!configured[0]) {
                 for (int i = 0; i < 3; i++) NaturalVillageR1GameTests.actor(helper.getLevel(), village, i).setCommand(NpcCommand.STAY);
                 configured[0] = true;

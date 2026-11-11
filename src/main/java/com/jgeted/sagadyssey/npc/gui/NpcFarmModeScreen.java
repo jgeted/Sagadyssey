@@ -53,7 +53,7 @@ public class NpcFarmModeScreen extends Screen {
             addRenderableWidget(Button.builder(
                     Component.literal(label),
                     btn -> {
-                        PacketDistributor.sendToServer(new NpcFarmModePacket(npcId, mode.name()));
+                        net.neoforged.neoforge.client.network.ClientPacketDistributor.sendToServer(new NpcFarmModePacket(npcId, mode.name()));
                         this.onClose();
                     })
                     .bounds(startX, y, btnW, btnH)

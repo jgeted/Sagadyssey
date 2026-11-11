@@ -5,7 +5,7 @@ import com.jgeted.sagadyssey.npc.brain.context.NpcPerceptionSnapshot;
 import com.jgeted.sagadyssey.npc.brain.plan.NpcPlanKind;
 import com.jgeted.sagadyssey.npc.brain.plan.NpcPlanPhase;
 import com.jgeted.sagadyssey.npc.brain.plan.NpcPlanPriority;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;
@@ -19,10 +19,10 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class NpcActivityCandidateTest {
-    private static final ResourceLocation PROVIDER =
-            ResourceLocation.fromNamespaceAndPath("sagadyssey", "profession");
-    private static final ResourceLocation EXECUTOR =
-            ResourceLocation.fromNamespaceAndPath("sagadyssey", "smithing");
+    private static final Identifier PROVIDER =
+            Identifier.fromNamespaceAndPath("sagadyssey", "profession");
+    private static final Identifier EXECUTOR =
+            Identifier.fromNamespaceAndPath("sagadyssey", "smithing");
 
     @Test
     void constructorDefensivelyCopiesCollections() {

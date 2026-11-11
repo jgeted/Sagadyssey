@@ -1,11 +1,13 @@
 package com.jgeted.sagadyssey.worldsim.transfer;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.world.level.saveddata.SavedData;
+import com.jgeted.sagadyssey.worldsim.NbtSavedData;
 
 import javax.annotation.Nullable;
 import java.util.ArrayDeque;
@@ -16,7 +18,7 @@ import java.util.Map;
 import java.util.UUID;
 
 /** Bounded idempotency window plus durable audit trail for material transfers. */
-public final class TransferLedgerData extends SavedData {
+public final class TransferLedgerData extends NbtSavedData {
     public static final String DATA_NAME = "sagadyssey_transfer_ledger_v2";
     private static final int MAX_RECEIPTS = 1024;
     private static final int MAX_AUDITS = 2048;
@@ -85,22 +87,22 @@ public final class TransferLedgerData extends SavedData {
 
     static TransferLedgerData load(CompoundTag tag, HolderLookup.Provider registries) {
         TransferLedgerData data = new TransferLedgerData();
-        ListTag receipts = tag.getList("Receipts", Tag.TAG_COMPOUND);
+        ListTag receipts = MinecraftApi.listOfType(tag, "Receipts", Tag.TAG_COMPOUND);
         for (int i = 0; i < receipts.size(); i++) {
-            TransferReceipt receipt = TransferReceipt.load(receipts.getCompound(i));
+            TransferReceipt receipt = TransferReceipt.load(receipts.getCompoundOrEmpty(i));
             data.receipts.put(receipt.transferId(), receipt);
-            CompoundTag entry = receipts.getCompound(i);
+            CompoundTag entry = receipts.getCompoundOrEmpty(i);
             if (entry.contains("RequestIdentity")) {
-                if (!entry.contains("RequestIdentity", Tag.TAG_COMPOUND))
+                if (!MinecraftApi.containsTag(entry, "RequestIdentity", Tag.TAG_COMPOUND))
                     throw new IllegalArgumentException("invalid transfer request identity");
-                var identity = entry.getCompound("RequestIdentity");
-                if (identity.getInt("Version") != 1)
+                var identity = entry.getCompoundOrEmpty("RequestIdentity");
+                if (identity.getIntOr("Version", 0) != 1)
                     throw new IllegalArgumentException("unknown transfer request identity version");
                 data.requestIdentities.put(receipt.transferId(), identity.copy());
             }
         }
-        ListTag audits = tag.getList("Audits", Tag.TAG_COMPOUND);
-        for (int i = 0; i < audits.size(); i++) data.audits.addLast(TransferAudit.load(audits.getCompound(i)));
+        ListTag audits = MinecraftApi.listOfType(tag, "Audits", Tag.TAG_COMPOUND);
+        for (int i = 0; i < audits.size(); i++) data.audits.addLast(TransferAudit.load(audits.getCompoundOrEmpty(i)));
         return data;
     }
 }

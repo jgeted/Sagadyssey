@@ -1,7 +1,7 @@
 package com.jgeted.sagadyssey.npc.brain.candidate;
 
 import com.jgeted.sagadyssey.npc.brain.context.NpcDecisionContext;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -15,21 +15,21 @@ import java.util.Optional;
  * 活动 Provider 注册表。Provider 只生成候选，不能在注册或提案阶段修改世界。
  */
 public final class NpcActivityProviderRegistry {
-    private final Map<ResourceLocation, NpcActivityProvider> providers = new LinkedHashMap<>();
+    private final Map<Identifier, NpcActivityProvider> providers = new LinkedHashMap<>();
 
     public synchronized void register(NpcActivityProvider provider) {
         Objects.requireNonNull(provider, "provider");
-        ResourceLocation id = Objects.requireNonNull(provider.id(), "provider id");
+        Identifier id = Objects.requireNonNull(provider.id(), "provider id");
         if (providers.putIfAbsent(id, provider) != null) {
             throw new IllegalStateException("duplicate activity provider: " + id);
         }
     }
 
-    public synchronized Optional<NpcActivityProvider> find(ResourceLocation id) {
+    public synchronized Optional<NpcActivityProvider> find(Identifier id) {
         return Optional.ofNullable(providers.get(Objects.requireNonNull(id, "id")));
     }
 
-    public synchronized Map<ResourceLocation, NpcActivityProvider> snapshot() {
+    public synchronized Map<Identifier, NpcActivityProvider> snapshot() {
         return Map.copyOf(providers);
     }
 

@@ -1,5 +1,10 @@
 package com.jgeted.sagadyssey.core.structure;
 
+import com.jgeted.sagadyssey.gametest.PortedGameTests.*;
+
+import com.jgeted.sagadyssey.core.MinecraftApi;
+import net.minecraft.core.UUIDUtil;
+
 import com.google.gson.Gson;
 import com.jgeted.sagadyssey.Sagadyssey;
 import com.jgeted.sagadyssey.npc.brain.execution.NpcBrainRuntime;
@@ -30,14 +35,12 @@ import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.ChunkPos;
-import net.minecraft.world.level.GameRules;
+import net.minecraft.world.level.gamerules.GameRules;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.CropBlock;
 import net.minecraft.world.level.storage.LevelResource;
 import net.neoforged.bus.api.EventPriority;
 import net.neoforged.bus.api.SubscribeEvent;
-import net.neoforged.neoforge.gametest.GameTestHolder;
-import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
 import java.nio.file.Files;
 import java.nio.file.StandardOpenOption;
@@ -120,7 +123,7 @@ public final class NaturalFarmSeedLodGameTests {
             h = helper; level = h.getLevel(); since = lastTime = level.getGameTime();
             village = NaturalVillageR1GameTests.fixture(h, 0, NaturalVillageLayout.FARM_V3);
             // Declared continuity isolation only: preserve the 12 actual young crops rather than aging/replacing them.
-            level.getGameRules().getRule(GameRules.RULE_RANDOMTICKING).set(0, level.getServer());
+            level.getGameRules().set(GameRules.RANDOM_TICK_SPEED, 0, level.getServer());
         }
 
         int index(UUID body) {
@@ -131,7 +134,7 @@ public final class NaturalFarmSeedLodGameTests {
         CompoundTag row() {
             var result = NaturalVillageEconomyData.get(level.getServer()).row(village.buildingKey());
             require(result != null, "registered economy row required");
-            require(!result.getString("Phase").equals("REVIEW"), "existing economy requires review: " + result.getString("Reason"));
+            require(!result.getStringOr("Phase", "").equals("REVIEW"), "existing economy requires review: " + result.getStringOr("Reason", ""));
             return result;
         }
 
@@ -155,23 +158,23 @@ public final class NaturalFarmSeedLodGameTests {
                 // A Post event may see an incomplete NEAR view while native unload callbacks run.
                 // Do not reload a missing chunk to audit it, or count an incomplete physical view.
                 // The original baseline and mandatory first REMOTE balance still cover every delta.
-                if (!row().getString("Phase").equals("NEAR") || physicalViewAvailable()) accounting();
+                if (!row().getStringOr("Phase", "").equals("NEAR") || physicalViewAvailable()) accounting();
                 else if (!nearAuditDeferred) {
                     nearAuditDeferred = true;
                     event("NEAR_AUDIT_DEFERRED_TO_HANDOFF", Map.of("reason", "native unload transition; no chunk loads or invented stock"));
                 }
                 if (!actuallyAbsent()) return;
                 var region = row();
-                require(region.getBoolean("Farmer"), "BLOCKED: ordinary active original farmer was not captured; do not fake remote labor");
-                epoch = region.getLong("Epoch");
+                require(region.getBooleanOr("Farmer", false), "BLOCKED: ordinary active original farmer was not captured; do not fake remote labor");
+                epoch = region.getLongOr("Epoch", 0L);
                 for (var original : originals) {
                     var checkpoint = NpcLodData.get(level.getServer()).find(original.getUUID());
                     require(checkpoint != null && checkpoint.unloaded() && !NpcLodRuntime.review(checkpoint), "original unloaded checkpoint required");
                     require(checkpoint.person().equals(original.getCharacterId())
                             && checkpoint.inventoryDigest().equals(LodFingerprints.inventory(original)), "checkpoint covers this actual original inventory");
                     frozenCheckpoints.put(original.getUUID(), checkpoint);
-                    CompoundTag proof = original.saveWithoutId(new CompoundTag());
-                    proof.putUUID("PersonProof", original.getCharacterId()); proof.putBoolean("AIProof", original.isNoAi());
+                    CompoundTag proof = MinecraftApi.saveEntity(original);
+                    proof.store("PersonProof", UUIDUtil.CODEC, original.getCharacterId()); proof.putBoolean("AIProof", original.isNoAi());
                     proof.put("PersonalProof", NaturalVillageEconomyData.items(original.getPersonalInventory(), level.registryAccess()));
                     proof.put("CargoProof", NaturalVillageEconomyData.items(original.getTransportInventory(), level.registryAccess()));
                     proof.put("AllItemsProof", LodFingerprints.inventoryTag(original));
@@ -186,10 +189,10 @@ public final class NaturalFarmSeedLodGameTests {
                 require(now - since <= REMOTE_MIN + 400, "BLOCKED: remote 2000-tick observation/catchup boundary exceeded 2400 ticks");
                 require(actuallyAbsent(), "BLOCKED: original body or footprint reappeared during remote observation");
                 verifyFrozenCheckpoints();
-                require(row().getLong("Epoch") == epoch, "single actual handoff epoch; no repeated virtual inventory copy");
+                require(row().getLongOr("Epoch", 0L) == epoch, "single actual handoff epoch; no repeated virtual inventory copy");
                 accounting();
                 if ((now - remoteSince) % 200 == 0) evidence("REMOTE_SAMPLE", false);
-                var clock = RemoteCropClock.load(row().getCompound("Clock"));
+                var clock = RemoteCropClock.load(row().getCompoundOrEmpty("Clock"));
                 if (now - remoteSince < REMOTE_MIN || clock.settledAt() < remoteSince + REMOTE_MIN) return;
                 require(clock.backlog(now) == 0, "remote clock caught up through ordinary service, not direct advance calls");
                 evidence("REMOTE_2000_BEFORE_RETURN", true);
@@ -224,7 +227,7 @@ public final class NaturalFarmSeedLodGameTests {
                 var result = report(); result.putBoolean("SameProcessOnly", true); result.putBoolean("CarryProcessRestartStillSeparate", true);
                 write("natural-farm-seed-lod-result.nbt", result);
                 level.getServer().saveEverything(true, true, true);
-                net.neoforged.neoforge.common.IOUtilities.waitUntilIOWorkerComplete();
+                
                 Sagadyssey.LOGGER.info("NATURAL_SEED_LOD_PASS actualUnloaded=true remoteTicks={} originalSeedBag=12 originals=3 titlePreserved=true carrotBalance={} processRestart=false",
                         since - remoteSince, accounting());
                 active = null; h.succeed();
@@ -263,8 +266,8 @@ public final class NaturalFarmSeedLodGameTests {
 
         void admission(NpcBase loaded) {
             var proof = frozenBodies.get(loaded.getUUID());
-            require(proof != null && loaded.getCharacterId().equals(proof.getUUID("PersonProof")), "return uses same body/person");
-            require(loaded.isNoAi() == proof.getBoolean("AIProof"), "saved original AI state before declared post-admission hold");
+            require(proof != null && loaded.getCharacterId().equals(proof.read("PersonProof", UUIDUtil.CODEC).orElseThrow()), "return uses same body/person");
+            require(loaded.isNoAi() == proof.getBooleanOr("AIProof", false), "saved original AI state before declared post-admission hold");
             require(LodFingerprints.inventoryTag(loaded).equals(proof.get("AllItemsProof")), "original complete item payload at admission before work");
             require(admissions.add(loaded.getUUID()), "duplicate admission of an original body");
             require(personalTitle().equals(frozenTitle), "original personal title/claims/grants before return work");
@@ -365,7 +368,7 @@ public final class NaturalFarmSeedLodGameTests {
             for (int i = 0; i < 3; i++) {
                 var record = life.record(NaturalVillageLifeData.person(village, i));
                 require(record != null && record.bedPosition() != null, "original bed registration exists");
-                var tag = new CompoundTag(); tag.putUUID("Person", record.npcId()); tag.putString("Dimension", record.dimension());
+                var tag = new CompoundTag(); tag.store("Person", UUIDUtil.CODEC, record.npcId()); tag.putString("Dimension", record.dimension());
                 tag.putLong("Bed", record.bedPosition().asLong()); result.add(tag);
             }
             return result;
@@ -393,23 +396,23 @@ public final class NaturalFarmSeedLodGameTests {
         }
 
         CompoundTag accounting() {
-            var region = row(); long produced = 0, planted = 0, remoteMeals = region.getLong("Meals");
+            var region = row(); long produced = 0, planted = 0, remoteMeals = region.getLongOr("Meals", 0L);
             if (region.contains("Clock")) {
-                var clock = RemoteCropClock.load(region.getCompound("Clock")); produced = clock.produced(); planted = clock.planted();
+                var clock = RemoteCropClock.load(region.getCompoundOrEmpty("Clock")); produced = clock.produced(); planted = clock.planted();
                 long receiptOutputs = 0, receiptSeeds = 0, receiptMeals = 0;
-                for (var raw : region.getList("Receipts", Tag.TAG_COMPOUND)) {
-                    var receipt = (CompoundTag) raw; String kind = receipt.getString("Kind");
+                for (var raw : MinecraftApi.listOfType(region, "Receipts", Tag.TAG_COMPOUND)) {
+                    var receipt = (CompoundTag) raw; String kind = receipt.getStringOr("Kind", "");
                     if (kind.equals("HARVEST_REPLANT") || kind.equals("PLANT")) {
-                        receiptOutputs += receipt.getInt("Output"); receiptSeeds += receipt.getInt("Input");
-                    } else if (kind.equals("MEAL")) { require(receipt.getInt("Input") == 1, "one real carrot per remote meal receipt"); receiptMeals++; }
+                        receiptOutputs += receipt.getIntOr("Output", 0); receiptSeeds += receipt.getIntOr("Input", 0);
+                    } else if (kind.equals("MEAL")) { require(receipt.getIntOr("Input", 0) == 1, "one real carrot per remote meal receipt"); receiptMeals++; }
                 }
                 require(receiptOutputs == produced && receiptSeeds == planted && receiptMeals == remoteMeals,
                         "remote gross/seed/meal counters each match actual existing receipts");
             }
             long stored;
-            if (region.getString("Phase").equals("NEAR")) stored = physical();
+            if (region.getStringOr("Phase", "").equals("NEAR")) stored = physical();
             else {
-                require(Set.of("REMOTE", "RETURNING").contains(region.getString("Phase")), "one recognized region authority");
+                require(Set.of("REMOTE", "RETURNING").contains(region.getStringOr("Phase", "")), "one recognized region authority");
                 stored = LodContinuityP8GameTests.virtual(level, region);
                 for (int i = 0; i < 3; i++) stored += mobile(npc(i) == null ? originals.get(i) : npc(i));
             }
@@ -418,7 +421,7 @@ public final class NaturalFarmSeedLodGameTests {
                     "BLOCKED: exact carrot balance initial16 + nearNet + remoteGross - seeds != authoritative stock + near/remote actual meals");
             var out = new CompoundTag(); out.putInt("InitialStoredCarrots", 16); out.putLong("NearFieldworkNet", net);
             out.putLong("RemoteProduced", produced); out.putLong("RemotePlanted", planted); out.putLong("RemoteMeals", remoteMeals);
-            out.putInt("NearMealCommits", meals.size()); out.putLong("AuthoritativeStored", stored); out.putString("Authority", region.getString("Phase")); return out;
+            out.putInt("NearMealCommits", meals.size()); out.putLong("AuthoritativeStored", stored); out.putString("Authority", region.getStringOr("Phase", "")); return out;
         }
 
         int physical() {
@@ -455,7 +458,7 @@ public final class NaturalFarmSeedLodGameTests {
         void verifyProjectedStores() {
             var region = row();
             for (int i = 0; i < NaturalVillageLayout.stores(village).size(); i++) require(NaturalVillageEconomyData.items(store(i), level.registryAccess())
-                    .equals(region.getList("Stores", Tag.TAG_COMPOUND).getCompound(i).get("Items")), "one actual final warehouse projection, every item type preserved");
+                    .equals(MinecraftApi.listOfType(region, "Stores", Tag.TAG_COMPOUND).getCompoundOrEmpty(i).get("Items")), "one actual final warehouse projection, every item type preserved");
             require(count(npc(0).getPersonalInventory()) == 12, "return has the original12 personal seeds, separate from remote warehouse projection");
             require(personalTitle().equals(frozenTitle), "personal rights are unchanged by return projection");
         }
@@ -468,12 +471,12 @@ public final class NaturalFarmSeedLodGameTests {
             var needs = new ListTag(); for (int i = 0; i < 3; i++) needs.add(NpcLifeData.get(level.getServer()).needs(NaturalVillageLifeData.person(village, i)).save());
             tag.put("Needs", needs); events.add(tag);
             if (includeLinks) {
-                var state = comparable(links(level)); require(state.getAllKeys().size() == 21, "all21 linked categories captured");
+                var state = comparable(links(level)); require(state.keySet().size() == 21, "all21 linked categories captured");
                 linkBoundaries.put(name, state); write("natural-farm-seed-lod-" + name.toLowerCase(Locale.ROOT) + "-links.nbt", state);
             }
             write("natural-farm-seed-lod-events.nbt", report());
-            event(name, Map.of("gameTime", level.getGameTime(), "stage", stage, "regionPhase", row().getString("Phase"),
-                    "accounting", tag.getCompound("Accounting").toString(), "actualRemoteTicks", tag.getLong("ActualRemoteTicks")));
+            event(name, Map.of("gameTime", level.getGameTime(), "stage", stage, "regionPhase", row().getStringOr("Phase", ""),
+                    "accounting", tag.getCompoundOrEmpty("Accounting").toString(), "actualRemoteTicks", tag.getLongOr("ActualRemoteTicks", 0L)));
         }
         CompoundTag report() {
             var out = new CompoundTag(); out.put("Village", NaturalVillageLifeData.get(level.getServer()).village(village.buildingKey()));
@@ -492,7 +495,7 @@ public final class NaturalFarmSeedLodGameTests {
                 level.getServer().saveEverything(true, true, true);
             } catch (Exception saving) { Sagadyssey.LOGGER.error("Seed LOD blocked evidence could not be fully saved", saving); }
             Sagadyssey.LOGGER.error("NATURAL_SEED_LOD_BLOCKED {}", failure.toString()); active = null;
-            running.runAtTickTime(running.getTick() + 1, () -> { throw new GameTestAssertException(failure.getMessage()); });
+            running.runAtTickTime(running.getTick() + 1, () -> { running.fail(failure.getMessage()); });
         }
         void event(String name, Object detail) {
             try { Files.writeString(level.getServer().getWorldPath(LevelResource.ROOT).resolve("natural-farm-seed-lod.jsonl"),
@@ -534,17 +537,17 @@ public final class NaturalFarmSeedLodGameTests {
     /** Same map-order normalization as carry, not an excuse to drop domain fields. */
     private static CompoundTag comparable(CompoundTag source) {
         var copy = source.copy();
-        for (var entry : copy.getCompound("Transfers").getList("Receipts", Tag.TAG_COMPOUND)) {
+        for (var entry : MinecraftApi.listOfType(copy.getCompoundOrEmpty("Transfers"), "Receipts", Tag.TAG_COMPOUND)) {
             var receipt = (CompoundTag) entry; var sorted = new TreeMap<UUID, CompoundTag>();
-            for (var item : receipt.getList("Revisions", Tag.TAG_COMPOUND)) { var r = (CompoundTag) item; require(sorted.putIfAbsent(r.getUUID("Container"), r) == null, "unique revision map entry"); }
+            for (var item : MinecraftApi.listOfType(receipt, "Revisions", Tag.TAG_COMPOUND)) { var r = (CompoundTag) item; require(sorted.putIfAbsent(r.read("Container", UUIDUtil.CODEC).orElseThrow(), r) == null, "unique revision map entry"); }
             var list = new ListTag(); sorted.values().forEach(list::add); receipt.put("Revisions", list);
         }
         var knowledge = new TreeMap<String, CompoundTag>();
-        for (var entry : copy.getCompound("Supply").getList("Known", Tag.TAG_COMPOUND)) {
-            var item = (CompoundTag) entry; var actor = SubjectRef.load(item.getCompound("Actor"));
-            require(knowledge.putIfAbsent(actor.type() + ":" + actor.id() + ":" + item.getUUID("Point"), item) == null, "unique source knowledge entry");
+        for (var entry : MinecraftApi.listOfType(copy.getCompoundOrEmpty("Supply"), "Known", Tag.TAG_COMPOUND)) {
+            var item = (CompoundTag) entry; var actor = SubjectRef.load(item.getCompoundOrEmpty("Actor"));
+            require(knowledge.putIfAbsent(actor.type() + ":" + actor.id() + ":" + item.read("Point", UUIDUtil.CODEC).orElseThrow(), item) == null, "unique source knowledge entry");
         }
-        var known = new ListTag(); knowledge.values().forEach(known::add); copy.getCompound("Supply").put("Known", known); return copy;
+        var known = new ListTag(); knowledge.values().forEach(known::add); copy.getCompoundOrEmpty("Supply").put("Known", known); return copy;
     }
     private static int count(Container c) { int n = 0; for (int i = 0; i < c.getContainerSize(); i++) if (c.getItem(i).is(Items.CARROT)) n += c.getItem(i).getCount(); return n; }
     private static void require(boolean condition, String reason) { if (!condition) throw new IllegalStateException(reason); }

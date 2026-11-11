@@ -13,7 +13,7 @@ import io.netty.buffer.ByteBuf;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EquipmentSlot;
@@ -27,7 +27,7 @@ import net.neoforged.neoforge.network.handling.IPayloadContext;
 public record NpcProfessionPacket(int npcId, String professionName) implements CustomPacketPayload {
 
     public static final Type<NpcProfessionPacket> TYPE = new Type<>(
-            ResourceLocation.fromNamespaceAndPath(Sagadyssey.MOD_ID, "npc_profession")
+            Identifier.fromNamespaceAndPath(Sagadyssey.MOD_ID, "npc_profession")
     );
 
     public static final StreamCodec<ByteBuf, NpcProfessionPacket> STREAM_CODEC = StreamCodec.of(
@@ -52,7 +52,7 @@ public record NpcProfessionPacket(int npcId, String professionName) implements C
         context.enqueueWork(() -> {
             ServerPlayer player = (ServerPlayer) context.player();
             if (!NetworkRateLimiter.allow(player, "npc_profession", 4)) return;
-            Entity entity = player.serverLevel().getEntity(data.npcId);
+            Entity entity = player.level().getEntity(data.npcId);
 
             if (!(entity instanceof NpcBase npc)) {
                 player.displayClientMessage(
@@ -65,9 +65,9 @@ public record NpcProfessionPacket(int npcId, String professionName) implements C
                 player.displayClientMessage(Component.literal("当前没有可用的在生人物，不能行使工作授权。"), true);
                 return;
             }
-            var verdict = ServiceRelationshipData.get(player.server).authorize(
+            var verdict = ServiceRelationshipData.get(player.level().getServer()).authorize(
                     principal, npc.getCharacterId(),
-                    AuthorityScope.ASSIGN_ROLE, false, player.serverLevel().getGameTime());
+                    AuthorityScope.ASSIGN_ROLE, false, player.level().getGameTime());
             if (!verdict.allowed()) {
                 player.displayClientMessage(
                         Component.literal("§c没有岗位协商授权：" + verdict.reason()), true);
@@ -134,8 +134,8 @@ public record NpcProfessionPacket(int npcId, String professionName) implements C
                 if (!npc.addToBag(equipped)) npc.spawnWorkOutput(equipped);
             }
 
-            LogisticsData.get(player.server).releaseOrdersForNpc(
-                    npc.getCharacterId(), player.serverLevel().getGameTime());
+            LogisticsData.get(player.level().getServer()).releaseOrdersForNpc(
+                    npc.getCharacterId(), player.level().getGameTime());
             npc.setProfession(newProfession);
             npc.applyInitialEquipment(newProfession);
             npc.setExperience(penaltyExp);  // 应用降级经验
@@ -148,7 +148,7 @@ public record NpcProfessionPacket(int npcId, String professionName) implements C
 
     private static boolean hasEnoughEmeralds(ServerPlayer player, int cost) {
         int count = 0;
-        for (ItemStack stack : player.getInventory().items) {
+        for (ItemStack stack : player.getInventory().getNonEquipmentItems()) {
             if (stack.is(Items.EMERALD)) {
                 count += stack.getCount();
                 if (count >= cost) return true;
@@ -159,16 +159,16 @@ public record NpcProfessionPacket(int npcId, String professionName) implements C
 
     private static boolean deductEmeralds(ServerPlayer player, int cost) {
         int remaining = cost;
-        for (int i = 0; i < player.getInventory().items.size() && remaining > 0; i++) {
-            ItemStack stack = player.getInventory().items.get(i);
+        for (int i = 0; i < player.getInventory().getNonEquipmentItems().size() && remaining > 0; i++) {
+            ItemStack stack = player.getInventory().getNonEquipmentItems().get(i);
             if (stack.is(Items.EMERALD) && stack.getCount() < stack.getMaxStackSize()) {
                 int toRemove = Math.min(remaining, stack.getCount());
                 stack.shrink(toRemove);
                 remaining -= toRemove;
             }
         }
-        for (int i = 0; i < player.getInventory().items.size() && remaining > 0; i++) {
-            ItemStack stack = player.getInventory().items.get(i);
+        for (int i = 0; i < player.getInventory().getNonEquipmentItems().size() && remaining > 0; i++) {
+            ItemStack stack = player.getInventory().getNonEquipmentItems().get(i);
             if (stack.is(Items.EMERALD)) {
                 int toRemove = Math.min(remaining, stack.getCount());
                 stack.shrink(toRemove);

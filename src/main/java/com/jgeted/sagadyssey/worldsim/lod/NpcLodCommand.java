@@ -1,5 +1,7 @@
 package com.jgeted.sagadyssey.worldsim.lod;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+
 import com.mojang.brigadier.CommandDispatcher;
 import net.minecraft.commands.*;
 import net.minecraft.network.chat.Component;
@@ -12,7 +14,7 @@ import java.util.*;
 /** Backstage truth is OP-only. Never sent through ordinary NPC projections. */
 public final class NpcLodCommand {
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
-        dispatcher.register(Commands.literal("saga").then(Commands.literal("lod").requires(s->s.hasPermission(2))
+        dispatcher.register(Commands.literal("saga").then(Commands.literal("lod").requires(s->MinecraftApi.hasPermission(s, 2))
                 .executes(c->status(c.getSource())).then(Commands.literal("status").executes(c->status(c.getSource())))
                 .then(Commands.literal("migration")
                     .then(Commands.literal("dryrun").then(Commands.argument("targets",EntityArgument.entities()).executes(c->{

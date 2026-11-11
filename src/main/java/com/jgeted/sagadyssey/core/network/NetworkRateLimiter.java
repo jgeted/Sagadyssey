@@ -13,7 +13,7 @@ public final class NetworkRateLimiter {
     private NetworkRateLimiter() { }
 
     public static synchronized boolean allow(ServerPlayer player, String channel, int intervalTicks) {
-        long now = player.serverLevel().getGameTime();
+        long now = player.level().getGameTime();
         Map<String, Long> channels = LAST_TICK.computeIfAbsent(player, ignored -> new HashMap<>());
         long last = channels.getOrDefault(channel, Long.MIN_VALUE / 2L);
         if (now - last < Math.max(1, intervalTicks)) return false;

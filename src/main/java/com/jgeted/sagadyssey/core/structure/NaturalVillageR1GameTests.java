@@ -1,5 +1,11 @@
 package com.jgeted.sagadyssey.core.structure;
 
+import net.minecraft.world.level.gamerules.GameRules;
+
+import com.jgeted.sagadyssey.gametest.PortedGameTests.*;
+
+import com.jgeted.sagadyssey.core.MinecraftApi;
+
 import com.jgeted.sagadyssey.Sagadyssey;
 import com.jgeted.sagadyssey.npc.brain.execution.NpcBrainRuntime;
 import com.jgeted.sagadyssey.npc.brain.fieldwork.*;
@@ -13,7 +19,7 @@ import net.minecraft.core.*;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.gametest.framework.*;
 import net.minecraft.nbt.*;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.*;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.Container;
@@ -30,20 +36,20 @@ import java.util.*;
 public final class NaturalVillageR1GameTests {
     private static final String MARKER="society-r1-running.nbt";
     private static CompoundTag previous;
-    private static final ResourceLocation EMPTY=ResourceLocation.parse("sagadyssey_society_r1:empty");
-    private static final TicketType<ChunkPos> TICK=TicketType.create("society-r1-crops",Comparator.comparingLong(ChunkPos::toLong));
+    private static final Identifier EMPTY=Identifier.parse("sagadyssey_society_r1:empty");
+    private static final com.jgeted.sagadyssey.worldsim.ChunkTickets.Kind TICK=com.jgeted.sagadyssey.worldsim.ChunkTickets.kind("society-r1-crops");
     @net.neoforged.bus.api.SubscribeEvent public static void install(net.neoforged.neoforge.event.server.ServerStartedEvent e){
         if(!(e.getServer() instanceof GameTestServer))return;var l=e.getServer().overworld();try{
-            l.getStructureManager().getOrCreate(EMPTY).load(l.holderLookup(Registries.BLOCK),TagParser.parseTag("{size:[16,6,16],entities:[],blocks:[],palette:[{Name:\"minecraft:air\"}]}"));
+            l.getStructureManager().getOrCreate(EMPTY).load(l.holderLookup(Registries.BLOCK),TagParser.parseCompoundFully("{size:[16,6,16],entities:[],blocks:[],palette:[{Name:\"minecraft:air\"}]}"));
         }catch(Exception x){throw new IllegalStateException(x);}
         previous=null;if(!System.getProperty("sagadyssey.society.phase","").equals("r1-restart"))return;
         try{var server=e.getServer();previous=NbtIo.readCompressed(server.getWorldPath(LevelResource.ROOT).resolve(MARKER),NbtAccounter.unlimitedHeap());
             var world=NbtIo.readCompressed(server.getWorldPath(LevelResource.ROOT).resolve("level.dat"),NbtAccounter.unlimitedHeap());
-            server.getWorldData().overworldData().setGameTime(Math.max(previous.getLong("Time"),world.getCompound("Data").getLong("Time"))+1);
-            server.getWorldData().overworldData().setDayTime(world.getCompound("Data").getLong("DayTime")+1);
-            var village=NaturalVillageLifeData.decode(previous.getCompound("Village"));
+            server.getWorldData().overworldData().setGameTime(Math.max(previous.getLongOr("Time", 0L),world.getCompoundOrEmpty("Data").getLongOr("Time", 0L))+1);
+            server.getWorldData().overworldData().setDayTime(world.getCompoundOrEmpty("Data").getLongOr("DayTime", 0L)+1);
+            var village=NaturalVillageLifeData.decode(previous.getCompoundOrEmpty("Village"));
             var origin=village.buildingOrigin();for(int x=(origin.getX()>>4)-3;x<=(origin.getX()>>4)+3;x++)for(int z=(origin.getZ()>>4)-3;z<=(origin.getZ()>>4)+3;z++){
-                l.setChunkForced(x,z,true);l.getChunk(x,z);var c=new ChunkPos(x,z);l.getChunkSource().addRegionTicket(TICK,c,2,c,true);
+                l.setChunkForced(x,z,true);l.getChunk(x,z);var c=new ChunkPos(x,z);com.jgeted.sagadyssey.worldsim.ChunkTickets.add(l.getChunkSource(), TICK,c,2,c,true);
             }
         }catch(Exception x){throw new IllegalStateException("Original R1 world checkpoint required",x);}
     }
@@ -56,15 +62,15 @@ public final class NaturalVillageR1GameTests {
         default->List.of();};}
     private static TestFunction test(String name,java.util.function.Consumer<GameTestHelper> f,int limit){return new TestFunction("society_r1",name,EMPTY.toString(),limit,0,true,f);}
     public static NaturalVillageBuilding fixture(GameTestHelper h,int offset){return fixture(h,offset,NaturalVillageLayout.LIVING);}
-    public static NaturalVillageBuilding fixture(GameTestHelper h,int offset,ResourceLocation requested){
-        var l=h.getLevel();var gen=l.getChunkSource().getGenerator();var structure=l.registryAccess().registryOrThrow(Registries.STRUCTURE).get(NaturalVillageBuilding.SUPPORTED);
+    public static NaturalVillageBuilding fixture(GameTestHelper h,int offset,Identifier requested){
+        var l=h.getLevel();var gen=l.getChunkSource().getGenerator();var structure=l.registryAccess().lookupOrThrow(Registries.STRUCTURE).get(NaturalVillageBuilding.SUPPORTED).orElseThrow();
         var cp=new ChunkPos(h.absolutePos(new BlockPos(2048+offset,0,2048)));
         String developmentPhase=System.getProperty("sagadyssey.development.phase","");
         if(developmentPhase.startsWith("formal-")||developmentPhase.startsWith("counter-"))
             cp=new ChunkPos(new BlockPos(-11475920+offset,0,-41648));
         StructureStart start=null;
         for(int attempt=0;attempt<128;attempt++){
-            var candidate=structure.generate(l.registryAccess(),gen,gen.getBiomeSource(),l.getChunkSource().randomState(),l.getStructureManager(),7019L+attempt,cp,0,l,biome->true);
+            var candidate=structure.value().generate(structure, l.dimension(), l.registryAccess(),gen,gen.getBiomeSource(),l.getChunkSource().randomState(),l.getStructureManager(),7019L+attempt,cp,0,l,biome->true);
             if(candidate.isValid()&&template(l,candidate).equals(requested)){start=candidate;break;}
             // The production pool now uses v3. Legacy regressions explicitly place the
             // retained v2 asset at the generated farm footprint; they are not v3 natural evidence.
@@ -81,37 +87,37 @@ public final class NaturalVillageR1GameTests {
                 encoded.putString("location",requested.toString());
                 var element=net.minecraft.world.level.levelgen.structure.pools.SinglePoolElement.CODEC.codec().parse(context,encoded).getOrThrow();
                 var retained=new PoolElementStructurePiece(l.getStructureManager(),element,piece.getPosition(),piece.getGroundLevelDelta(),piece.getRotation(),element.getBoundingBox(l.getStructureManager(),piece.getPosition(),piece.getRotation()),net.minecraft.world.level.levelgen.structure.structures.JigsawStructure.DEFAULT_LIQUID_SETTINGS);
-                start=new StructureStart(structure,cp,0,new net.minecraft.world.level.levelgen.structure.pieces.PiecesContainer(List.of(retained)));
+                start=new StructureStart(structure.value(),cp,0,new net.minecraft.world.level.levelgen.structure.pieces.PiecesContainer(List.of(retained)));
                 Sagadyssey.LOGGER.info("LEGACY_FARM_FIXTURE retainedTemplate={} generatedFootprint={} testOnly=true",requested,piece.getPosition());break;
             }
         }
         h.assertTrue(start!=null&&start.isValid(),"actual seeded pool supports the requested versioned fixture");
         var p=(PoolElementStructurePiece)start.getPieces().getFirst();var anchor=cp.getWorldPosition();
-        var b=new NaturalVillageBuilding(l.dimension().location().toString(),NaturalVillageBuilding.SUPPORTED.toString(),anchor,
+        var b=new NaturalVillageBuilding(l.dimension().identifier().toString(),NaturalVillageBuilding.SUPPORTED.toString(),anchor,
                 new BlockPos(anchor.getX()+8,p.getBoundingBox().minY(),anchor.getZ()+8),requested.toString(),p.getPosition(),p.getRotation());
         var box=start.getBoundingBox();
         for(int x=(box.minX()>>4)-1;x<=(box.maxX()>>4)+1;x++)for(int z=(box.minZ()>>4)-1;z<=(box.maxZ()>>4)+1;z++){
-            l.setChunkForced(x,z,true);l.getChunk(x,z);var chunk=new ChunkPos(x,z);l.getChunkSource().addRegionTicket(TICK,chunk,2,chunk,true);
+            l.setChunkForced(x,z,true);l.getChunk(x,z);var chunk=new ChunkPos(x,z);com.jgeted.sagadyssey.worldsim.ChunkTickets.add(l.getChunkSource(), TICK,chunk,2,chunk,true);
         }
         for(int x=box.minX()>>4;x<=box.maxX()>>4;x++)for(int z=box.minZ()>>4;z<=box.maxZ()>>4;z++){
-            var c=new ChunkPos(x,z);start.placeInChunk(l,l.structureManager(),gen,RandomSource.create(44),new BoundingBox(c.getMinBlockX(),l.getMinBuildHeight(),c.getMinBlockZ(),c.getMaxBlockX(),l.getMaxBuildHeight()-1,c.getMaxBlockZ()),c);
+            var c=new ChunkPos(x,z);start.placeInChunk(l,l.structureManager(),gen,RandomSource.create(44),new BoundingBox(c.getMinBlockX(),l.getMinY(),c.getMinBlockZ(),c.getMaxBlockX(),(l.getMaxY() + 1)-1,c.getMaxBlockZ()),c);
         }
-        l.getGameRules().getRule(GameRules.RULE_RANDOMTICKING).set(3,l.getServer());l.getGameRules().getRule(GameRules.RULE_DAYLIGHT).set(true,l.getServer());
-        l.getGameRules().getRule(GameRules.RULE_DOMOBSPAWNING).set(false,l.getServer());return b;
+        l.getGameRules().set(GameRules.RANDOM_TICK_SPEED, 3,l.getServer());l.getGameRules().set(GameRules.ADVANCE_TIME, true,l.getServer());
+        l.getGameRules().set(GameRules.SPAWN_MOBS, false,l.getServer());return b;
     }
-    public static ResourceLocation template(ServerLevel l,StructureStart start){
+    public static Identifier template(ServerLevel l,StructureStart start){
         var p=(PoolElementStructurePiece)start.getPieces().getFirst();var element=(net.minecraft.world.level.levelgen.structure.pools.SinglePoolElement)p.getElement();
-        var tag=(CompoundTag)net.minecraft.world.level.levelgen.structure.pools.SinglePoolElement.CODEC.codec().encodeStart(l.registryAccess().createSerializationContext(NbtOps.INSTANCE),element).getOrThrow();return ResourceLocation.parse(tag.getString("location"));
+        var tag=(CompoundTag)net.minecraft.world.level.levelgen.structure.pools.SinglePoolElement.CODEC.codec().encodeStart(l.registryAccess().createSerializationContext(NbtOps.INSTANCE),element).getOrThrow();return Identifier.parse(tag.getStringOr("location", ""));
     }
     public static void visiting(ServerLevel l,NaturalVillageBuilding b,boolean visit){
         var a=NaturalVillageLayout.at(b,BlockPos.ZERO);var end=NaturalVillageLayout.at(b,new BlockPos(25,0,com.jgeted.sagadyssey.social.growth.SettlementDevelopmentLayout.supports(b)?39:21));
         for(int x=((Math.min(a.getX(),end.getX())-12)>>4)-1;x<=((Math.max(a.getX(),end.getX())+12)>>4)+1;x++)for(int z=((Math.min(a.getZ(),end.getZ())-12)>>4)-1;z<=((Math.max(a.getZ(),end.getZ())+12)>>4)+1;z++){
-            var c=new ChunkPos(x,z);l.setChunkForced(x,z,visit);if(visit){l.getChunk(x,z);l.getChunkSource().addRegionTicket(TICK,c,2,c,true);}else l.getChunkSource().removeRegionTicket(TICK,c,2,c,true);
+            var c=new ChunkPos(x,z);l.setChunkForced(x,z,visit);if(visit){l.getChunk(x,z);com.jgeted.sagadyssey.worldsim.ChunkTickets.add(l.getChunkSource(), TICK,c,2,c,true);}else com.jgeted.sagadyssey.worldsim.ChunkTickets.remove(l.getChunkSource(), TICK,c,2,c,true);
         }
     }
     public static NpcBase actor(ServerLevel l,NaturalVillageBuilding b,int i){return (NpcBase)l.getEntity(NaturalVillageLifeData.body(b,i));}
     private static void ready(GameTestHelper h,NaturalVillageBuilding b){var d=NaturalVillageLifeData.get(h.getLevel().getServer()).village(b.buildingKey());
-        h.assertTrue(d!=null&&d.getBoolean("Ready"),"natural life ready: "+(d==null?"missing intent":d.getString("Reason")));}
+        h.assertTrue(d!=null&&d.getBooleanOr("Ready", false),"natural life ready: "+(d==null?"missing intent":d.getStringOr("Reason", "")));}
     private static void initialize(GameTestHelper h){var b=fixture(h,0);h.runAfterDelay(240,()->{
         ready(h,b);var l=h.getLevel();
         var farmer=actor(l,b,0);var crop=NaturalVillageLayout.at(b,NaturalVillageLayout.crops().getFirst());
@@ -126,9 +132,9 @@ public final class NaturalVillageR1GameTests {
         NaturalVillageLifeData.get(l.getServer()).schedule(b);
         h.assertTrue(HouseholdData.get(l.getServer()).byId(NaturalVillageLifeData.home(b)).members().size()==3,"repeated placement does not duplicate family");h.succeed();});}
     private static void missing(GameTestHelper h){var b=fixture(h,256);var l=h.getLevel();var p=NaturalVillageLayout.at(b,NaturalVillageLayout.BEDS.getFirst());var bed=l.getBlockState(p);l.setBlockAndUpdate(p,Blocks.AIR.defaultBlockState());
-        h.runAfterDelay(200,()->{var v=NaturalVillageLifeData.get(l.getServer()).village(b.buildingKey());h.assertTrue(!v.getBoolean("Ready")&&actor(l,b,0)==null,"missing prerequisite does not invent residents or work");l.setBlockAndUpdate(p,bed);});
+        h.runAfterDelay(200,()->{var v=NaturalVillageLifeData.get(l.getServer()).village(b.buildingKey());h.assertTrue(!v.getBooleanOr("Ready", false)&&actor(l,b,0)==null,"missing prerequisite does not invent residents or work");l.setBlockAndUpdate(p,bed);});
         h.runAfterDelay(440,()->{ready(h,b);h.succeed();});}
-    private static int dispatch(ServerPlayer p,String command){try{return p.server.getCommands().getDispatcher().execute(command,p.createCommandSourceStack().withPermission(0).withSuppressedOutput());}catch(Exception e){throw new IllegalStateException(e);}}
+    private static int dispatch(ServerPlayer p,String command){try{return p.level().getServer().getCommands().getDispatcher().execute(command,p.createCommandSourceStack().withPermission(net.minecraft.server.permissions.LevelBasedPermissionSet.ALL).withSuppressedOutput());}catch(Exception e){throw new IllegalStateException(e);}}
     private static int count(Container c,Item item){int n=0;for(int i=0;i<c.getContainerSize();i++)if(c.getItem(i).is(item))n+=c.getItem(i).getCount();return n;}
     private static void member(GameTestHelper h){var b=fixture(h,512);h.runAfterDelay(240,()->{
         ready(h,b);var l=h.getLevel();var p=net.neoforged.neoforge.common.util.FakePlayerFactory.get(l,new com.mojang.authlib.GameProfile(UUID.randomUUID(),"SocietyMember"));
@@ -171,17 +177,17 @@ public final class NaturalVillageR1GameTests {
         var server=h.getLevel().getServer();var marker=new CompoundTag();marker.putLong("Time",h.getLevel().getGameTime());
         marker.put("Village",NaturalVillageLifeData.get(server).village(b.buildingKey()).copy());marker.putInt("Delta",delta);marker.putInt("Meals",meals.size());
         var keys=new ListTag();meals.forEach(k->keys.add(StringTag.valueOf(k)));marker.put("MealKeys",keys);
-        try{NbtIo.writeCompressed(marker,server.getWorldPath(LevelResource.ROOT).resolve(MARKER));server.saveEverything(true,true,true);net.neoforged.neoforge.common.IOUtilities.waitUntilIOWorkerComplete();}
+        try{NbtIo.writeCompressed(marker,server.getWorldPath(LevelResource.ROOT).resolve(MARKER));server.saveEverything(true,true,true);}
         catch(Exception e){throw new IllegalStateException("Save running natural household",e);}
     }
     private static void restart(GameTestHelper h){
-        h.assertTrue(previous!=null,"running checkpoint exists");var b=NaturalVillageLifeData.decode(previous.getCompound("Village"));var l=h.getLevel();Set<String> meals=new HashSet<>();
-        for(var key:previous.getList("MealKeys",Tag.TAG_STRING))meals.add(key.getAsString());
+        h.assertTrue(previous!=null,"running checkpoint exists");var b=NaturalVillageLifeData.decode(previous.getCompoundOrEmpty("Village"));var l=h.getLevel();Set<String> meals=new HashSet<>();
+        for(var key:MinecraftApi.listOfType(previous, "MealKeys",Tag.TAG_STRING))meals.add(key.asString().orElseThrow());
         h.succeedWhen(()->{ready(h,b);for(int i=0;i<3;i++){var n=actor(l,b,i);h.assertTrue(n!=null&&n.getCharacterId().equals(NaturalVillageLifeData.person(b,i)),"same people and bodies survive restart");}
             observe(l,b,meals);var farmer=actor(l,b,0);int delta=FieldworkData.get(l.getServer()).receiptsFor(farmer.getUUID()).stream().flatMap(r->r.inventoryDeltas().stream()).filter(d->d.fingerprint().equals("minecraft:carrot#0")).mapToInt(FieldworkActionReceipt.ItemDelta::quantity).sum();
             h.assertTrue(16+delta==stocks(l,b)+meals.size(),"restart exact carrot balance: net="+delta+" stock="+stocks(l,b)+" meals="+meals.size());
-            h.assertTrue(delta>previous.getInt("Delta")&&meals.size()>previous.getInt("Meals"),"original autonomous chain produces and consumes after restart");
-            Sagadyssey.LOGGER.info("R1_RESTART_ACCEPT netBefore={} netNow={} mealsBefore={} mealsNow={}",previous.getInt("Delta"),delta,previous.getInt("Meals"),meals.size());
+            h.assertTrue(delta>previous.getIntOr("Delta", 0)&&meals.size()>previous.getIntOr("Meals", 0),"original autonomous chain produces and consumes after restart");
+            Sagadyssey.LOGGER.info("R1_RESTART_ACCEPT netBefore={} netNow={} mealsBefore={} mealsNow={}",previous.getIntOr("Delta", 0),delta,previous.getIntOr("Meals", 0),meals.size());
         });
     }
 }

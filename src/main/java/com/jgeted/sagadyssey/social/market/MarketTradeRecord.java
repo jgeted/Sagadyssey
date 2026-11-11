@@ -1,5 +1,8 @@
 package com.jgeted.sagadyssey.social.market;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+import net.minecraft.core.UUIDUtil;
+
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
@@ -25,10 +28,10 @@ public record MarketTradeRecord(UUID tradeId, UUID settlementId, UUID firstParty
 
     CompoundTag save() {
         CompoundTag tag = new CompoundTag();
-        tag.putUUID("Trade", tradeId);
-        tag.putUUID("Settlement", settlementId);
-        tag.putUUID("FirstParty", firstParty);
-        tag.putUUID("SecondParty", secondParty);
+        tag.store("Trade", UUIDUtil.CODEC, tradeId);
+        tag.store("Settlement", UUIDUtil.CODEC, settlementId);
+        tag.store("FirstParty", UUIDUtil.CODEC, firstParty);
+        tag.store("SecondParty", UUIDUtil.CODEC, secondParty);
         tag.put("FirstToSecond", saveBasket(firstToSecond));
         tag.put("SecondToFirst", saveBasket(secondToFirst));
         tag.putLong("CompletedAt", completedAt);
@@ -37,11 +40,11 @@ public record MarketTradeRecord(UUID tradeId, UUID settlementId, UUID firstParty
     }
 
     static MarketTradeRecord load(CompoundTag tag) {
-        return new MarketTradeRecord(tag.getUUID("Trade"), tag.getUUID("Settlement"),
-                tag.getUUID("FirstParty"), tag.getUUID("SecondParty"),
-                loadBasket(tag.getList("FirstToSecond", Tag.TAG_COMPOUND)),
-                loadBasket(tag.getList("SecondToFirst", Tag.TAG_COMPOUND)),
-                tag.getLong("CompletedAt"), tag.getBoolean("Public"));
+        return new MarketTradeRecord(tag.read("Trade", UUIDUtil.CODEC).orElseThrow(), tag.read("Settlement", UUIDUtil.CODEC).orElseThrow(),
+                tag.read("FirstParty", UUIDUtil.CODEC).orElseThrow(), tag.read("SecondParty", UUIDUtil.CODEC).orElseThrow(),
+                loadBasket(MinecraftApi.listOfType(tag, "FirstToSecond", Tag.TAG_COMPOUND)),
+                loadBasket(MinecraftApi.listOfType(tag, "SecondToFirst", Tag.TAG_COMPOUND)),
+                tag.getLongOr("CompletedAt", 0L), tag.getBooleanOr("Public", false));
     }
 
     private static ListTag saveBasket(List<MarketBasketEntry> basket) {
@@ -53,7 +56,7 @@ public record MarketTradeRecord(UUID tradeId, UUID settlementId, UUID firstParty
     private static List<MarketBasketEntry> loadBasket(ListTag tags) {
         List<MarketBasketEntry> result = new ArrayList<>();
         for (int index = 0; index < tags.size(); index++) {
-            result.add(MarketBasketEntry.load(tags.getCompound(index)));
+            result.add(MarketBasketEntry.load(tags.getCompoundOrEmpty(index)));
         }
         return result;
     }

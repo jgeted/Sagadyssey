@@ -107,7 +107,7 @@ class NeedRequestDataTest {
         var duplicate = data.save(new CompoundTag(), null);
         ((ListTag) duplicate.get("Requests")).add(r.save());
         assertThrows(IllegalArgumentException.class, () -> NeedRequestData.load(duplicate, null));
-        var broken = r.save(); broken.getCompound("Item").remove("Components");
+        var broken = r.save(); broken.getCompoundOrEmpty("Item").remove("Components");
         assertThrows(IllegalArgumentException.class, () -> NeedRequest.load(broken));
     }
 

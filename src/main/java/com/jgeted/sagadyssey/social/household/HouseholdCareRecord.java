@@ -1,5 +1,7 @@
 package com.jgeted.sagadyssey.social.household;
 
+import net.minecraft.core.UUIDUtil;
+
 import net.minecraft.nbt.CompoundTag;
 
 import javax.annotation.Nullable;
@@ -47,25 +49,25 @@ public record HouseholdCareRecord(
 
     public CompoundTag save() {
         CompoundTag tag = new CompoundTag();
-        tag.putUUID("Household", householdId);
+        tag.store("Household", UUIDUtil.CODEC, householdId);
         tag.putLong("LastAssessedDay", lastAssessedDay);
         tag.putInt("PantryFoodItems", pantryFoodItems);
         tag.putInt("HungryMembers", hungryMembers);
         tag.putInt("CriticalMembers", criticalMembers);
         tag.putInt("ShortageDays", shortageDays);
         tag.putInt("TotalContributions", totalContributions);
-        if (lastContributor != null) tag.putUUID("LastContributor", lastContributor);
+        if (lastContributor != null) tag.store("LastContributor", UUIDUtil.CODEC, lastContributor);
         tag.putLong("LastContributionAt", lastContributionAt);
         tag.putString("Summary", summary);
         return tag;
     }
 
     public static HouseholdCareRecord load(CompoundTag tag) {
-        return new HouseholdCareRecord(tag.getUUID("Household"),
-                tag.getLong("LastAssessedDay"), tag.getInt("PantryFoodItems"),
-                tag.getInt("HungryMembers"), tag.getInt("CriticalMembers"),
-                tag.getInt("ShortageDays"), tag.getInt("TotalContributions"),
-                tag.hasUUID("LastContributor") ? tag.getUUID("LastContributor") : null,
-                tag.getLong("LastContributionAt"), tag.getString("Summary"));
+        return new HouseholdCareRecord(tag.read("Household", UUIDUtil.CODEC).orElseThrow(),
+                tag.getLongOr("LastAssessedDay", 0L), tag.getIntOr("PantryFoodItems", 0),
+                tag.getIntOr("HungryMembers", 0), tag.getIntOr("CriticalMembers", 0),
+                tag.getIntOr("ShortageDays", 0), tag.getIntOr("TotalContributions", 0),
+                tag.read("LastContributor", UUIDUtil.CODEC).isPresent() ? tag.read("LastContributor", UUIDUtil.CODEC).orElseThrow() : null,
+                tag.getLongOr("LastContributionAt", 0L), tag.getStringOr("Summary", ""));
     }
 }

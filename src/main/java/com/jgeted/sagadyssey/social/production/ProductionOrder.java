@@ -1,12 +1,15 @@
 package com.jgeted.sagadyssey.social.production;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+import net.minecraft.core.UUIDUtil;
+
 import com.jgeted.sagadyssey.worldsim.rights.SubjectRef;
 import com.jgeted.sagadyssey.worldsim.rights.ItemFingerprint;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 
 import javax.annotation.Nullable;
 import java.util.ArrayList;
@@ -187,7 +190,7 @@ public record ProductionOrder(UUID id, SubjectRef issuer, SubjectRef outputOwner
 
     public CompoundTag save() {
         CompoundTag tag = new CompoundTag();
-        tag.putUUID("Id", id);
+        tag.store("Id", UUIDUtil.CODEC, id);
         tag.put("Issuer", issuer.save());
         tag.put("OutputOwner", outputOwner.save());
         tag.putString("Recipe", recipeId);
@@ -196,13 +199,13 @@ public record ProductionOrder(UUID id, SubjectRef issuer, SubjectRef outputOwner
         tag.put("Inputs", inputTags);
         tag.put("Output", output.save());
         tag.putInt("RequiredWorkTicks", requiredWorkTicks);
-        tag.putUUID("BatchId", batchId);
-        if (assignedWorkerId != null) tag.putUUID("AssignedWorker", assignedWorkerId);
+        tag.store("BatchId", UUIDUtil.CODEC, batchId);
+        if (assignedWorkerId != null) tag.store("AssignedWorker", UUIDUtil.CODEC, assignedWorkerId);
         if (workstationDimension != null && workstationPosition != null) {
             tag.putString("WorkstationDimension", workstationDimension);
             tag.putLong("WorkstationPosition", workstationPosition.asLong());
         }
-        tag.putUUID("TargetContainer", targetContainerId);
+        tag.store("TargetContainer", UUIDUtil.CODEC, targetContainerId);
         tag.putString("TargetDimension", targetContainerDimension);
         tag.putLong("TargetPosition", targetContainerPosition.asLong());
         tag.putString("Status", status.name());
@@ -221,7 +224,7 @@ public record ProductionOrder(UUID id, SubjectRef issuer, SubjectRef outputOwner
         requireCompound(tag, "Issuer");
         requireCompound(tag, "OutputOwner");
         requireCompound(tag, "Output");
-        if (!tag.contains("RequiredWorkTicks", Tag.TAG_INT)) {
+        if (!MinecraftApi.containsTag(tag, "RequiredWorkTicks", Tag.TAG_INT)) {
             throw new IllegalArgumentException("missing required work ticks");
         }
         requireString(tag, "Recipe");
@@ -231,26 +234,26 @@ public record ProductionOrder(UUID id, SubjectRef issuer, SubjectRef outputOwner
         requireLong(tag, "TargetPosition");
         requireLong(tag, "CreatedAt");
         requireLong(tag, "UpdatedAt");
-        if (!tag.contains("Inputs", Tag.TAG_LIST)) {
+        if (!MinecraftApi.containsTag(tag, "Inputs", Tag.TAG_LIST)) {
             throw new IllegalArgumentException("missing production inputs");
         }
-        ListTag inputTags = tag.getList("Inputs", Tag.TAG_COMPOUND);
+        ListTag inputTags = MinecraftApi.listOfType(tag, "Inputs", Tag.TAG_COMPOUND);
         if (inputTags.isEmpty() || inputTags.size() > MAX_INPUTS) {
             throw new IllegalArgumentException("invalid production input count");
         }
         List<ProductionMaterial> inputs = new ArrayList<>(inputTags.size());
         for (int index = 0; index < inputTags.size(); index++) {
-            inputs.add(ProductionMaterial.load(inputTags.getCompound(index)));
+            inputs.add(ProductionMaterial.load(inputTags.getCompoundOrEmpty(index)));
         }
 
-        if (tag.contains("AssignedWorker") && !tag.hasUUID("AssignedWorker")) {
+        if (tag.contains("AssignedWorker") && !tag.read("AssignedWorker", UUIDUtil.CODEC).isPresent()) {
             throw new IllegalArgumentException("invalid assigned worker UUID");
         }
-        UUID workerId = tag.hasUUID("AssignedWorker") ? tag.getUUID("AssignedWorker") : null;
+        UUID workerId = tag.read("AssignedWorker", UUIDUtil.CODEC).isPresent() ? tag.read("AssignedWorker", UUIDUtil.CODEC).orElseThrow() : null;
         String workstationDimension = null;
         BlockPos workstationPosition = null;
-        boolean hasWorkstationDimension = tag.contains("WorkstationDimension", Tag.TAG_STRING);
-        boolean hasWorkstationPosition = tag.contains("WorkstationPosition", Tag.TAG_LONG);
+        boolean hasWorkstationDimension = MinecraftApi.containsTag(tag, "WorkstationDimension", Tag.TAG_STRING);
+        boolean hasWorkstationPosition = MinecraftApi.containsTag(tag, "WorkstationPosition", Tag.TAG_LONG);
         if (tag.contains("WorkstationDimension") != hasWorkstationDimension
                 || tag.contains("WorkstationPosition") != hasWorkstationPosition) {
             throw new IllegalArgumentException("invalid workstation locator type");
@@ -259,34 +262,34 @@ public record ProductionOrder(UUID id, SubjectRef issuer, SubjectRef outputOwner
             throw new IllegalArgumentException("incomplete workstation locator");
         }
         if (hasWorkstationDimension) {
-            workstationDimension = tag.getString("WorkstationDimension");
-            workstationPosition = BlockPos.of(tag.getLong("WorkstationPosition"));
+            workstationDimension = tag.getStringOr("WorkstationDimension", "");
+            workstationPosition = BlockPos.of(tag.getLongOr("WorkstationPosition", 0L));
         }
 
-        ProductionOrderStatus status = parseStatus(tag.getString("Status"), "status");
+        ProductionOrderStatus status = parseStatus(tag.getStringOr("Status", ""), "status");
         ProductionOrderStatus blockedFrom = null;
         ProductionOrderBlocker blocker = null;
-        if (tag.contains("BlockedFrom") && !tag.contains("BlockedFrom", Tag.TAG_STRING)) {
+        if (tag.contains("BlockedFrom") && !MinecraftApi.containsTag(tag, "BlockedFrom", Tag.TAG_STRING)) {
             throw new IllegalArgumentException("invalid blocked-from status type");
         }
-        if (tag.contains("BlockedFrom", Tag.TAG_STRING)) {
-            blockedFrom = parseStatus(tag.getString("BlockedFrom"), "blockedFromStatus");
+        if (MinecraftApi.containsTag(tag, "BlockedFrom", Tag.TAG_STRING)) {
+            blockedFrom = parseStatus(tag.getStringOr("BlockedFrom", ""), "blockedFromStatus");
         }
-        if (tag.contains("Blocker") && !tag.contains("Blocker", Tag.TAG_COMPOUND)) {
+        if (tag.contains("Blocker") && !MinecraftApi.containsTag(tag, "Blocker", Tag.TAG_COMPOUND)) {
             throw new IllegalArgumentException("invalid blocker type");
         }
-        if (tag.contains("Blocker", Tag.TAG_COMPOUND)) {
-            blocker = ProductionOrderBlocker.load(tag.getCompound("Blocker"));
+        if (MinecraftApi.containsTag(tag, "Blocker", Tag.TAG_COMPOUND)) {
+            blocker = ProductionOrderBlocker.load(tag.getCompoundOrEmpty("Blocker"));
         }
-        return new ProductionOrder(tag.getUUID("Id"),
-                SubjectRef.load(tag.getCompound("Issuer")),
-                SubjectRef.load(tag.getCompound("OutputOwner")), tag.getString("Recipe"),
-                inputs, ProductionMaterial.load(tag.getCompound("Output")),
-                tag.getInt("RequiredWorkTicks"), tag.getUUID("BatchId"), workerId,
+        return new ProductionOrder(tag.read("Id", UUIDUtil.CODEC).orElseThrow(),
+                SubjectRef.load(tag.getCompoundOrEmpty("Issuer")),
+                SubjectRef.load(tag.getCompoundOrEmpty("OutputOwner")), tag.getStringOr("Recipe", ""),
+                inputs, ProductionMaterial.load(tag.getCompoundOrEmpty("Output")),
+                tag.getIntOr("RequiredWorkTicks", 0), tag.read("BatchId", UUIDUtil.CODEC).orElseThrow(), workerId,
                 workstationDimension, workstationPosition,
-                tag.getUUID("TargetContainer"), tag.getString("TargetDimension"),
-                BlockPos.of(tag.getLong("TargetPosition")), status, blockedFrom, blocker,
-                tag.getLong("CreatedAt"), tag.getLong("UpdatedAt"), tag.getString("Detail"));
+                tag.read("TargetContainer", UUIDUtil.CODEC).orElseThrow(), tag.getStringOr("TargetDimension", ""),
+                BlockPos.of(tag.getLongOr("TargetPosition", 0L)), status, blockedFrom, blocker,
+                tag.getLongOr("CreatedAt", 0L), tag.getLongOr("UpdatedAt", 0L), tag.getStringOr("Detail", ""));
     }
 
     private static boolean requiresWorker(ProductionOrderStatus status) {
@@ -299,7 +302,7 @@ public record ProductionOrder(UUID id, SubjectRef issuer, SubjectRef outputOwner
 
     private static String requireResourceId(String value, String field) {
         if (value == null || value.isBlank() || value.length() > MAX_IDENTITY_LENGTH
-                || ResourceLocation.tryParse(value) == null) {
+                || Identifier.tryParse(value) == null) {
             throw new IllegalArgumentException("invalid " + field);
         }
         return value;
@@ -314,23 +317,23 @@ public record ProductionOrder(UUID id, SubjectRef issuer, SubjectRef outputOwner
     }
 
     private static void requireUuid(CompoundTag tag, String key) {
-        if (!tag.hasUUID(key)) throw new IllegalArgumentException("missing UUID: " + key);
+        if (!tag.read(key, UUIDUtil.CODEC).isPresent()) throw new IllegalArgumentException("missing UUID: " + key);
     }
 
     private static void requireCompound(CompoundTag tag, String key) {
-        if (!tag.contains(key, Tag.TAG_COMPOUND)) {
+        if (!MinecraftApi.containsTag(tag, key, Tag.TAG_COMPOUND)) {
             throw new IllegalArgumentException("missing compound: " + key);
         }
     }
 
     private static void requireString(CompoundTag tag, String key) {
-        if (!tag.contains(key, Tag.TAG_STRING)) {
+        if (!MinecraftApi.containsTag(tag, key, Tag.TAG_STRING)) {
             throw new IllegalArgumentException("missing string: " + key);
         }
     }
 
     private static void requireLong(CompoundTag tag, String key) {
-        if (!tag.contains(key, Tag.TAG_LONG)) {
+        if (!MinecraftApi.containsTag(tag, key, Tag.TAG_LONG)) {
             throw new IllegalArgumentException("missing long: " + key);
         }
     }

@@ -1,5 +1,8 @@
 package com.jgeted.sagadyssey.social.household;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+import net.minecraft.core.UUIDUtil;
+
 import com.jgeted.sagadyssey.social.character.CharacterRecord;
 import com.jgeted.sagadyssey.social.character.CharacterRegistryData;
 import com.jgeted.sagadyssey.social.history.WorldHistoryData;
@@ -9,7 +12,7 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.world.level.saveddata.SavedData;
+import com.jgeted.sagadyssey.worldsim.NbtSavedData;
 
 import javax.annotation.Nullable;
 import java.util.Comparator;
@@ -21,7 +24,7 @@ import java.util.Set;
 import java.util.UUID;
 
 /** 世界级家庭登记；保证一个人物同时只能属于一个家庭。 */
-public final class HouseholdData extends SavedData {
+public final class HouseholdData extends NbtSavedData {
     private static final String DATA_NAME = "sagadyssey_households";
     private static final Factory<HouseholdData> FACTORY =
             new Factory<>(HouseholdData::new, HouseholdData::load);
@@ -36,7 +39,7 @@ public final class HouseholdData extends SavedData {
     private final Map<UUID, HouseholdProvisionPlan> provisionPlans = new HashMap<>();
 
     public static HouseholdData get(MinecraftServer server) {
-        return server.overworld().getDataStorage().computeIfAbsent(FACTORY, DATA_NAME);
+        return server.overworld().getDataStorage().computeIfAbsent(FACTORY.type(DATA_NAME));
     }
 
     public List<HouseholdRecord> households() {
@@ -304,9 +307,9 @@ public final class HouseholdData extends SavedData {
     private static HouseholdData load(CompoundTag tag, HolderLookup.Provider registries) {
         HouseholdData data = new HouseholdData();
         com.jgeted.sagadyssey.social.combat.CombatImpact.load(tag,data.combatImpacts);
-        ListTag list = tag.getList("Households", Tag.TAG_COMPOUND);
+        ListTag list = MinecraftApi.listOfType(tag, "Households", Tag.TAG_COMPOUND);
         for (int index = 0; index < list.size(); index++) {
-            HouseholdRecord household = HouseholdRecord.load(list.getCompound(index));
+            HouseholdRecord household = HouseholdRecord.load(list.getCompoundOrEmpty(index));
             if (household == null) continue;
             // 损坏存档中重复出现的人物只保留首次登记，避免一人多户。
             Set<UUID> localMembers = new HashSet<>();
@@ -321,10 +324,10 @@ public final class HouseholdData extends SavedData {
             data.households.put(repaired.id(), repaired);
             unique.forEach(member -> data.householdByMember.put(member.characterId(), repaired.id()));
         }
-        ListTag careList = tag.getList("CareRecords", Tag.TAG_COMPOUND);
+        ListTag careList = MinecraftApi.listOfType(tag, "CareRecords", Tag.TAG_COMPOUND);
         for (int index = 0; index < careList.size(); index++) {
-            CompoundTag careTag = careList.getCompound(index);
-            if (!careTag.hasUUID("Household")) continue;
+            CompoundTag careTag = careList.getCompoundOrEmpty(index);
+            if (!careTag.read("Household", UUIDUtil.CODEC).isPresent()) continue;
             HouseholdCareRecord care = HouseholdCareRecord.load(careTag);
             if (data.households.containsKey(care.householdId())) {
                 data.careRecords.put(care.householdId(), care);
@@ -332,10 +335,10 @@ public final class HouseholdData extends SavedData {
         }
         data.households.keySet().forEach(id -> data.careRecords.computeIfAbsent(
                 id, HouseholdCareRecord::create));
-        ListTag planList = tag.getList("ProvisionPlans", Tag.TAG_COMPOUND);
+        ListTag planList = MinecraftApi.listOfType(tag, "ProvisionPlans", Tag.TAG_COMPOUND);
         for (int index = 0; index < planList.size(); index++) {
-            CompoundTag planTag = planList.getCompound(index);
-            if (!planTag.hasUUID("Household")) continue;
+            CompoundTag planTag = planList.getCompoundOrEmpty(index);
+            if (!planTag.read("Household", UUIDUtil.CODEC).isPresent()) continue;
             HouseholdProvisionPlan plan = HouseholdProvisionPlan.load(planTag);
             if (data.households.containsKey(plan.householdId())) {
                 data.provisionPlans.put(plan.householdId(), plan);

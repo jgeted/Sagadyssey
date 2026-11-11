@@ -4,7 +4,7 @@ import com.jgeted.sagadyssey.Sagadyssey;
 import io.netty.buffer.ByteBuf;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 
 /**
  * 从客户端发送到服务端的数据包。
@@ -13,7 +13,7 @@ import net.minecraft.resources.ResourceLocation;
 public record ChatPayload(String message) implements CustomPacketPayload {
 
     public static final CustomPacketPayload.Type<ChatPayload> TYPE =
-            new Type<>(ResourceLocation.fromNamespaceAndPath(Sagadyssey.MOD_ID, "chat_message"));
+            new Type<>(Identifier.fromNamespaceAndPath(Sagadyssey.MOD_ID, "chat_message"));
 
     public static final StreamCodec<ByteBuf, ChatPayload> STREAM_CODEC = StreamCodec.of(
             (buf, packet) -> {

@@ -1,5 +1,7 @@
 package com.jgeted.sagadyssey.social.needs;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+
 import com.jgeted.sagadyssey.npc.brain.execution.NpcBrainRuntime;
 import com.jgeted.sagadyssey.core.structure.NaturalFarmRules;
 import com.jgeted.sagadyssey.core.structure.NaturalVillageBuilding;
@@ -33,10 +35,12 @@ public final class SupplyFlowService {
     private static final Map<MinecraftServer,Long> LAST=new WeakHashMap<>();
     // Diagnostic de-duplication only, never an authority or retry-budget record.
     private static final Map<MinecraftServer,Map<UUID,String>> EMERGENCY_DIAGNOSTICS=new WeakHashMap<>();
+    // Scheduling only: absence never grants stock or renews the durable attempt/deadline budget.
+    private static final Map<MinecraftServer,Map<UUID,Long>> STOCK_RECOVERY_POLL=new WeakHashMap<>();
     private SupplyFlowService(){}
     public static UUID receipt(UUID id,String stage){return ContainerIds.named("need:"+id+":"+stage);}
     public static ServerLevel level(MinecraftServer server,String dimension){
-        var id=ResourceLocation.tryParse(dimension);return id==null?null:server.getLevel(ResourceKey.create(Registries.DIMENSION,id));
+        var id=net.minecraft.resources.Identifier.tryParse(dimension);return id==null?null:server.getLevel(ResourceKey.create(Registries.DIMENSION,id));
     }
     public static Container container(MinecraftServer server,FieldworkStorage point){
         if(com.jgeted.sagadyssey.worldsim.lod.NaturalVillageEconomyData.protects(server,point.dimension(),point.position()))return null;
@@ -68,8 +72,8 @@ public final class SupplyFlowService {
         flows.demand(request.id(),principal,destination.containerId());return request;
     }
     public static void tick(NpcBase npc){
-        if(com.jgeted.sagadyssey.social.household.NaturalHouseholdMigrationData.moving(npc.getServer(),npc.getCharacterId()))return;
-        var server=npc.getServer();long now=server.overworld().getGameTime();
+        if(com.jgeted.sagadyssey.social.household.NaturalHouseholdMigrationData.moving(MinecraftApi.server(npc),npc.getCharacterId()))return;
+        var server=MinecraftApi.server(npc);long now=server.overworld().getGameTime();
         long previous=LAST.getOrDefault(server,-100L);if(now>=previous&&now-previous<100)return;LAST.put(server,now);
         aggregate(server,now);match(server,now);
     }
@@ -77,6 +81,7 @@ public final class SupplyFlowService {
         var flows=SupplyFlowData.get(server);var needs=NeedRequestData.get(server);
         reconcileHouseholdDestinations(server,now);
         FurnaceWorkAdapter.reservePendingInputs(server,now);
+        openLocalKitchenNeeds(server,now);
         Set<UUID> plannedCharacters = plannedCharacters(server);
         for(var household:HouseholdData.get(server).households()){
             if(household.sharedStorage()==null||household.members().stream().noneMatch(m->plannedCharacters.contains(m.characterId())))continue;
@@ -130,6 +135,8 @@ public final class SupplyFlowService {
                 RightsStateData.get(server).ensureContext(point.containerId(),point.dimension()+":"+point.position().asLong(),point.owner(),point.owner(),point.policy());flows.register(point);flows.reveal(order.outputOwner(),point.containerId());
             }
         }
+        LocalWorkshopNeeds.aggregate(server,now);
+        openLocalSupplierNeeds(server,now);
         // Settled production receipts, not elapsed time or inventory guesses, fulfill produced demands.
         for(var r:needs.requests()){
             if(r.key().purpose().contains(":production:")){
@@ -139,7 +146,7 @@ public final class SupplyFlowService {
                 if(original!=null&&original.status()==ProductionOrderStatus.COMPLETED){
                     if(r.status()==NeedRequestStatus.DELIVERED)
                         needs.transition(r.id(),NeedRequestStatus.CONSUMED,now,"真实生产完成，缺料交付已被批次消耗");
-                    else if((uncommittedUnitMaterialIsRedundant(r,original,ProductionBatchData.get(server).batch(original.batchId()))
+                    else if((uncommittedUnitMaterialIsRedundant(server,r,original,ProductionBatchData.get(server).batch(original.batchId()))
                             ||uncommittedNativeMaterialIsRedundant(server,r,original))
                             &&flows.routes().stream().noneMatch(route->route.need().equals(materialNeedId)
                             &&(!route.closed()||route.pending()!=null||route.stage()==SupplyFlowData.Stage.REVIEW))){
@@ -155,7 +162,7 @@ public final class SupplyFlowService {
             var batch=ProductionBatchData.get(server).batch(order.batchId());
             boolean nativeComplete=FurnaceWorkAdapter.completedDelivery(server,order);
             if(nativeComplete||batch!=null&&batch.status()==ProductionBatchStatus.COMPLETED){
-                if(!nativeComplete&&order.output().quantity()==1&&!completedUnitMatches(order,batch)){
+                if(!nativeComplete&&(order.output().quantity()==1||WorkshopTask.recognized(server,order))&&!completedUnitMatches(order,batch)){
                     productionReview(needs,needs.request(r.id()),now,"原单件批次与制造意图不一致");continue;
                 }
                 if(now>=r.key().deadline()){
@@ -501,7 +508,7 @@ public final class SupplyFlowService {
                 && ((!old.id().equals(r.id()) && !old.status().terminal()) || unsettledFood(server, old, now))) return;
         var life = NaturalVillageLifeData.existing(server); if (life == null) return;
         NaturalVillageBuilding village = null;
-        for (var row : life.villages()) if (row.getBoolean("Ready")) {
+        for (var row : life.villages()) if (row.getBooleanOr("Ready", false)) {
             var candidate = NaturalVillageLifeData.decode(row);
             if (NaturalVillageLayout.autonomousFarm(candidate) && NaturalVillageLifeData.home(candidate).equals(r.key().requester())) {
                 village = candidate; break;
@@ -557,6 +564,209 @@ public final class SupplyFlowService {
                     r.id(), routeId, bestQuantity, r.createdAt(), r.attempts(), r.maxAttempts(), r.key().deadline(), courier.getCharacterId());
     }
 
+    static boolean materialRecoveryMatches(NeedRequest r, SupplyFlowData.Demand scope, ProductionOrder order,
+                                           ProductionMaterialRequest legacy, ProductionBatch batch, long now) {
+        if (!r.existingStockRecoveryEligible(now) || scope == null || order == null || legacy == null
+                || order.terminal() || legacy.terminal() || batch != null) return false;
+        var effective = order.status() == ProductionOrderStatus.BLOCKED ? order.blockedFromStatus() : order.status();
+        return (effective == ProductionOrderStatus.OPEN || effective == ProductionOrderStatus.CLAIMED)
+                && r.key().purpose().equals(order.outputOwner().type()+":production:"+order.id())
+                && scope.principal().equals(order.outputOwner()) && r.key().requester().equals(order.outputOwner().id())
+                && scope.destination().equals(r.key().destination()) && scope.destination().equals(legacy.containerId())
+                && legacy.orderId().equals(order.id()) && legacy.material().fingerprint().equals(r.key().item())
+                && legacy.material().quantity() == r.requested() && r.originalRequested() == r.requested()
+                && order.inputs().contains(legacy.material()) && r.key().windowStart() == order.createdAt()
+                && r.key().deadline() == order.createdAt()+72000;
+    }
+
+    static boolean completedSupplierRecoveryMatches(NeedRequest parent, NeedRequest child,
+                                                    ProductionOrder order, ProductionBatch batch) {
+        return child != null && order != null && child.status() == NeedRequestStatus.DELIVERED
+                && child.reserved() == 0 && child.inTransit() == 0
+                && child.key().purpose().equals("CHARACTER:local-supplier:"+parent.id()+":"+parent.key().item().itemId())
+                && child.key().item().equals(parent.key().item())
+                && child.key().requester().equals(order.outputOwner().id())
+                && order.outputOwner().type() == SubjectRef.SubjectType.CHARACTER
+                && order.issuer().equals(order.outputOwner()) && child.key().destination().equals(order.targetContainerId())
+                && order.output().fingerprint().equals(child.key().item())
+                && child.delivered() == child.requested() && child.delivered() == order.output().quantity()
+                && order.status() == ProductionOrderStatus.COMPLETED && completedUnitMatches(order,batch);
+    }
+
+    private static boolean recoveryObligationsClear(RightsStateData rights, NeedRequestData needs,
+                                                    SupplyFlowData flows, LogisticsData logistics,
+                                                    NeedRequest need, long now) {
+        if (need.reserved()!=0 || need.inTransit()!=0) return false;
+        var unmatched = new HashMap<>(needs.reserveReceipts(need.id()));
+        int delivered=0, released=0;
+        for (var route : flows.routes()) if (route.need().equals(need.id())) {
+            if (!route.closed() || route.pending()!=null || route.stage()==SupplyFlowData.Stage.REVIEW) return false;
+            Integer quantity = unmatched.remove(receipt(route.id(),"reserve"));
+            if (quantity==null || quantity!=route.quantity() || !linkedRecoveryOrder(logistics,need,route)
+                    || !rights.reservationsForToken(route.token(),now).isEmpty())
+                throw new IllegalStateException("原路线、预留回执或物流订单未核清");
+            var order=logistics.order(route.id());
+            if (route.stage()==SupplyFlowData.Stage.DONE) {
+                if(order.pickedUpCount()!=quantity || order.deliveredCount()!=quantity
+                        || order.status()!=LogisticsOrderStatus.DELIVERED)
+                    throw new IllegalStateException("完成路线缺少物流实际取货或交付数量");
+                delivered=Math.addExact(delivered,quantity);
+            } else {
+                if(order.pickedUpCount()!=0 || order.deliveredCount()!=0 || order.status()!=LogisticsOrderStatus.CANCELLED
+                        || !needs.hasReceipt(receipt(route.id(),"release"),need.id(),NeedRequestData.Action.RELEASE_RESERVED,quantity))
+                    throw new IllegalStateException("取消路线缺少原预留释放证据或仍有货物");
+                released=Math.addExact(released,quantity);
+            }
+        }
+        if (!unmatched.isEmpty()) throw new IllegalStateException("存在无原路线的预留回执，禁止以新路线重扣");
+        for (var order : logistics.orders()) if (need.id().equals(order.needRequestId()) && flows.routeOrNull(order.id())==null)
+            throw new IllegalStateException("存在无原路线的物流义务，禁止以新路线重扣");
+        // Transfer operation IDs are random pending IDs, not derived route IDs.
+        if(delivered!=need.delivered() || needs.acknowledgedQuantity(need.id(),NeedRequestData.Action.DELIVER)!=delivered
+                ||needs.acknowledgedQuantity(need.id(),NeedRequestData.Action.DISPATCH)!=delivered
+                ||needs.acknowledgedQuantity(need.id(),NeedRequestData.Action.RELEASE_RESERVED)!=released)
+            throw new IllegalStateException("需求数量、已关闭路线和实际转移回执总量不一致");
+        return true;
+    }
+
+    private static boolean linkedRecoveryOrder(LogisticsData logistics, NeedRequest need, SupplyFlowData.Route route) {
+        var order=logistics.order(route.id());
+        return order!=null && route.need().equals(need.id()) && route.destination().equals(need.key().destination())
+                && route.principal().id().equals(need.key().requester()) && Objects.equals(order.needRequestId(),need.id())
+                && order.sourceWarehouseId().equals(route.source()) && order.destinationWarehouseId().equals(route.destination())
+                && Objects.equals(order.createdByCharacter(),route.principal().id()) && order.requestedCount()==route.quantity()
+                && order.itemId().equals(need.key().item().itemId()) && order.componentsHash()==need.key().item().componentsHash();
+    }
+
+    /** Replays inspect the existing receipt before rights.reserve; an old released lease is never revived. */
+    static boolean reserveExistingStockRoute(RightsStateData rights, NeedRequestData needs, SupplyFlowData flows,
+                                             LogisticsData logistics, AssetReservation reservation,
+                                             SupplyFlowData.Route route, int physical, long now) {
+        var need=needs.request(route.need()); var scope=flows.demand(need.id());
+        var source=flows.pointOrNull(route.source());
+        if (scope==null || source==null || !scope.principal().equals(route.principal())
+                || !scope.destination().equals(route.destination()) || !need.key().destination().equals(route.destination())
+                || !need.key().requester().equals(route.principal().id())
+                || !reservation.id().equals(receipt(route.id(),"lease")) || !reservation.token().equals(route.token())
+                || !reservation.containerId().equals(route.source()) || !reservation.reservedFor().equals(source.owner())
+                || !reservation.fingerprint().equals(need.key().item()) || reservation.quantity()!=route.quantity()
+                || route.stage()!=SupplyFlowData.Stage.HELD || route.carrierEntity()!=null || route.pending()!=null)
+            throw new IllegalStateException("existing stock recovery publication identity conflict");
+        var previous=flows.routeOrNull(route.id());
+        if (needs.hasReceipt(receipt(route.id(),"reserve"),need.id(),NeedRequestData.Action.RESERVE,route.quantity())) {
+            if (previous==null || !previous.need().equals(route.need()) || !previous.source().equals(route.source())
+                    || !previous.destination().equals(route.destination()) || !previous.principal().equals(route.principal())
+                    || previous.quantity()!=route.quantity() || !linkedRecoveryOrder(logistics,need,route))
+                throw new IllegalStateException("existing stock reserve receipt lost its linked identity");
+            return false;
+        }
+        if (previous!=null || logistics.order(route.id())!=null
+                || rights.reservations().stream().anyMatch(r->r.token().equals(route.token())))
+            throw new IllegalStateException("existing stock recovery has linked state without reserve receipt");
+        if (!need.existingStockRecoveryEligible(now) || !recoveryObligationsClear(rights,needs,flows,logistics,need,now)) return false;
+        if (!rights.reserve(reservation,physical,now)) return false;
+        try {
+            needs.acknowledgeExistingStockReserveAndPublish(receipt(route.id(),"reserve"),need.id(),route.quantity(),now,
+                    ()->flows.createRouteWithOrder(route,()->logistics.createManagedOrder(route.id(),route.source(),
+                            route.destination(),reservation.fingerprint(),route.quantity(),route.principal().id(),need.id(),now)));
+            return true;
+        } catch (RuntimeException error) {
+            rights.releaseReservations(reservation.token());
+            throw error;
+        }
+    }
+
+    private static void tryExistingStockRecovery(MinecraftServer server,NeedRequest r,SupplyFlowData.Demand scope,long now) {
+        if (!r.existingStockRecoveryEligible(now) || !scope.destination().equals(r.key().destination())
+                || !scope.principal().id().equals(r.key().requester())) return;
+        var polls=STOCK_RECOVERY_POLL.computeIfAbsent(server,s->new HashMap<>());
+        Long last=polls.get(r.id()); if(last!=null && now>=last && now-last<600) return;
+        polls.put(r.id(),now);
+        var needs=NeedRequestData.get(server);var flows=SupplyFlowData.get(server);var rights=RightsStateData.get(server);
+        try {
+            if (flows.production(r.id())!=null || !recoveryObligationsClear(rights,needs,flows,LogisticsData.get(server),r,now)) return;
+            var destination=flows.pointOrNull(scope.destination());
+            if(destination==null || !validOwner(server,destination) || container(server,destination)==null) return;
+            int limit=r.remaining();
+            Set<UUID> permittedSources=null;
+            int marker=r.key().purpose().indexOf(":production:");
+            if(marker>=0) {
+                var order=ProductionOrderData.get(server).byId(UUID.fromString(r.key().purpose().substring(marker+12))).orElse(null);
+                if(order==null) throw new IllegalStateException("原生产订单缺失");
+                if(order.terminal()) return;
+                var material=new ProductionMaterial(r.key().item(),r.requested());
+                var legacy=ProductionMaterialRequestData.get(server).byKey(ProductionMaterialRequest.keyFor(order.id(),material)).orElse(null);
+                var batch=ProductionBatchData.get(server).batch(order.batchId());
+                if(legacy==null)throw new IllegalStateException("原缺料记录缺失");
+                if(!materialRecoveryMatches(r,scope,order,legacy,batch,now)) return;
+                FieldworkStorage expected=FurnaceWorkAdapter.recognized(order)?FurnaceWorkAdapter.inputPoint(server,order)
+                        :new FieldworkStorage(order.targetContainerDimension(),order.targetContainerPosition(),order.targetContainerId(),
+                            order.outputOwner(),destination.policy(),TransferIntent.DELIVERY,order.token());
+                if(!expected.containerId().equals(destination.containerId()) || !expected.position().equals(destination.position())
+                        || !expected.dimension().equals(destination.dimension()) || !expected.owner().equals(destination.owner()))
+                    throw new IllegalStateException("原缺料需求与实际生产容器不一致");
+                if(!rights.reservationsForToken(order.token(),now).isEmpty()
+                        ||!rights.reservationsForToken("production:"+order.batchId(),now).isEmpty()) return;
+                limit=Math.min(limit,Math.max(0,material.quantity()-count(container(server,destination),r.key().item())));
+            } else {
+                if(!scope.principal().equals(SubjectRef.household(r.key().requester())) || householdFood(r)) return;
+                var item=net.minecraft.core.registries.BuiltInRegistries.ITEM.getValue(net.minecraft.resources.Identifier.parse(r.key().item().itemId()));
+                if(com.jgeted.sagadyssey.social.life.NpcFoodItems.rationValue(new net.minecraft.world.item.ItemStack(item))>0) return;
+                var home=HouseholdData.get(server).byId(r.key().requester());
+                if(home==null || home.sharedStorage()==null || !home.dimension().equals(destination.dimension())
+                        || !home.sharedStorage().equals(destination.position()) || !destination.owner().equals(scope.principal())) return;
+                int deficit=0;
+                for(var policy:flows.policies()) if(r.key().purpose().equals(policy.principal().type()+":"+policy.category()+":"+policy.id())
+                        && policy.principal().equals(scope.principal()) && policy.destination().equals(scope.destination()) && policy.item().equals(r.key().item()))
+                    deficit=Math.max(0,policy.target()-count(container(server,destination),r.key().item()));
+                var provision=HouseholdData.get(server).provisionPlan(home.id()).inspect(container(server,destination));
+                if(r.key().purpose().equals("HOUSEHOLD:household:tools") && r.key().item().equals(new ItemFingerprint("minecraft:iron_pickaxe",0))) deficit=provision.toolDeficit();
+                if(r.key().purpose().equals("HOUSEHOLD:household:fuel") && r.key().item().equals(new ItemFingerprint("minecraft:coal",0))) deficit=provision.fuelDeficit();
+                if(deficit<=0)return;limit=Math.min(limit,deficit);permittedSources=new HashSet<>();
+                for(UUID childId:needs.dependencies(r.id())) {
+                    var child=needs.request(childId);
+                    if(!child.key().purpose().equals("CHARACTER:local-supplier:"+r.id()+":"+r.key().item().itemId())
+                            ||child.status()!=NeedRequestStatus.DELIVERED)continue;
+                    UUID orderId=flows.production(child.id());
+                    var order=orderId==null?null:ProductionOrderData.get(server).byId(orderId).orElse(null);
+                    var batch=order==null?null:ProductionBatchData.get(server).batch(order.batchId());
+                    if(!completedSupplierRecoveryMatches(r,child,order,batch)) throw new IllegalStateException("原本地供应完成证据不一致");
+                    var target=flows.pointOrNull(child.key().destination());var childScope=flows.demand(child.id());
+                    if(target==null||childScope==null)throw new IllegalStateException("原供应库或作用域缺失");
+                    if(!woodProductionIntent(child,childScope,target,order,0) && !unitProductionIntent(child,childScope,target,order,0))
+                        throw new IllegalStateException("原本地供应制造意图不一致，保留核对");
+                    if(!needs.hasReceipt(receipt(order.id(),"produced-reserve"),child.id(),NeedRequestData.Action.RESERVE,order.output().quantity())
+                            ||!needs.hasReceipt(receipt(order.id(),"produced-dispatch"),child.id(),NeedRequestData.Action.DISPATCH,order.output().quantity())
+                            ||!needs.hasReceipt(receipt(order.id(),"produced-delivery"),child.id(),NeedRequestData.Action.DELIVER,order.output().quantity()))
+                        throw new IllegalStateException("原本地供应缺少真实生产结算回执");
+                    if(flows.routes().stream().anyMatch(route->route.need().equals(childId)&&(!route.closed()||route.pending()!=null||route.stage()==SupplyFlowData.Stage.REVIEW)))return;
+                    if(!rights.reservationsForToken(order.token(),now).isEmpty()
+                            ||!rights.reservationsForToken("production:"+order.batchId(),now).isEmpty())return;
+                    permittedSources.add(child.key().destination());
+                }
+                if(permittedSources.isEmpty())return;
+            }
+            if(limit<=0)return;
+            for(UUID sourceId:flows.known(scope.principal()).stream().sorted().toList()) {
+                if(sourceId.equals(scope.destination()) || permittedSources!=null&&!permittedSources.contains(sourceId))continue;
+                var source=flows.pointOrNull(sourceId);if(source==null||!source.dimension().equals(destination.dimension()))continue;
+                int quantity=Math.min(limit,Math.min(64,available(server,source,scope.principal(),r.key().item(),now)));
+                if(quantity<=0)continue;
+                UUID routeId=UUID.randomUUID();
+                var route=new SupplyFlowData.Route(routeId,r.id(),sourceId,destination.containerId(),scope.principal(),quantity,
+                        null,null,SupplyFlowData.Stage.HELD,now,0,null,"原请求32次后取得已确认合法现货；保留原身份、年龄、期限和次数");
+                var lease=new AssetReservation(receipt(routeId,"lease"),sourceId,r.key().item(),quantity,source.owner(),route.token(),"原请求现货恢复",now,now+1200);
+                if(reserveExistingStockRoute(rights,needs,flows,LogisticsData.get(server),lease,route,count(container(server,source),r.key().item()),now)) {
+                    com.jgeted.sagadyssey.Sagadyssey.LOGGER.info("SUPPLY_EXISTING_STOCK_RECOVERY need={} route={} item={} quantity={} originalCreated={} attempts={}/{} originalDeadline={}",
+                            r.id(),route.id(),r.key().item(),quantity,r.createdAt(),r.attempts(),r.maxAttempts(),r.key().deadline());
+                    return;
+                }
+            }
+        } catch(IllegalStateException|IllegalArgumentException|NoSuchElementException error) {
+            productionReview(needs,needs.request(r.id()),now,"现货恢复证据不足："+error.getMessage());
+        }
+    }
+
     public static void match(MinecraftServer server,long now){
         var flows=SupplyFlowData.get(server);var needs=NeedRequestData.get(server);var rights=RightsStateData.get(server);
         Set<UUID> routedNeeds = new HashSet<>();
@@ -570,7 +780,11 @@ public final class SupplyFlowService {
             if(scope==null||r.status().terminal()||r.status()==NeedRequestStatus.DELIVERED||r.status()==NeedRequestStatus.BLOCKED_CYCLE
                     ||r.key().deadline()<=now||r.remaining()==0||now-r.updatedAt()<600&&r.status()==NeedRequestStatus.WAITING_EXTERNAL)continue;
             if(!currentHouseholdDestination(server,r)||SettlementExchangeData.managedNeed(r))continue;
-            if (r.attempts() >= r.maxAttempts()) { tryNaturalFoodEmergency(server, r, scope, now); continue; }
+            if (r.attempts() >= r.maxAttempts()) {
+                tryNaturalFoodEmergency(server, r, scope, now);
+                tryExistingStockRecovery(server, needs.request(r.id()), scope, now);
+                continue;
+            }
             if (householdFood(r)) {
                 var history = householdFoodHistory(needs, r.key().requester());
                 UUID currentId = r.id();
@@ -595,9 +809,22 @@ public final class SupplyFlowService {
                 var old=series.isEmpty()?null:series.getLast();
                 int unit=Math.max(0,series.size()-1);
                 if(old!=null&&old.status()==ProductionOrderStatus.COMPLETED){
-                    // Non-unit recipes have one immutable, fixed-quantity contract.
-                    // Aggregation reconciles that original contract; never split it into tool units.
-                    if(toolRecipe(r.key().item())==null)continue;
+                    // Wood recipes keep their native batch size and immutable input specification.
+                    // Only a confirmed earlier batch permits another batch for the same unmet need.
+                    if(toolRecipe(r.key().item())==null){
+                        if(woodBatchRecipe(old.recipeId())&&WorkshopTask.recognized(server,old)){
+                            var destination=flows.point(scope.destination());
+                            int delivered=series.stream().mapToInt(o->o.output().quantity()).sum();
+                            if(!woodProductionIntent(r,scope,destination,old,unit)
+                                    ||!completedUnitMatches(old,ProductionBatchData.get(server).batch(old.batchId()))){
+                                productionReview(needs,r,now,"木工原批次完成证据或身份不足，不接续新批次");continue;
+                            }
+                            if(woodContinuationReady(r,delivered,old.output().quantity(),series.size(),
+                                    woodBufferStillNeeds(server,r,scope,destination,old.output().quantity())))
+                                createProduction(server,r,scope,destination,now,series.size());
+                        }
+                        continue;
+                    }
                     var destination=flows.point(scope.destination());
                     if(!unitProductionIntent(r,scope,destination,old,unit)
                             ||!completedUnitMatches(old,ProductionBatchData.get(server).batch(old.batchId()))){
@@ -704,6 +931,12 @@ public final class SupplyFlowService {
         return receipt(need,unit==0?kind:kind+":unit:"+unit);
     }
     private record ToolRecipe(String id,List<ProductionMaterial> inputs){}
+    static boolean localMaterialRecipe(MinecraftServer server,ProductionOrder order){
+        if(WorkshopTask.recognized(server,order))return true;
+        var spec=toolRecipe(order.output().fingerprint());
+        return spec!=null&&order.recipeId().equals(spec.id())&&order.inputs().equals(spec.inputs())
+                &&order.output().quantity()==1&&order.requiredWorkTicks()==80;
+    }
     private static ToolRecipe toolRecipe(ItemFingerprint output){
         if(output.componentsHash()!=0)return null;
         var iron=new ItemFingerprint("minecraft:iron_ingot",0);var sticks=new ItemFingerprint("minecraft:stick",0);
@@ -732,10 +965,55 @@ public final class SupplyFlowService {
                 &&batch.containerId().equals(order.targetContainerId())&&batch.inputs().equals(order.inputs())
                 &&batch.output().equals(order.output())&&batch.requiredWorkTicks()==order.requiredWorkTicks();
     }
+    static String woodBusiness(UUID need,int index){
+        if(index<0||index>=64)throw new IllegalArgumentException("wood batch outside bounded production request");
+        return "need:"+need+(index==0?"":":batch:"+index);
+    }
+    static UUID woodOrderId(UUID need,UUID person,String recipe,int index){
+        String prefix=switch(recipe){case WorkshopTask.PLANKS->"industry-planks";case WorkshopTask.STICKS->"industry-sticks";case WorkshopTask.BED->"industry-bed";default->throw new IllegalArgumentException("not a wood recipe");};
+        return IndustryTransfers.id(prefix+":"+person+":"+woodBusiness(need,index));
+    }
+    static UUID woodBatchId(UUID order){return IndustryTransfers.id(order+":batch");}
+    static boolean woodBatchRecipe(String recipe){
+        return recipe.equals(WorkshopTask.PLANKS)||recipe.equals(WorkshopTask.STICKS)||recipe.equals(WorkshopTask.BED);
+    }
+    static boolean woodContinuationReady(NeedRequest r,int confirmedOutput,int quantity,int batches,boolean bufferNeedsBatch){
+        return !r.status().terminal()&&r.status()!=NeedRequestStatus.DELIVERED&&r.status()!=NeedRequestStatus.BLOCKED_CYCLE
+                &&quantity>0&&batches>0&&batches<64&&r.delivered()>=confirmedOutput
+                &&r.remaining()>=quantity&&bufferNeedsBatch;
+    }
+    static boolean woodProductionIntent(NeedRequest r,SupplyFlowData.Demand scope,FieldworkStorage target,ProductionOrder o,int index){
+        if(scope==null||target==null||o==null||scope.principal().type()!=SubjectRef.SubjectType.CHARACTER)return false;
+        int quantity=switch(o.recipeId()){case WorkshopTask.PLANKS->12;case WorkshopTask.STICKS->4;case WorkshopTask.BED->1;default->0;};
+        return quantity>0&&r.requested()>=(index+1)*quantity
+                &&o.id().equals(woodOrderId(r.id(),scope.principal().id(),o.recipeId(),index))
+                &&o.batchId().equals(woodBatchId(o.id()))
+                &&o.issuer().equals(scope.principal())&&o.outputOwner().equals(scope.principal())
+                &&o.output().equals(new ProductionMaterial(r.key().item(),quantity))
+                &&com.jgeted.sagadyssey.social.industry.workshop.WoodMaterialRecipes.shape(o.recipeId(),o.inputs(),o.output(),o.requiredWorkTicks())
+                &&o.targetContainerId().equals(scope.destination())&&r.key().destination().equals(scope.destination())
+                &&r.key().requester().equals(scope.principal().id())
+                &&o.targetContainerDimension().equals(target.dimension())&&o.targetContainerPosition().equals(target.position());
+    }
+    private static boolean woodBufferStillNeeds(MinecraftServer server,NeedRequest r,SupplyFlowData.Demand scope,FieldworkStorage target,int batch){
+        var inventory=container(server,target);if(inventory==null||!validOwner(server,target))return false;
+        // An independent lawful delivery can fill a buffer while the earlier batch is working.
+        // Do not credit that arrival twice, or launch new production merely because the old need remains.
+        for(var policy:SupplyFlowData.get(server).policies())if(r.key().purpose().equals(policy.principal().type()+":"+policy.category()+":"+policy.id())
+                &&policy.principal().equals(scope.principal())&&policy.destination().equals(scope.destination())&&policy.item().equals(r.key().item()))
+            return Math.max(0,policy.target()-count(inventory,policy.item()))>=batch;
+        return true;
+    }
     static boolean uncommittedUnitMaterialIsRedundant(NeedRequest r,ProductionOrder order,ProductionBatch batch){
+        return redundantUnitMaterial(r,order,batch,order!=null&&WorkshopTask.recognized(order));
+    }
+    private static boolean uncommittedUnitMaterialIsRedundant(MinecraftServer server,NeedRequest r,ProductionOrder order,ProductionBatch batch){
+        return redundantUnitMaterial(r,order,batch,order!=null&&WorkshopTask.recognized(server,order));
+    }
+    private static boolean redundantUnitMaterial(NeedRequest r,ProductionOrder order,ProductionBatch batch,boolean woodRecipe){
         return order!=null&&order.status()==ProductionOrderStatus.COMPLETED
                 &&((toolRecipe(order.output().fingerprint())!=null&&order.recipeId().equals(toolRecipe(order.output().fingerprint()).id())&&order.output().quantity()==1)
-                    ||WorkshopTask.recognized(order))
+                    ||woodRecipe)
                 &&completedUnitMatches(order,batch)&&!r.status().terminal()&&r.status()!=NeedRequestStatus.DELIVERED
                 &&r.reserved()==0&&r.inTransit()==0
                 &&r.key().requester().equals(order.outputOwner().id())
@@ -746,12 +1024,20 @@ public final class SupplyFlowService {
     private static List<ProductionOrder> productionSeries(MinecraftServer server,NeedRequest r,SupplyFlowData.Demand scope,long now){
         UUID root=SupplyFlowData.get(server).production(r.id());if(root==null)return List.of();
         var orders=ProductionOrderData.get(server);var first=orders.byId(root).orElse(null);if(first==null)return List.of();
-        if(scope==null||!unitProductionIntent(r,scope,SupplyFlowData.get(server).point(scope.destination()),first,0))return List.of(first);
+        if(scope==null)return List.of(first);
+        var target=SupplyFlowData.get(server).point(scope.destination());
+        boolean wood=woodBatchRecipe(first.recipeId())&&WorkshopTask.recognized(server,first);
+        if(wood&&!woodProductionIntent(r,scope,target,first,0)){
+            productionReview(NeedRequestData.get(server),r,now,"木工首单与原需求身份不一致，保留核对");return null;
+        }
+        if(!wood&&!unitProductionIntent(r,scope,target,first,0))return List.of(first);
         var result=new ArrayList<ProductionOrder>();result.add(first);boolean gap=false;
-        for(int unit=1;unit<Math.min(64,r.requested());unit++){
-            var next=orders.byId(unitOrderId(r.id(),unit)).orElse(null);
+        int batchSize=wood?first.output().quantity():1;
+        for(int unit=1;unit<Math.min(64,r.requested()/batchSize);unit++){
+            UUID nextId=wood?woodOrderId(r.id(),scope.principal().id(),first.recipeId(),unit):unitOrderId(r.id(),unit);
+            var next=orders.byId(nextId).orElse(null);
             if(next==null){
-                if(ProductionBatchData.get(server).batch(unitBatchId(r.id(),unit))!=null){
+                if(ProductionBatchData.get(server).batch(wood?woodBatchId(nextId):unitBatchId(r.id(),unit))!=null){
                     productionReview(NeedRequestData.get(server),r,now,"单件订单缺失但批次存在，保留核对");return null;
                 }
                 gap=true;continue;
@@ -759,7 +1045,9 @@ public final class SupplyFlowService {
             var previous=result.getLast();
             if(gap||previous.status()!=ProductionOrderStatus.COMPLETED
                     ||!completedUnitMatches(previous,ProductionBatchData.get(server).batch(previous.batchId()))
-                    ||!unitProductionIntent(r,scope,SupplyFlowData.get(server).point(scope.destination()),next,unit)){
+                    ||(wood? !woodProductionIntent(r,scope,target,next,unit)||!WorkshopTask.recognized(server,next)
+                            ||!Objects.equals(first.workstationDimension(),next.workstationDimension())||!Objects.equals(first.workstationPosition(),next.workstationPosition())
+                            :!unitProductionIntent(r,scope,target,next,unit))){
                 productionReview(NeedRequestData.get(server),r,now,"单件序列存在身份冲突或前单未核实，不新承诺");return null;
             }
             result.add(next);
@@ -777,9 +1065,9 @@ public final class SupplyFlowService {
     }
     private static boolean createProduction(MinecraftServer server,NeedRequest r,SupplyFlowData.Demand scope,FieldworkStorage destination,long now,int unit){
         var toolSpec=toolRecipe(r.key().item());
-        if(toolSpec==null)return unit==0&&createDeclaredIndustryProduction(server,r,scope,destination,now);
+        if(toolSpec==null)return createDeclaredIndustryProduction(server,r,scope,destination,now,unit);
         if(r.remaining()<=0||r.remaining()>64)return false;
-        if(!toolSpec.id().equals("sagadyssey:iron_pickaxe")&&industryOwner(server,scope.principal())==null)return false;
+        if(!toolSpec.id().equals("sagadyssey:iron_pickaxe")&&industryToolOwner(server,scope.principal(),r.key().item())==null)return false;
         if(container(server,destination)==null||!validOwner(server,destination))return false;
         var orders=ProductionOrderData.get(server);UUID id=unitOrderId(r.id(),unit);
         if(orders.byId(id).isPresent()||ProductionBatchData.get(server).batch(unitBatchId(r.id(),unit))!=null){
@@ -803,22 +1091,41 @@ public final class SupplyFlowService {
                 &&o.inputs().stream().anyMatch(m->m.fingerprint().equals(r.key().item())&&m.quantity()==r.requested());}
         catch(IllegalStateException|NoSuchElementException bad){return false;}
     }
+    static boolean industryToolRequester(com.jgeted.sagadyssey.npc.profession.NpcProfession profession,String item){
+        return com.jgeted.sagadyssey.social.industry.common.IndustryToolTask.supported(item)
+                &&(profession==NpcProfession.WORKER||profession==NpcProfession.FARMER&&item.equals("minecraft:iron_hoe"));
+    }
+    private static NpcBase industryToolOwner(MinecraftServer server,SubjectRef owner,ItemFingerprint item){
+        if(owner.type()!=SubjectRef.SubjectType.CHARACTER)return null;
+        for(var l:server.getAllLevels())for(var e:l.getAllEntities())if(e instanceof NpcBase n&&n.isAlive()&&n.getCharacterId().equals(owner.id())
+                &&EntityResourceTask.enabled(n)&&industryToolRequester(n.getProfession(),item.itemId()))return n;
+        return null;
+    }
     private static NpcBase industryOwner(MinecraftServer server,SubjectRef owner){
         if(owner.type()!=SubjectRef.SubjectType.CHARACTER)return null;
         for(var l:server.getAllLevels())for(var e:l.getAllEntities())if(e instanceof NpcBase n&&n.getCharacterId().equals(owner.id())&&EntityResourceTask.enabled(n)&&n.getProfession()==NpcProfession.WORKER)return n;
         return null;
     }
-    /** Closed declared recipes only, behind the existing controlled-world opt-in. No guessed rights or remote sites. */
-    private static boolean createDeclaredIndustryProduction(MinecraftServer server,NeedRequest r,SupplyFlowData.Demand scope,FieldworkStorage target,long now){
+    /** Closed declared recipes only. Normal worlds require a registered, known and owned workstation. */
+    private static boolean createDeclaredIndustryProduction(MinecraftServer server,NeedRequest r,SupplyFlowData.Demand scope,FieldworkStorage target,long now,int index){
         var owner=industryOwner(server,scope.principal());if(owner==null||!target.owner().equals(scope.principal())||r.remaining()<=0)return false;
-        var flows=SupplyFlowData.get(server);var l=level(server,target.dimension());if(l==null||!owner.level().dimension().location().toString().equals(target.dimension()))return false;
+        var flows=SupplyFlowData.get(server);var l=level(server,target.dimension());if(l==null||!owner.level().dimension().identifier().toString().equals(target.dimension()))return false;
         boolean furnace=FurnaceWorkAdapter.supports(r.key().item());String item=r.key().item().itemId();
-        if(!furnace&&!Set.of("minecraft:oak_planks","minecraft:stick","minecraft:white_bed").contains(item))return false;
+        boolean rod=r.key().item().equals(new ItemFingerprint("minecraft:fishing_rod",0));
+        if(index>0&&(furnace||rod))return false;
+        if(!furnace&&!rod&&com.jgeted.sagadyssey.social.industry.workshop.WoodMaterialRecipes.outputQuantity(r.key().item())==0)return false;
         if(furnace&&r.remaining()>8)return false;
+        boolean fixture=SettlementIndustryAccess.fixture(owner,"sagadyssey.industry.native");
         BlockPos station=null;
-        for(var p:BlockPos.betweenClosed(target.position().offset(-8,-2,-8),target.position().offset(8,2,8))){
-            if(!l.hasChunkAt(p))continue;
-            if(furnace?l.getBlockEntity(p) instanceof net.minecraft.world.level.block.entity.AbstractFurnaceBlockEntity:l.getBlockState(p).is(net.minecraft.world.level.block.Blocks.CRAFTING_TABLE)){station=p.immutable();break;}
+        if(fixture){
+            for(var p:BlockPos.betweenClosed(target.position().offset(-8,-2,-8),target.position().offset(8,2,8))){
+                if(l.hasChunkAt(p)&&matchingIndustryStation(l,p,r.key().item(),furnace)){
+                    station=p.immutable();break;
+                }
+            }
+        }else{
+            if(!SettlementIndustryAccess.local(owner,target.position())||!validOwner(server,target))return false;
+            station=knownIndustryStation(owner,target,r.key().item(),furnace);
         }
         if(station==null)return false;
         try{
@@ -829,21 +1136,159 @@ public final class SupplyFlowService {
                 // Only an explicitly configured same-owner raw buffer can override the output endpoint.
                 // It was already registered and known; no inventory/permission is invented by discovery.
                 var raw=new ItemFingerprint(FurnaceWorkAdapter.rawItem(r.key().item()),0);FieldworkStorage input=target;
-                for(var p:flows.policies())if(p.principal().equals(scope.principal())&&p.item().equals(raw)&&flows.known(scope.principal()).contains(p.destination())){
-                    var known=flows.point(p.destination());if(known.owner().equals(scope.principal())&&known.dimension().equals(target.dimension())&&known.position().distSqr(station)<=256){input=known;break;}
+                for(var p:flows.policies())if(!r.key().purpose().equals("CHARACTER:local-kitchen")
+                        &&p.principal().equals(scope.principal())&&p.item().equals(raw)&&flows.known(scope.principal()).contains(p.destination())){
+                    var known=flows.point(p.destination());if(known!=null&&known.owner().equals(scope.principal())&&known.dimension().equals(target.dimension())&&known.position().distSqr(station)<=256
+                            &&(fixture||SettlementIndustryAccess.local(owner,known.position())&&validOwner(server,known))){input=known;break;}
                 }
                 order=FurnaceWorkAdapter.requestDemand(owner,r,station,input,target,now);
+            }else if(rod){
+                if(r.remaining()!=1)return false;
+                order=WorkshopTask.requestFishingRod(owner,"need:"+r.id(),target,station,now);
             }else{
-                int expected=item.equals("minecraft:oak_planks")?12:item.equals("minecraft:stick")?4:1;if(r.remaining()!=expected)return false;
-                String business="need:"+r.id();order=item.equals("minecraft:oak_planks")?WorkshopTask.requestPlanks(owner,business,target,station,now):item.equals("minecraft:stick")?WorkshopTask.requestSticks(owner,business,target,station,now):WorkshopTask.requestBed(owner,business,target,station,now);
+                int expected=com.jgeted.sagadyssey.social.industry.workshop.WoodMaterialRecipes.outputQuantity(r.key().item());if(r.remaining()<expected||index>=64)return false;
+                // Existing orders replay their fixed materials; a new batch selects actual lawful native inputs.
+                order=WorkshopTask.requestProduct(owner,woodBusiness(r.id(),index),target,station,r.key().item(),now);
             }
-            flows.production(r.id(),order.id());return true;
+            if(index==0)flows.production(r.id(),order.id());return true;
         }catch(IllegalArgumentException unavailable){return false;}
         catch(IllegalStateException conflict){productionReview(NeedRequestData.get(server),r,now,"declared production identity/facility unavailable: "+conflict.getMessage());return true;}
     }
+    private static boolean matchingIndustryStation(ServerLevel level, BlockPos position, ItemFingerprint item, boolean furnace){
+        return furnace ? FurnaceWorkAdapter.supportsStation(level.getBlockEntity(position),item)
+                : level.getBlockState(position).is(net.minecraft.world.level.block.Blocks.CRAFTING_TABLE);
+    }
+    static BlockPos knownIndustryStation(NpcBase operator, FieldworkStorage target,
+                                                  ItemFingerprint product, boolean furnace) {
+        var server = MinecraftApi.server(operator);
+        var flows = SupplyFlowData.get(server);
+        var level = (ServerLevel) operator.level();
+        return flows.known(target.owner()).stream().map(flows::pointOrNull)
+                .filter(point -> point != null && point.dimension().equals(target.dimension())
+                        && point.owner().equals(target.owner()))
+                .map(FieldworkStorage::position)
+                .filter(pos -> pos.distSqr(target.position()) <= 64 && SettlementIndustryAccess.local(operator, pos))
+                .filter(pos -> FurnaceWorkAdapter.ownsStation(server, target.dimension(), pos, target.owner())
+                        && matchingIndustryStation(level, pos, product, furnace))
+                .min(Comparator.comparingDouble((BlockPos pos) -> pos.distSqr(target.position()))
+                        .thenComparingLong(BlockPos::asLong)).orElse(null);
+    }
+
+    /** A known local supplier may produce a missing intermediate in its own stock.
+     * The requesting household never acquires the supplier's furnace or ingredients.
+     * Fixed batches remain separate from the original transport obligation. */
+    private static void openLocalSupplierNeeds(MinecraftServer server,long now) {
+        if(!com.jgeted.sagadyssey.core.config.SagadysseyConfig.ENABLE_SETTLEMENT_INDUSTRIES.get())return;
+        var flows=SupplyFlowData.get(server);var needs=NeedRequestData.get(server);
+        var unresolved=new HashSet<UUID>();
+        for(var route:flows.routes())if(!route.closed()||route.pending()!=null||route.stage()==SupplyFlowData.Stage.REVIEW)
+            unresolved.add(route.need());
+        // A deadline is not evidence that a transfer/production vanished. Only never-bound,
+        // fully uncommitted intentions may expire; all previous records and receipts remain.
+        for(var old:needs.requests())if(LocalSupplierRules.expireUncommitted(old,
+                flows.production(old.id())!=null,unresolved.contains(old.id()),now))
+            needs.transition(old.id(),NeedRequestStatus.CANCELLED,now,"本地供应意向到期且无制造、预留、在途或未核对转移；保留历史后重新评估");
+        var snapshot=new ArrayList<>(needs.requests());
+        var claimedParents=new HashSet<UUID>();
+        var workers=new ArrayList<NpcBase>();
+        for(var level:server.getAllLevels())for(var entity:level.getAllEntities())
+            if(entity instanceof NpcBase worker&&worker.getProfession()==NpcProfession.WORKER
+                    &&SettlementIndustryAccess.resident(worker))workers.add(worker);
+        workers.sort(Comparator.comparing(NpcBase::getCharacterId));
+        for(var worker:workers){
+            var life=com.jgeted.sagadyssey.social.life.NpcLifeData.get(server).record(worker.getCharacterId());
+            if(life==null||life.privateStoragePosition()==null||!SettlementIndustryAccess.local(worker,life.privateStoragePosition()))continue;
+            var actor=SubjectRef.character(worker.getCharacterId());
+            var stock=flows.pointOrNull(ProductionContainerIds.resolve(server,life.dimension(),life.privateStoragePosition()));
+            if(stock==null||!stock.owner().equals(actor)||!validOwner(server,stock))continue;
+            for(var prior:snapshot){
+                var need=needs.request(prior.id());
+                if(!LocalSupplierRules.eligibleParent(need,now)||LocalWorkshopNeeds.child(need)||claimedParents.contains(need.id())
+                        ||unresolved.contains(need.id()))continue;
+                var linked=needs.dependencies(need.id());
+                if(linked.size()>=NeedRequestData.MAX_DEPENDENCIES)continue;
+                boolean awaitingSupplier=false;
+                for(var id:linked){
+                    var child=needs.request(id);if(!LocalSupplierRules.supplier(child))continue;
+                    var original=flows.pointOrNull(child.key().destination());
+                    // Missing/unloaded stock is unknown, not permission to produce its replacement.
+                    var inventory=original==null?null:container(server,original);
+                    int remainingStock=inventory==null?Integer.MAX_VALUE:count(inventory,child.key().item());
+                    if(LocalSupplierRules.blocksNextBatch(child,unresolved.contains(id),remainingStock)){
+                        awaitingSupplier=true;break;
+                    }
+                }
+                if(awaitingSupplier)continue;
+                var demand=flows.demand(need.id());var item=need.key().item();
+                if(demand==null||demand.destination().equals(stock.containerId())
+                        ||!SettlementIndustryAccess.servesLocalPrincipal(worker,demand.principal())
+                        ||!flows.known(demand.principal()).contains(stock.containerId())
+                        ||new RightsService(RightsStateData.get(server)).can(demand.principal(),AssetRight.TRANSFER,
+                            stock.containerId(),0,item,now).status()!=RightsVerdict.Status.ALLOW)continue;
+                int knownFree=0;
+                for(UUID sourceId:flows.known(demand.principal())){
+                    if(sourceId.equals(demand.destination()))continue;
+                    var source=flows.pointOrNull(sourceId);
+                    if(source==null||!source.dimension().equals(stock.dimension()))continue;
+                    knownFree+=(int)Math.min((long)need.remaining()-knownFree,available(server,source,demand.principal(),item,now));
+                    if(knownFree>=need.remaining())break;
+                }
+                int deficit=LocalSupplierRules.uncovered(need,knownFree);if(deficit<1)continue;
+                boolean iron=item.equals(new ItemFingerprint("minecraft:iron_ingot",0));
+                int batch=iron?Math.min(3,deficit):com.jgeted.sagadyssey.social.industry.workshop.WoodMaterialRecipes.outputQuantity(item);
+                if(batch<1||knownIndustryStation(worker,stock,item,iron)==null)continue;
+                // Existing obligations in this same supplier stock also block overlapping batches.
+                if(needs.requests().stream().anyMatch(n->!n.status().terminal()&&n.status()!=NeedRequestStatus.DELIVERED
+                        &&n.key().destination().equals(stock.containerId())&&n.key().item().equals(item)))continue;
+                if(iron){
+                    int raw=available(server,stock,actor,new ItemFingerprint("minecraft:raw_iron",0),now);
+                    batch=Math.min(batch,raw);if(batch<1)continue;
+                }
+                var child=request(server,actor,"local-supplier:"+need.id()+":"+item.itemId(),stock,item,batch,now,now+24000);
+                // Existing persisted dependency edges bind this batch to one actual downstream need.
+                // A new child has no dependencies and cannot create a cycle. No new ledger is added.
+                if(!needs.dependOn(need.id(),child.id(),now))
+                    throw new IllegalStateException("new local supplier demand unexpectedly forms a dependency cycle");
+                claimedParents.add(need.id());
+            }
+        }
+    }
+    /** An empty prepared-food buffer may use up to two already available potatoes from the cook's own stock. */
+    private static void openLocalKitchenNeeds(MinecraftServer server, long now) {
+        if (!com.jgeted.sagadyssey.core.config.SagadysseyConfig.ENABLE_SETTLEMENT_INDUSTRIES.get()) return;
+        var flows = SupplyFlowData.get(server);
+        var needs = NeedRequestData.get(server);
+        var orders = ProductionOrderData.get(server);
+        var baked = new ItemFingerprint("minecraft:baked_potato",0);
+        var potato = new ItemFingerprint("minecraft:potato",0);
+        var coal = new ItemFingerprint("minecraft:coal",0);
+        for (var level : server.getAllLevels()) for (var entity : level.getAllEntities()) {
+            if (!(entity instanceof NpcBase worker) || worker.getProfession()!=NpcProfession.WORKER
+                    || worker.getCommand()!=com.jgeted.sagadyssey.npc.entity.NpcCommand.WORK || worker.getTarget()!=null
+                    || !SettlementIndustryAccess.resident(worker)) continue;
+            var life = com.jgeted.sagadyssey.social.life.NpcLifeData.get(server).record(worker.getCharacterId());
+            if (life.privateStoragePosition()==null || !SettlementIndustryAccess.local(worker,life.privateStoragePosition())) continue;
+            var actor = SubjectRef.character(worker.getCharacterId());
+            var storage = ProductionContainerIds.resolve(server,life.dimension(),life.privateStoragePosition());
+            var point = flows.point(storage);
+            if (point==null || !point.owner().equals(actor) || !point.dimension().equals(life.dimension())
+                    || !point.position().equals(life.privateStoragePosition()) || available(server,point,actor,baked,now)>0) continue;
+            int quantity = Math.min(2,available(server,point,actor,potato,now));
+            if (quantity==0 || needs.requests().stream().anyMatch(r -> r.key().destination().equals(storage)
+                    && r.key().item().equals(baked) && !r.status().terminal() && r.status()!=NeedRequestStatus.DELIVERED)
+                    || orders.assignedTo(worker.getCharacterId()).stream().anyMatch(o -> FurnaceWorkAdapter.recognized(o)
+                    && o.output().fingerprint().equals(baked) && !o.terminal())) continue;
+            var station = knownIndustryStation(worker,point,baked,true);
+            if (station==null || !(level.getBlockEntity(station) instanceof net.minecraft.world.level.block.entity.AbstractFurnaceBlockEntity furnace)
+                    || !furnace.getItem(0).isEmpty() || !furnace.getItem(2).isEmpty()
+                    || !furnace.getItem(1).isEmpty() && !coal.matches(furnace.getItem(1))
+                    || furnace.getItem(1).isEmpty() && available(server,point,actor,coal,now)<1) continue;
+            request(server,actor,"local-kitchen",point,baked,quantity,now,now+24000);
+        }
+    }
     /** Death drops physical cargo through NpcLogisticsEvents; never pretend it was delivered. */
     public static void carrierLost(NpcBase npc,long now){
-        var server=npc.getServer();var flows=SupplyFlowData.get(server);var needs=NeedRequestData.get(server);
+        var server=MinecraftApi.server(npc);var flows=SupplyFlowData.get(server);var needs=NeedRequestData.get(server);
         for(var route:flows.routes())if(!route.closed()&&npc.getUUID().equals(route.carrierEntity())){
             if(route.stage()==SupplyFlowData.Stage.HELD&&route.pending()==null)release(server,route,now,"运输者死亡，未取货预留已释放");
             else{

@@ -1,5 +1,7 @@
 package com.jgeted.sagadyssey.social.market;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+
 import com.jgeted.sagadyssey.worldsim.rights.ItemFingerprint;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
@@ -8,8 +10,8 @@ import net.minecraft.nbt.Tag;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.item.Items;
 import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.resources.ResourceLocation;
-import net.minecraft.world.level.saveddata.SavedData;
+import net.minecraft.resources.Identifier;
+import com.jgeted.sagadyssey.worldsim.NbtSavedData;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -19,7 +21,7 @@ import java.util.Map;
 import java.util.UUID;
 
 /** Settlement-local transaction tape. No observation is broadcast to another settlement. */
-public final class LocalMarketData extends SavedData {
+public final class LocalMarketData extends NbtSavedData {
     private static final String DATA_NAME = "sagadyssey_local_markets";
     private static final int MAX_RECORDS_PER_SETTLEMENT = 256;
     public static final long QUOTE_WINDOW = 14L * 24_000L;
@@ -30,7 +32,7 @@ public final class LocalMarketData extends SavedData {
     private final Map<UUID, List<MarketTradeRecord>> trades = new HashMap<>();
 
     public static LocalMarketData get(MinecraftServer server) {
-        return server.overworld().getDataStorage().computeIfAbsent(FACTORY, DATA_NAME);
+        return server.overworld().getDataStorage().computeIfAbsent(FACTORY.type(DATA_NAME));
     }
 
     public boolean record(MarketTradeRecord record) {
@@ -99,9 +101,9 @@ public final class LocalMarketData extends SavedData {
     }
 
     private static boolean isEmerald(ItemFingerprint fingerprint) {
-        ResourceLocation id = ResourceLocation.tryParse(fingerprint.itemId());
+        Identifier id = Identifier.tryParse(fingerprint.itemId());
         return id != null && BuiltInRegistries.ITEM.containsKey(id)
-                && BuiltInRegistries.ITEM.get(id) == Items.EMERALD;
+                && BuiltInRegistries.ITEM.getValue(id) == Items.EMERALD;
     }
 
     @Override
@@ -114,10 +116,10 @@ public final class LocalMarketData extends SavedData {
 
     static LocalMarketData load(CompoundTag tag, HolderLookup.Provider registries) {
         LocalMarketData data = new LocalMarketData();
-        ListTag list = tag.getList("Trades", Tag.TAG_COMPOUND);
+        ListTag list = MinecraftApi.listOfType(tag, "Trades", Tag.TAG_COMPOUND);
         for (int index = 0; index < list.size(); index++) {
             try {
-                MarketTradeRecord record = MarketTradeRecord.load(list.getCompound(index));
+                MarketTradeRecord record = MarketTradeRecord.load(list.getCompoundOrEmpty(index));
                 data.record(record);
             } catch (RuntimeException ignored) { }
         }

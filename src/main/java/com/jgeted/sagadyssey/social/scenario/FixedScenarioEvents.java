@@ -40,7 +40,7 @@ import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceKey;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -204,7 +204,7 @@ public final class FixedScenarioEvents {
         var placement = definition.placements().get(deployment.cursor());
         StructureConfig config = SagadysseyStructures.getConfig(placement.templateId());
         String templatePath = config == null ? placement.templateId() : config.getNbtFileName();
-        ResourceLocation location = ResourceLocation.fromNamespaceAndPath(Sagadyssey.MOD_ID, templatePath);
+        Identifier location = Identifier.fromNamespaceAndPath(Sagadyssey.MOD_ID, templatePath);
         Optional<StructureTemplate> template = level.getStructureManager().get(location);
         if (template.isEmpty()) throw new IllegalStateException("找不到建筑模板 " + location);
 
@@ -284,9 +284,9 @@ public final class FixedScenarioEvents {
     static void fillInitialStock(Container container, Map<String, Integer> stock) {
         int slot = 0;
         for (var entry : stock.entrySet()) {
-            ResourceLocation id = ResourceLocation.tryParse(entry.getKey());
+            Identifier id = Identifier.tryParse(entry.getKey());
             if (id == null || !BuiltInRegistries.ITEM.containsKey(id)) continue;
-            Item item = BuiltInRegistries.ITEM.get(id);
+            Item item = BuiltInRegistries.ITEM.getValue(id);
             int remaining = Math.max(0, entry.getValue());
             while (remaining > 0 && slot < container.getContainerSize()) {
                 ItemStack stack = new ItemStack(item, Math.min(remaining, item.getDefaultMaxStackSize()));
@@ -859,7 +859,7 @@ public final class FixedScenarioEvents {
 
     @Nullable
     private static ServerLevel level(MinecraftServer server, String dimension) {
-        ResourceLocation id = ResourceLocation.tryParse(dimension);
+        Identifier id = Identifier.tryParse(dimension);
         return id == null ? null : server.getLevel(ResourceKey.create(Registries.DIMENSION, id));
     }
 }

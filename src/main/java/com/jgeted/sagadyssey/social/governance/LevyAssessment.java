@@ -1,5 +1,7 @@
 package com.jgeted.sagadyssey.social.governance;
 
+import net.minecraft.core.UUIDUtil;
+
 import com.jgeted.sagadyssey.worldsim.rights.ItemFingerprint;
 import com.jgeted.sagadyssey.worldsim.rights.SubjectRef;
 import net.minecraft.nbt.CompoundTag;
@@ -45,9 +47,9 @@ public record LevyAssessment(UUID id, UUID institutionId, UUID settlementId,
 
     CompoundTag save() {
         CompoundTag tag = new CompoundTag();
-        tag.putUUID("Id", id);
-        tag.putUUID("Institution", institutionId);
-        tag.putUUID("Settlement", settlementId);
+        tag.store("Id", UUIDUtil.CODEC, id);
+        tag.store("Institution", UUIDUtil.CODEC, institutionId);
+        tag.store("Settlement", UUIDUtil.CODEC, settlementId);
         tag.put("Debtor", debtor.save());
         tag.putString("Type", type.name());
         tag.put("Asset", asset.save());
@@ -62,12 +64,12 @@ public record LevyAssessment(UUID id, UUID institutionId, UUID settlementId,
     }
 
     static LevyAssessment load(CompoundTag tag) {
-        return new LevyAssessment(tag.getUUID("Id"), tag.getUUID("Institution"),
-                tag.getUUID("Settlement"), SubjectRef.load(tag.getCompound("Debtor")),
-                LevyType.valueOf(tag.getString("Type")),
-                ItemFingerprint.load(tag.getCompound("Asset")), tag.getInt("AssessedQuantity"),
-                tag.getInt("PaidQuantity"), tag.getLong("AssessedAt"), tag.getLong("DueAt"),
-                LevyStatus.valueOf(tag.getString("Status")), tag.getString("Basis"),
-                tag.getInt("Revision"));
+        return new LevyAssessment(tag.read("Id", UUIDUtil.CODEC).orElseThrow(), tag.read("Institution", UUIDUtil.CODEC).orElseThrow(),
+                tag.read("Settlement", UUIDUtil.CODEC).orElseThrow(), SubjectRef.load(tag.getCompoundOrEmpty("Debtor")),
+                LevyType.valueOf(tag.getStringOr("Type", "")),
+                ItemFingerprint.load(tag.getCompoundOrEmpty("Asset")), tag.getIntOr("AssessedQuantity", 0),
+                tag.getIntOr("PaidQuantity", 0), tag.getLongOr("AssessedAt", 0L), tag.getLongOr("DueAt", 0L),
+                LevyStatus.valueOf(tag.getStringOr("Status", "")), tag.getStringOr("Basis", ""),
+                tag.getIntOr("Revision", 0));
     }
 }

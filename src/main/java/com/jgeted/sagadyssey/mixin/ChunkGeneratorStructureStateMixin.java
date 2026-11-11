@@ -44,7 +44,7 @@ public class ChunkGeneratorStructureStateMixin {
         // 检查 structureSet 是否包含 sagadyssey 的结构
         for (var entry : structureSet.structures()) {
             String namespace = entry.structure().unwrapKey()
-                    .map(k -> k.location().getNamespace())
+                    .map(k -> k.identifier().getNamespace())
                     .orElse("");
             if (namespace.equals(Sagadyssey.MOD_ID)) {
                 cir.setReturnValue(true);
@@ -67,7 +67,7 @@ public class ChunkGeneratorStructureStateMixin {
     ) {
         List<StructurePlacement> placements = cir.getReturnValue();
         String structName = structureHolder.unwrapKey()
-                .map(k -> k.location().toString())
+                .map(k -> k.identifier().toString())
                 .orElse("unknown");
 
         if (placements.isEmpty()) {

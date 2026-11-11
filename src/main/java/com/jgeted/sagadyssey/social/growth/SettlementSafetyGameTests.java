@@ -1,5 +1,9 @@
 package com.jgeted.sagadyssey.social.growth;
 
+import com.jgeted.sagadyssey.gametest.PortedGameTests.*;
+
+import net.minecraft.core.UUIDUtil;
+
 import com.jgeted.sagadyssey.Sagadyssey;
 import com.jgeted.sagadyssey.core.structure.*;
 import com.jgeted.sagadyssey.npc.entity.*;
@@ -9,14 +13,14 @@ import com.jgeted.sagadyssey.social.politics.NaturalPolityData;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.*;
 import net.minecraft.nbt.*;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.Container;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.EquipmentSlot;
-import net.minecraft.world.entity.monster.Zombie;
+import net.minecraft.world.entity.monster.zombie.Zombie;
 import net.minecraft.world.item.*;
-import net.minecraft.world.level.GameRules;
+import net.minecraft.world.level.gamerules.GameRules;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.storage.LevelResource;
 import net.neoforged.neoforge.gametest.*;
@@ -31,13 +35,13 @@ public final class SettlementSafetyGameTests {
     @net.neoforged.bus.api.SubscribeEvent public static void install(net.neoforged.neoforge.event.server.ServerStartedEvent e) {
         if(!(e.getServer() instanceof GameTestServer))return;
         var l=e.getServer().overworld();try {
-            l.getStructureManager().getOrCreate(ResourceLocation.parse("sagadyssey_safety:empty")).load(l.holderLookup(net.minecraft.core.registries.Registries.BLOCK),
-                    TagParser.parseTag("{size:[16,8,16],entities:[],blocks:[],palette:[{Name:\"minecraft:air\"}]}"));
+            l.getStructureManager().getOrCreate(Identifier.parse("sagadyssey_safety:empty")).load(l.holderLookup(net.minecraft.core.registries.Registries.BLOCK),
+                    TagParser.parseCompoundFully("{size:[16,8,16],entities:[],blocks:[],palette:[{Name:\"minecraft:air\"}]}"));
         }catch(Exception x){throw new IllegalStateException(x);}
     }
     @BeforeBatch(batch="safety") public static void setup(ServerLevel l) {
-        l.getGameRules().getRule(GameRules.RULE_DOMOBSPAWNING).set(false,l.getServer());
-        l.getGameRules().getRule(GameRules.RULE_DAYLIGHT).set(false,l.getServer());l.setDayTime(6000);
+        l.getGameRules().set(GameRules.SPAWN_MOBS, false,l.getServer());
+        l.getGameRules().set(GameRules.ADVANCE_TIME, false,l.getServer());l.setDayTime(6000);
         l.getServer().setDifficulty(net.minecraft.world.Difficulty.NORMAL,true);
         l.getServer().tickRateManager().requestGameToSprint(60000);
     }
@@ -62,7 +66,7 @@ public final class SettlementSafetyGameTests {
     }
     private static NaturalVillageBuilding fixture(GameTestHelper h,int offset) {
         var b=NaturalVillageR1GameTests.fixture(h,offset,GrowthLayout.COORDINATED);
-        h.getLevel().getGameRules().getRule(GameRules.RULE_DAYLIGHT).set(false,h.getLevel().getServer());
+        h.getLevel().getGameRules().set(GameRules.ADVANCE_TIME, false,h.getLevel().getServer());
         h.getLevel().setDayTime(6000);return b;
     }
     private static void initialDarkness(ServerLevel l,NaturalVillageBuilding b) {
@@ -77,7 +81,7 @@ public final class SettlementSafetyGameTests {
         var d=SettlementSafetyData.existing(h.getLevel().getServer());return d!=null&&d.site(b.buildingKey())!=null;
     }
     private static int count(Container c,Item type){int n=0;for(int i=0;i<c.getContainerSize();i++)if(c.getItem(i).is(type))n+=c.getItem(i).getCount();return n;}
-    private static int completed(CompoundTag row) {int n=0;for(String key:row.getCompound("Tasks").getAllKeys())if(row.getCompound("Tasks").getCompound(key).getString("State").equals("DONE"))n++;return n;}
+    private static int completed(CompoundTag row) {int n=0;for(String key:row.getCompoundOrEmpty("Tasks").keySet())if(row.getCompoundOrEmpty("Tasks").getCompoundOrEmpty(key).getStringOr("State", "").equals("DONE"))n++;return n;}
     private static void lighting(GameTestHelper h,boolean checkpoint) {
         var b=fixture(h,0);var l=h.getLevel();boolean[] configured={false};long[] begin={0};int[] dark={0};
         h.onEachTick(()-> {
@@ -94,21 +98,21 @@ public final class SettlementSafetyGameTests {
                 configured[0]=true;begin[0]=l.getGameTime();
                 Sagadyssey.LOGGER.info("SAFETY_INITIAL village={} source={} coal=16 otherInput={} quantity=8 randomSpawning=false daylightFrozen=6000",b.buildingKey(),household?"household":"public",household?"stick":"oak_planks");return;
             }
-            if(row.getInt("DarkFloor")>0&&dark[0]==0)dark[0]=row.getInt("DarkFloor");
-            if((l.getGameTime()-begin[0])%1000==0)Sagadyssey.LOGGER.info("SAFETY_PROGRESS ticks={} dark={} tasks={} worker={}",l.getGameTime()-begin[0],row.getInt("DarkFloor"),row.getCompound("Tasks"),NaturalVillageR1GameTests.actor(l,b,2).getWorkActivityDetail());
+            if(row.getIntOr("DarkFloor", 0)>0&&dark[0]==0)dark[0]=row.getIntOr("DarkFloor", 0);
+            if((l.getGameTime()-begin[0])%1000==0)Sagadyssey.LOGGER.info("SAFETY_PROGRESS ticks={} dark={} tasks={} worker={}",l.getGameTime()-begin[0],row.getIntOr("DarkFloor", 0),row.getCompoundOrEmpty("Tasks"),NaturalVillageR1GameTests.actor(l,b,2).getWorkActivityDetail());
             if(checkpoint) {
-                for(String key:row.getCompound("Tasks").getAllKeys()) {
-                    var t=row.getCompound("Tasks").getCompound(key);
-                    if(!t.getBoolean("MaterialCarried")||t.getInt("Placed")>0)continue;
-                    var marker=new CompoundTag();marker.put("Village",row.getCompound("Village").copy());marker.putString("Task",key);
-                    marker.putUUID("Person",t.getUUID("Person"));marker.putUUID("Body",t.getUUID("Body"));marker.putInt("BeforeDark",dark[0]);marker.putLong("Tick",l.getGameTime());
+                for(String key:row.getCompoundOrEmpty("Tasks").keySet()) {
+                    var t=row.getCompoundOrEmpty("Tasks").getCompoundOrEmpty(key);
+                    if(!t.getBooleanOr("MaterialCarried", false)||t.getIntOr("Placed", 0)>0)continue;
+                    var marker=new CompoundTag();marker.put("Village",row.getCompoundOrEmpty("Village").copy());marker.putString("Task",key);
+                    marker.store("Person", UUIDUtil.CODEC,t.read("Person", UUIDUtil.CODEC).orElseThrow());marker.store("Body", UUIDUtil.CODEC,t.read("Body", UUIDUtil.CODEC).orElseThrow());marker.putInt("BeforeDark",dark[0]);marker.putLong("Tick",l.getGameTime());
                     marker.put("Safety",d.save(new CompoundTag(),s.registryAccess()));
-                    try {NbtIo.writeCompressed(marker,s.getWorldPath(LevelResource.ROOT).resolve(MARKER));s.saveEverything(true,true,true);net.neoforged.neoforge.common.IOUtilities.waitUntilIOWorkerComplete();}
+                    try {NbtIo.writeCompressed(marker,s.getWorldPath(LevelResource.ROOT).resolve(MARKER));s.saveEverything(true,true,true);}
                     catch(Exception ex){throw new IllegalStateException(ex);}
-                    Sagadyssey.LOGGER.info("SAFETY_CHECKPOINT task={} person={} body={} materialCarried=true tick={}",key,t.getUUID("Person"),t.getUUID("Body"),l.getGameTime());h.succeed();return;
+                    Sagadyssey.LOGGER.info("SAFETY_CHECKPOINT task={} person={} body={} materialCarried=true tick={}",key,t.read("Person", UUIDUtil.CODEC).orElseThrow(),t.read("Body", UUIDUtil.CODEC).orElseThrow(),l.getGameTime());h.succeed();return;
                 }
-            } else if(completed(row)>=2&&row.getInt("DarkFloor")<dark[0]) {
-                int placed=0,carried=0;for(String key:row.getCompound("Tasks").getAllKeys()){var t=row.getCompound("Tasks").getCompound(key);placed+=t.getInt("Placed");if(t.getBoolean("MaterialCarried"))carried++;}
+            } else if(completed(row)>=2&&row.getIntOr("DarkFloor", 0)<dark[0]) {
+                int placed=0,carried=0;for(String key:row.getCompoundOrEmpty("Tasks").keySet()){var t=row.getCompoundOrEmpty("Tasks").getCompoundOrEmpty(key);placed+=t.getIntOr("Placed", 0);if(t.getBooleanOr("MaterialCarried", false))carried++;}
                 int torches=count(NaturalPolityData.inventory(s,b,3),Items.TORCH);
                 for(int i=0;i<3;i++)torches+=count(NaturalVillageR1GameTests.actor(l,b,i).getPersonalInventory(),Items.TORCH);
                 int remainingCoal=0;for(int i=0;i<5;i++)remainingCoal+=count(NaturalPolityData.inventory(s,b,i),Items.COAL);
@@ -117,17 +121,17 @@ public final class SettlementSafetyGameTests {
                 h.assertTrue(coal>0&&coal*4==torches+placed,"coal becomes exactly four torches each, in store/body/world; carried not double counted");
                 h.assertTrue(!d.permitted(row,NaturalVillageLayout.at(b,new BlockPos(40,1,40))),"mining range is not a light building permit");
                 if(System.getProperty("sagadyssey.safety.phase","").equals("supply")) {
-                    int deliveries=0;for(String key:row.getCompound("Tasks").getAllKeys())deliveries+=row.getCompound("Tasks").getCompound(key).getInt("SupplyCycle");
+                    int deliveries=0;for(String key:row.getCompoundOrEmpty("Tasks").keySet())deliveries+=row.getCompoundOrEmpty("Tasks").getCompoundOrEmpty(key).getIntOr("SupplyCycle", 0);
                     h.assertTrue(deliveries>=2,"coal and stick both moved through original personal inventory using formal transfer receipts");
                     Sagadyssey.LOGGER.info("SAFETY_SUPPLY_ACCEPT deliveredBatches={} originalHouseholdCoalRemaining={}",deliveries,count(NaturalPolityData.inventory(s,b,1),Items.COAL));
                 }
                 var saved=d.save(new CompoundTag(),s.registryAccess());h.assertTrue(SettlementSafetyData.load(saved,s.registryAccess()).save(new CompoundTag(),s.registryAccess()).equals(saved),"safety references survive serialization (separate from process test)");
-                Sagadyssey.LOGGER.info("SAFETY_LIGHT_ACCEPT ticks={} darkBefore={} darkNow={} placed={} remainingTorches={} coalConsumed={} carried={}",l.getGameTime()-begin[0],dark[0],row.getInt("DarkFloor"),placed,torches,coal,carried);h.succeed();
+                Sagadyssey.LOGGER.info("SAFETY_LIGHT_ACCEPT ticks={} darkBefore={} darkNow={} placed={} remainingTorches={} coalConsumed={} carried={}",l.getGameTime()-begin[0],dark[0],row.getIntOr("DarkFloor", 0),placed,torches,coal,carried);h.succeed();
             }
         });
     }
     private static Zombie zombie(ServerLevel l,NaturalVillageBuilding b,BlockPos local) {
-        var z=EntityType.ZOMBIE.create(l);var p=NaturalVillageLayout.at(b,local);z.moveTo(p.getX()+.5,p.getY(),p.getZ()+.5,0,0);
+        var z=EntityType.ZOMBIE.create(l, net.minecraft.world.entity.EntitySpawnReason.COMMAND);var p=NaturalVillageLayout.at(b,local);z.snapTo(p.getX()+.5,p.getY(),p.getZ()+.5,0,0);
         z.setPersistenceRequired();z.setItemSlot(EquipmentSlot.HEAD,new ItemStack(Items.IRON_HELMET));
         // Helmet is a declared calibration input to prevent sunlight confounding the target check.
         l.addFreshEntity(z);return z;
@@ -143,7 +147,7 @@ public final class SettlementSafetyGameTests {
                     var p=NaturalVillageLayout.at(b,local);l.getChunkAt(p);l.setBlockAndUpdate(p,Blocks.STONE.defaultBlockState());
                     l.setBlockAndUpdate(p.above(),Blocks.AIR.defaultBlockState());l.setBlockAndUpdate(p.above(2),Blocks.AIR.defaultBlockState());
                 }
-                var at=NaturalVillageLayout.at(b,new BlockPos(12,1,22));victim[0].moveTo(at.getX()+.5,at.getY(),at.getZ()+.5,0,0);
+                var at=NaturalVillageLayout.at(b,new BlockPos(12,1,22));victim[0].snapTo(at.getX()+.5,at.getY(),at.getZ()+.5,0,0);
                 z[0]=zombie(l,b,new BlockPos(12,1,28));begin[0]=l.getGameTime();start[0]=victim[0].distanceToSqr(NaturalVillageLayout.at(b,new BlockPos(4,1,14)).getCenter());return;
             }
             if(z[0].getTarget() instanceof NpcBase target&&SettlementSafetyData.enabled(target))acquired[0]=true;
@@ -180,24 +184,24 @@ public final class SettlementSafetyGameTests {
                 begin[0]=l.getGameTime();return;
             }
             if(z[0]==null) {
-                for(String key:row.getCompound("Tasks").getAllKeys()) {
-                    var task=row.getCompound("Tasks").getCompound(key);
-                    if(!task.getBoolean("MaterialCarried")||!task.hasUUID("Person")||!task.getUUID("Person").equals(guard[0].getCharacterId()))continue;
+                for(String key:row.getCompoundOrEmpty("Tasks").keySet()) {
+                    var task=row.getCompoundOrEmpty("Tasks").getCompoundOrEmpty(key);
+                    if(!task.getBooleanOr("MaterialCarried", false)||!task.read("Person", UUIDUtil.CODEC).isPresent()||!task.read("Person", UUIDUtil.CODEC).orElseThrow().equals(guard[0].getCharacterId()))continue;
                     originalTask[0]=key;
-                    z[0]=EntityType.ZOMBIE.create(l);z[0].moveTo(guard[0].getX()+3,guard[0].getY(),guard[0].getZ(),0,0);
+                    z[0]=EntityType.ZOMBIE.create(l, net.minecraft.world.entity.EntitySpawnReason.COMMAND);z[0].snapTo(guard[0].getX()+3,guard[0].getY(),guard[0].getZ(),0,0);
                     z[0].setPersistenceRequired();z[0].setItemSlot(EquipmentSlot.HEAD,new ItemStack(Items.IRON_HELMET));l.addFreshEntity(z[0]);
                     Sagadyssey.LOGGER.info("SAFETY_DEFENCE_START task={} person={} zombie={} originalTorchCarried=true tick={}",key,guard[0].getCharacterId(),z[0].getUUID(),l.getGameTime());return;
                 }
                 return;
             }
             if(z[0].getTarget() instanceof NpcBase)acquired[0]=true;
-            var task=row.getCompound("Tasks").getCompound(originalTask[0]);
-            if((l.getGameTime()-begin[0])%200==0)Sagadyssey.LOGGER.info("SAFETY_DEFENCE_PROGRESS ticks={} alive={} health={} zombieHealth={} activity={} task={}",l.getGameTime()-begin[0],guard[0].isAlive(),guard[0].getHealth(),z[0].getHealth(),guard[0].getWorkActivityDetail(),task.getString("Reason"));
-            if(acquired[0]&&!z[0].isAlive()&&guard[0].isAlive()&&task.getString("State").equals("DONE")) {
+            var task=row.getCompoundOrEmpty("Tasks").getCompoundOrEmpty(originalTask[0]);
+            if((l.getGameTime()-begin[0])%200==0)Sagadyssey.LOGGER.info("SAFETY_DEFENCE_PROGRESS ticks={} alive={} health={} zombieHealth={} activity={} task={}",l.getGameTime()-begin[0],guard[0].isAlive(),guard[0].getHealth(),z[0].getHealth(),guard[0].getWorkActivityDetail(),task.getStringOr("Reason", ""));
+            if(acquired[0]&&!z[0].isAlive()&&guard[0].isAlive()&&task.getStringOr("State", "").equals("DONE")) {
                 int wear=guard[0].getMainHandItem().getDamageValue();
                 h.assertTrue(wear>0||guard[0].getHealth()<guard[0].getMaxHealth(),"native combat has actual weapon or health cost");
-                h.assertTrue(task.getInt("Placed")==1&&!task.getBoolean("MaterialCarried"),"original interrupted job resumes real work with original material");
-                Sagadyssey.LOGGER.info("SAFETY_DEFENCE_ACCEPT ticks={} person={} zombie={} health={} weaponDamage={} originalTask={} placed={}",l.getGameTime()-begin[0],guard[0].getCharacterId(),z[0].getUUID(),guard[0].getHealth(),wear,originalTask[0],task.getInt("Placed"));h.succeed();
+                h.assertTrue(task.getIntOr("Placed", 0)==1&&!task.getBooleanOr("MaterialCarried", false),"original interrupted job resumes real work with original material");
+                Sagadyssey.LOGGER.info("SAFETY_DEFENCE_ACCEPT ticks={} person={} zombie={} health={} weaponDamage={} originalTask={} placed={}",l.getGameTime()-begin[0],guard[0].getCharacterId(),z[0].getUUID(),guard[0].getHealth(),wear,originalTask[0],task.getIntOr("Placed", 0));h.succeed();
             }
         });
     }
@@ -205,15 +209,15 @@ public final class SettlementSafetyGameTests {
         var l=h.getLevel();var s=l.getServer();final CompoundTag marker;
         try{marker=NbtIo.readCompressed(s.getWorldPath(LevelResource.ROOT).resolve(MARKER),NbtAccounter.unlimitedHeap());}
         catch(Exception ex){throw new IllegalStateException("Full prior checkpoint required",ex);}
-        var b=NaturalVillageLifeData.decode(marker.getCompound("Village"));NaturalVillageR1GameTests.visiting(l,b,true);
+        var b=NaturalVillageLifeData.decode(marker.getCompoundOrEmpty("Village"));NaturalVillageR1GameTests.visiting(l,b,true);
         h.onEachTick(()-> {
             var d=SettlementSafetyData.existing(s);if(d==null)return;var row=d.site(b.buildingKey());if(row==null)return;
-            var actor=l.getEntity(marker.getUUID("Body"));if(!(actor instanceof NpcBase n))return;
-            h.assertTrue(n.getCharacterId().equals(marker.getUUID("Person")),"same body and person after real process restart");
-            var task=row.getCompound("Tasks").getCompound(marker.getString("Task"));
-            if(!task.getString("State").equals("DONE"))return;
-            h.assertTrue(task.getInt("Placed")==1&&!task.getBoolean("MaterialCarried"),"original carried material consumed once");
-            Sagadyssey.LOGGER.info("SAFETY_RESTART_ACCEPT task={} person={} placed={} light={} tick={}",marker.getString("Task"),n.getCharacterId(),task.getInt("Placed"),task.getInt("MeasuredBlockLight"),l.getGameTime());h.succeed();
+            var actor=l.getEntity(marker.read("Body", UUIDUtil.CODEC).orElseThrow());if(!(actor instanceof NpcBase n))return;
+            h.assertTrue(n.getCharacterId().equals(marker.read("Person", UUIDUtil.CODEC).orElseThrow()),"same body and person after real process restart");
+            var task=row.getCompoundOrEmpty("Tasks").getCompoundOrEmpty(marker.getStringOr("Task", ""));
+            if(!task.getStringOr("State", "").equals("DONE"))return;
+            h.assertTrue(task.getIntOr("Placed", 0)==1&&!task.getBooleanOr("MaterialCarried", false),"original carried material consumed once");
+            Sagadyssey.LOGGER.info("SAFETY_RESTART_ACCEPT task={} person={} placed={} light={} tick={}",marker.getStringOr("Task", ""),n.getCharacterId(),task.getIntOr("Placed", 0),task.getIntOr("MeasuredBlockLight", 0),l.getGameTime());h.succeed();
         });
     }
     private static void noMaterial(GameTestHelper h) {
@@ -223,13 +227,13 @@ public final class SettlementSafetyGameTests {
             if(!setup[0]){initialDarkness(l,b);setup[0]=true;begin[0]=l.getGameTime();return;}
             if(l.getGameTime()-begin[0]<1400)return;
             var row=SettlementSafetyData.get(l.getServer()).site(b.buildingKey());
-            h.assertTrue(row.getInt("DarkFloor")>0&&completed(row)==0,"unfunded dark area remains a real gap");
-            boolean reason=false;for(String key:row.getCompound("Tasks").getAllKeys()) {
-                var t=row.getCompound("Tasks").getCompound(key);h.assertTrue(t.getInt("Placed")==0,"no free light without actual input");
-                reason|=t.getString("Reason").contains("缺少");
+            h.assertTrue(row.getIntOr("DarkFloor", 0)>0&&completed(row)==0,"unfunded dark area remains a real gap");
+            boolean reason=false;for(String key:row.getCompoundOrEmpty("Tasks").keySet()) {
+                var t=row.getCompoundOrEmpty("Tasks").getCompoundOrEmpty(key);h.assertTrue(t.getIntOr("Placed", 0)==0,"no free light without actual input");
+                reason|=t.getStringOr("Reason", "").contains("缺少");
             }
             h.assertTrue(reason,"waiting has a specific material reason");
-            Sagadyssey.LOGGER.info("SAFETY_NO_MATERIAL_ACCEPT dark={} completed=0 reason=missing_legal_inputs",row.getInt("DarkFloor"));h.succeed();
+            Sagadyssey.LOGGER.info("SAFETY_NO_MATERIAL_ACCEPT dark={} completed=0 reason=missing_legal_inputs",row.getIntOr("DarkFloor", 0));h.succeed();
         });
     }
     private static void night(GameTestHelper h) {
@@ -239,7 +243,7 @@ public final class SettlementSafetyGameTests {
             if(!setup[0]) {
                 initialDarkness(l,b);var refuge=NaturalVillageLayout.at(b,new BlockPos(5,1,14));l.setBlockAndUpdate(refuge,Blocks.TORCH.defaultBlockState());
                 worker[0]=NaturalVillageR1GameTests.actor(l,b,2);
-                var start=NaturalVillageLayout.at(b,new BlockPos(18,1,11));worker[0].moveTo(start.getX()+.5,start.getY(),start.getZ()+.5,0,0);
+                var start=NaturalVillageLayout.at(b,new BlockPos(18,1,11));worker[0].snapTo(start.getX()+.5,start.getY(),start.getZ()+.5,0,0);
                 NaturalPolityData.inventory(l.getServer(),b,3).setItem(20,new ItemStack(Items.TORCH,4));
                 for(int i=0;i<2;i++)NaturalVillageR1GameTests.actor(l,b,i).setCommand(NpcCommand.STAY);
                 l.setDayTime(18000);setup[0]=true;begin[0]=l.getGameTime();return;
@@ -250,10 +254,10 @@ public final class SettlementSafetyGameTests {
             }
             if(dawn[0]) {
                 var r=SettlementSafetyData.get(l.getServer()).site(b.buildingKey());
-                for(String key:r.getCompound("Tasks").getAllKeys()) {
-                    var t=r.getCompound("Tasks").getCompound(key);
-                    if(t.getString("State").equals("DONE")&&t.hasUUID("Person")&&t.getUUID("Person").equals(worker[0].getCharacterId())) {
-                        Sagadyssey.LOGGER.info("SAFETY_DAY_RESUME_ACCEPT person={} task={} placed={}",worker[0].getCharacterId(),key,t.getInt("Placed"));h.succeed();return;
+                for(String key:r.getCompoundOrEmpty("Tasks").keySet()) {
+                    var t=r.getCompoundOrEmpty("Tasks").getCompoundOrEmpty(key);
+                    if(t.getStringOr("State", "").equals("DONE")&&t.read("Person", UUIDUtil.CODEC).isPresent()&&t.read("Person", UUIDUtil.CODEC).orElseThrow().equals(worker[0].getCharacterId())) {
+                        Sagadyssey.LOGGER.info("SAFETY_DAY_RESUME_ACCEPT person={} task={} placed={}",worker[0].getCharacterId(),key,t.getIntOr("Placed", 0));h.succeed();return;
                     }
                 }
             }

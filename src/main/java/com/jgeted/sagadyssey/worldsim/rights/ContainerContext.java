@@ -1,5 +1,7 @@
 package com.jgeted.sagadyssey.worldsim.rights;
 
+import net.minecraft.core.UUIDUtil;
+
 import net.minecraft.nbt.CompoundTag;
 
 import java.util.UUID;
@@ -22,7 +24,7 @@ public record ContainerContext(UUID containerId, String locator, SubjectRef cust
 
     public CompoundTag save() {
         CompoundTag tag = new CompoundTag();
-        tag.putUUID("Id", containerId);
+        tag.store("Id", UUIDUtil.CODEC, containerId);
         tag.putString("Locator", locator);
         tag.put("Custodian", custodian.save());
         tag.put("Owner", defaultBeneficialOwner.save());
@@ -32,9 +34,9 @@ public record ContainerContext(UUID containerId, String locator, SubjectRef cust
     }
 
     public static ContainerContext load(CompoundTag tag) {
-        return new ContainerContext(tag.getUUID("Id"), tag.getString("Locator"),
-                SubjectRef.load(tag.getCompound("Custodian")),
-                SubjectRef.load(tag.getCompound("Owner")),
-                AccessPolicy.valueOf(tag.getString("Access")), tag.getLong("Revision"));
+        return new ContainerContext(tag.read("Id", UUIDUtil.CODEC).orElseThrow(), tag.getStringOr("Locator", ""),
+                SubjectRef.load(tag.getCompoundOrEmpty("Custodian")),
+                SubjectRef.load(tag.getCompoundOrEmpty("Owner")),
+                AccessPolicy.valueOf(tag.getStringOr("Access", "")), tag.getLongOr("Revision", 0L));
     }
 }

@@ -1,5 +1,7 @@
 package com.jgeted.sagadyssey.worldsim.transfer;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+
 import com.jgeted.sagadyssey.worldsim.rights.AccessPolicy;
 import com.jgeted.sagadyssey.worldsim.rights.AssetClaim;
 import com.jgeted.sagadyssey.worldsim.rights.AssetReservation;
@@ -340,13 +342,12 @@ class TransferServiceTest {
                 fixture.sourceId, fixture.destinationId, new ItemStack(Items.BREAD), 2, 0, 0);
         var first = fixture.service.submit(request, fixture.endpoints(), 20);
         var tag = fixture.ledger.save(new net.minecraft.nbt.CompoundTag(), null);
-        tag.getList("Receipts", net.minecraft.nbt.Tag.TAG_COMPOUND).getCompound(0).remove("RequestIdentity");
+        MinecraftApi.listOfType(tag, "Receipts", net.minecraft.nbt.Tag.TAG_COMPOUND).getCompoundOrEmpty(0).remove("RequestIdentity");
         var legacy = TransferLedgerData.load(tag, null);
         assertEquals(first, new TransferService(fixture.rights, legacy)
                 .submit(request, fixture.endpoints(), 21));
-        assertFalse(legacy.save(new net.minecraft.nbt.CompoundTag(), null)
-                .getList("Receipts", net.minecraft.nbt.Tag.TAG_COMPOUND)
-                .getCompound(0).contains("RequestIdentity"));
+        assertFalse(MinecraftApi.listOfType(legacy.save(new net.minecraft.nbt.CompoundTag(), null), "Receipts", net.minecraft.nbt.Tag.TAG_COMPOUND)
+                .getCompoundOrEmpty(0).contains("RequestIdentity"));
         assertEquals(2, count(fixture.destination, Items.BREAD));
     }
 

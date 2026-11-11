@@ -28,13 +28,10 @@ import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.InteractionHand;
-import net.minecraft.world.item.ArmorItem;
-import net.minecraft.world.item.DiggerItem;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.ProjectileWeaponItem;
 import net.minecraft.world.item.ShieldItem;
-import net.minecraft.world.item.SwordItem;
 
 import javax.annotation.Nullable;
 import java.util.List;
@@ -60,8 +57,8 @@ public final class NpcHandoverService {
         ItemStack offered = held.copy();
         offered.setCount(quantity);
         UUID giverId = CharacterRegistry.ensureCurrent(player).id();
-        long now = player.serverLevel().getGameTime();
-        boolean mayIssue = ServiceRelationshipData.get(player.server).hasScope(giverId,
+        long now = player.level().getGameTime();
+        boolean mayIssue = ServiceRelationshipData.get(player.level().getServer()).hasScope(giverId,
                 npc.getCharacterId(), AuthorityScope.MANAGE_ISSUED_EQUIPMENT, now);
         HandoverIntent intent = requestedIntent == null ? inferIntent(offered, mayIssue) : requestedIntent;
 
@@ -77,7 +74,7 @@ public final class NpcHandoverService {
                     "对方看见了你展示的 " + offered.getHoverName().getString(), null);
         }
 
-        RightsStateData rights = RightsStateData.get(player.server);
+        RightsStateData rights = RightsStateData.get(player.level().getServer());
         SubjectRef giver = SubjectRef.character(giverId);
         SubjectRef receiver = SubjectRef.character(npc.getCharacterId());
         UUID sourceId = ContainerIds.playerPersonal(giverId);
@@ -91,7 +88,7 @@ public final class NpcHandoverService {
                 List.of(new ExpectedRevision(sourceId, rights.context(sourceId).revision()),
                         new ExpectedRevision(destinationId, rights.context(destinationId).revision())),
                 "world_handover:" + intent.name().toLowerCase(java.util.Locale.ROOT), now);
-        var receipt = new TransferService(rights, TransferLedgerData.get(player.server))
+        var receipt = new TransferService(rights, TransferLedgerData.get(player.level().getServer()))
                 .submit(request, Map.of(sourceId, new TransferEndpoint(sourceId, player.getInventory()),
                         destinationId, new TransferEndpoint(destinationId,
                                 npc.getEquipmentInventory())), now);
@@ -122,9 +119,9 @@ public final class NpcHandoverService {
     }
 
     private static boolean equipmentLike(ItemStack stack) {
-        return stack.getItem() instanceof SwordItem || stack.getItem() instanceof DiggerItem
+        return com.jgeted.sagadyssey.core.MinecraftApi.isSword(stack) || com.jgeted.sagadyssey.core.MinecraftApi.isDigger(stack)
                 || stack.getItem() instanceof ProjectileWeaponItem
-                || stack.getItem() instanceof ArmorItem || stack.getItem() instanceof ShieldItem;
+                || com.jgeted.sagadyssey.core.MinecraftApi.isArmor(stack) || stack.getItem() instanceof ShieldItem;
     }
 
     static boolean dangerous(ItemStack stack) {
@@ -150,7 +147,7 @@ public final class NpcHandoverService {
     private static void recordShown(ServerPlayer player, NpcBase npc, UUID giverId,
                                     ItemStack held, long now) {
         String itemId = BuiltInRegistries.ITEM.getKey(held.getItem()).toString();
-        KnowledgeStateData.get(player.server).observe(npc.getCharacterId(),
+        KnowledgeStateData.get(player.level().getServer()).observe(npc.getCharacterId(),
                 new FactKey(giverId, "shown.item", itemId), held.getHoverName().getString(),
                 PrecisionBand.EXACT, 1.0D, "当面展示", now, 6_000L,
                 DisclosurePolicy.PRIVATE);
@@ -160,7 +157,7 @@ public final class NpcHandoverService {
     private static void applySocialEffects(ServerPlayer player, NpcBase npc, UUID giverId,
                                            ItemStack item, int quantity, HandoverIntent intent,
                                            long now) {
-        NpcLifeData life = NpcLifeData.get(player.server);
+        NpcLifeData life = NpcLifeData.get(player.level().getServer());
         int goodwill = switch (intent) {
             case GIFT -> item.has(DataComponents.FOOD) ? 5 : 3;
             case PAYMENT -> 2;

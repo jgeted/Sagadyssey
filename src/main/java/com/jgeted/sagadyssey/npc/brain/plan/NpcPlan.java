@@ -1,6 +1,6 @@
 package com.jgeted.sagadyssey.npc.brain.plan;
 
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 
 import javax.annotation.Nullable;
 import java.util.ArrayList;
@@ -12,7 +12,7 @@ import java.util.UUID;
  *
  * <p>对象本身不可变；所有状态变化都返回新快照，以便之后写入审计历史。</p>
  */
-public record NpcPlan(UUID id, UUID npcId, String candidateKey, ResourceLocation providerId,
+public record NpcPlan(UUID id, UUID npcId, String candidateKey, Identifier providerId,
                       NpcPlanKind kind, NpcPlanPriority priority, NpcPlanStatus status,
                       List<NpcPlanStep> steps, int currentStepIndex, long createdAt,
                       long updatedAt, long commitmentUntil, long expiresAt,

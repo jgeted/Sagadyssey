@@ -76,7 +76,7 @@ public class NpcTradeScreen extends Screen {
             addRenderableWidget(Button.builder(
                     Component.literal("交易"),
                     btn -> {
-                        PacketDistributor.sendToServer(new NpcTradePacket(npcId, index));
+                        net.neoforged.neoforge.client.network.ClientPacketDistributor.sendToServer(new NpcTradePacket(npcId, index));
                     })
                     .bounds(btnX, y, btnW, 20)
                     .build());
@@ -107,7 +107,7 @@ public class NpcTradeScreen extends Screen {
         addRenderableWidget(Button.builder(
                 Component.literal(label),
                 btn -> {
-                    PacketDistributor.sendToServer(new NpcTradePacket(npcId, tradeIndex));
+                    net.neoforged.neoforge.client.network.ClientPacketDistributor.sendToServer(new NpcTradePacket(npcId, tradeIndex));
                 })
                 .bounds(btnX, y, btnW, 20)
                 .build());

@@ -1,5 +1,7 @@
 package com.jgeted.sagadyssey.social.life;
 
+import net.minecraft.core.UUIDUtil;
+
 import net.minecraft.nbt.CompoundTag;
 
 import javax.annotation.Nullable;
@@ -11,10 +13,10 @@ public record NpcActionDecisionRecord(UUID npcId, String action, boolean accepte
                                       long decidedAt, long lockedUntil, String reason) {
     public CompoundTag save() {
         CompoundTag tag = new CompoundTag();
-        tag.putUUID("Npc", npcId);
+        tag.store("Npc", UUIDUtil.CODEC, npcId);
         tag.putString("Action", action);
         tag.putBoolean("Accepted", accepted);
-        if (subjectCharacterId != null) tag.putUUID("Subject", subjectCharacterId);
+        if (subjectCharacterId != null) tag.store("Subject", UUIDUtil.CODEC, subjectCharacterId);
         tag.putLong("DecidedAt", decidedAt);
         tag.putLong("LockedUntil", lockedUntil);
         tag.putString("Reason", reason == null ? "" : reason);
@@ -22,9 +24,9 @@ public record NpcActionDecisionRecord(UUID npcId, String action, boolean accepte
     }
 
     public static NpcActionDecisionRecord load(CompoundTag tag) {
-        return new NpcActionDecisionRecord(tag.getUUID("Npc"), tag.getString("Action"),
-                tag.getBoolean("Accepted"), tag.hasUUID("Subject") ? tag.getUUID("Subject") : null,
-                tag.getLong("DecidedAt"), tag.getLong("LockedUntil"), tag.getString("Reason"));
+        return new NpcActionDecisionRecord(tag.read("Npc", UUIDUtil.CODEC).orElseThrow(), tag.getStringOr("Action", ""),
+                tag.getBooleanOr("Accepted", false), tag.read("Subject", UUIDUtil.CODEC).isPresent() ? tag.read("Subject", UUIDUtil.CODEC).orElseThrow() : null,
+                tag.getLongOr("DecidedAt", 0L), tag.getLongOr("LockedUntil", 0L), tag.getStringOr("Reason", ""));
     }
 
     public boolean sameSubject(@Nullable UUID subject) {

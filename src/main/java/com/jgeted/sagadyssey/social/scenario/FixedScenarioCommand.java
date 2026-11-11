@@ -1,5 +1,7 @@
 package com.jgeted.sagadyssey.social.scenario;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+
 import com.jgeted.sagadyssey.npc.entity.NpcBase;
 import com.jgeted.sagadyssey.npc.work.NpcWorkstationContainers;
 import com.jgeted.sagadyssey.social.life.NpcLifeData;
@@ -48,20 +50,20 @@ public final class FixedScenarioCommand {
                                 .executes(ctx -> preview(ctx.getSource(),
                                         StringArgumentType.getString(ctx, "scenario")))))
                 .then(Commands.literal("status").executes(ctx -> status(ctx.getSource())))
-                .then(Commands.literal("observe").requires(source -> source.hasPermission(2))
+                .then(Commands.literal("observe").requires(source -> MinecraftApi.hasPermission(source, 2))
                         .executes(ctx -> observe(ctx.getSource())))
                 .then(Commands.literal("test")
                         .then(Commands.literal("profiles")
                                 .executes(ctx -> testProfiles(ctx.getSource())))
-                        .then(Commands.literal("reset").requires(source -> source.hasPermission(2))
+                        .then(Commands.literal("reset").requires(source -> MinecraftApi.hasPermission(source, 2))
                                 .executes(ctx -> resetLab(ctx.getSource(), null))
                                 .then(Commands.argument("profile", StringArgumentType.word())
                                         .suggests((ctx, builder) -> suggestProfiles(ctx.getSource(), builder))
                                         .executes(ctx -> resetLab(ctx.getSource(),
                                                 StringArgumentType.getString(ctx, "profile"))))))
-                .then(Commands.literal("verify").requires(source -> source.hasPermission(2))
+                .then(Commands.literal("verify").requires(source -> MinecraftApi.hasPermission(source, 2))
                         .executes(ctx -> verify(ctx.getSource())))
-                .then(Commands.literal("generate").requires(source -> source.hasPermission(2))
+                .then(Commands.literal("generate").requires(source -> MinecraftApi.hasPermission(source, 2))
                         .then(Commands.argument("scenario", StringArgumentType.word())
                                 .suggests((ctx, builder) -> suggestScenarios(builder))
                                 .executes(ctx -> generate(ctx.getSource(),
@@ -69,15 +71,15 @@ public final class FixedScenarioCommand {
                                 .then(Commands.literal("force")
                                         .executes(ctx -> generate(ctx.getSource(),
                                                 StringArgumentType.getString(ctx, "scenario"), true)))))
-                .then(Commands.literal("repair").requires(source -> source.hasPermission(2))
+                .then(Commands.literal("repair").requires(source -> MinecraftApi.hasPermission(source, 2))
                         .then(Commands.literal("confirm")
                                 .executes(ctx -> repair(ctx.getSource()))))
-                .then(Commands.literal("reclaim-drops").requires(source -> source.hasPermission(2))
+                .then(Commands.literal("reclaim-drops").requires(source -> MinecraftApi.hasPermission(source, 2))
                         .then(Commands.literal("preview")
                                 .executes(ctx -> reclaimDrops(ctx.getSource(), false)))
                         .then(Commands.literal("confirm")
                                 .executes(ctx -> reclaimDrops(ctx.getSource(), true))))
-                .then(Commands.literal("cancel").requires(source -> source.hasPermission(2))
+                .then(Commands.literal("cancel").requires(source -> MinecraftApi.hasPermission(source, 2))
                         .executes(ctx -> cancel(ctx.getSource())))));
     }
 
@@ -117,7 +119,7 @@ public final class FixedScenarioCommand {
             source.sendFailure(Component.literal("未知固定世界：" + scenarioId));
             return 0;
         }
-        BlockPos anchor = deploymentAnchor(player.serverLevel(), player.blockPosition());
+        BlockPos anchor = deploymentAnchor(player.level(), player.blockPosition());
         drawPreview(player, anchor, definition);
         source.sendSuccess(() -> Component.literal("§a已显示 " + definition.displayName()
                 + " 的边界和聚落中心；锚点=" + anchor.toShortString()), false);
@@ -134,8 +136,8 @@ public final class FixedScenarioCommand {
             source.sendFailure(Component.literal("未知固定世界：" + scenarioId));
             return 0;
         }
-        ServerLevel level = player.serverLevel();
-        String dimension = level.dimension().location().toString();
+        ServerLevel level = player.level();
+        String dimension = level.dimension().identifier().toString();
         BlockPos anchor = deploymentAnchor(level, player.blockPosition());
         if (!(level.getChunkSource().getGenerator() instanceof FlatLevelSource) && !force) {
             source.sendFailure(Component.literal("该场景按超平坦世界设计；普通世界必须明确使用 force。"));
@@ -167,7 +169,7 @@ public final class FixedScenarioCommand {
     }
 
     private static int status(CommandSourceStack source) {
-        String dimension = source.getLevel().dimension().location().toString();
+        String dimension = source.getLevel().dimension().identifier().toString();
         var deployments = FixedScenarioData.get(source.getServer()).deployments().stream()
                 .filter(deployment -> deployment.dimension().equals(dimension)).limit(8).toList();
         if (deployments.isEmpty()) {
@@ -223,7 +225,7 @@ public final class FixedScenarioCommand {
     private static int observe(CommandSourceStack source)
             throws com.mojang.brigadier.exceptions.CommandSyntaxException {
         ServerPlayer player = source.getPlayerOrException();
-        String dimension = player.serverLevel().dimension().location().toString();
+        String dimension = player.level().dimension().identifier().toString();
         FixedScenarioDeployment deployment = nearestDeployment(source, false, true);
         if (deployment == null) {
             source.sendFailure(Component.literal("当前维度附近没有已完成的固定场景。"));
@@ -235,7 +237,7 @@ public final class FixedScenarioCommand {
             return 0;
         }
 
-        ServerLevel level = player.serverLevel();
+        ServerLevel level = player.level();
         LogisticsData logistics = LogisticsData.get(source.getServer());
         String profile = deployment.testProfile().isBlank() ? "-" : deployment.testProfile();
         source.sendSuccess(() -> Component.literal("§6[场景观察] §f" + definition.displayName()
@@ -344,9 +346,9 @@ public final class FixedScenarioCommand {
     }
 
     private static void markPoint(ServerPlayer player, BlockPos position, Vector3f color, int maxHeight) {
-        DustParticleOptions particle = new DustParticleOptions(color, 1.0F);
+        DustParticleOptions particle = new DustParticleOptions(MinecraftApi.particleColor(color), 1.0F);
         for (int height = 0; height <= maxHeight; height++) {
-            player.serverLevel().sendParticles(player, particle, true,
+            player.level().sendParticles(player, particle, true, false,
                     position.getX() + 0.5D, position.getY() + 0.5D + height,
                     position.getZ() + 0.5D, 2, 0.12D, 0.08D, 0.12D, 0.0D);
         }
@@ -430,8 +432,8 @@ public final class FixedScenarioCommand {
     private static int repair(CommandSourceStack source)
             throws com.mojang.brigadier.exceptions.CommandSyntaxException {
         ServerPlayer player = source.getPlayerOrException();
-        ServerLevel level = player.serverLevel();
-        String dimension = level.dimension().location().toString();
+        ServerLevel level = player.level();
+        String dimension = level.dimension().identifier().toString();
         FixedScenarioData data = FixedScenarioData.get(source.getServer());
         if (data.activeIn(dimension) != null) {
             source.sendFailure(Component.literal("固定世界仍在生成，不能同时修复。请先等待完成或执行 cancel。"));
@@ -460,7 +462,7 @@ public final class FixedScenarioCommand {
     }
 
     private static int cancel(CommandSourceStack source) {
-        String dimension = source.getLevel().dimension().location().toString();
+        String dimension = source.getLevel().dimension().identifier().toString();
         if (!FixedScenarioData.get(source.getServer()).cancel(dimension)) {
             source.sendFailure(Component.literal("当前维度没有正在执行的固定世界任务。"));
             return 0;
@@ -477,7 +479,7 @@ public final class FixedScenarioCommand {
             throws com.mojang.brigadier.exceptions.CommandSyntaxException {
         ServerPlayer player = source.getPlayerOrException();
         FixedScenarioDeployment deployment = FixedScenarioData.get(source.getServer())
-                .latestIn(player.serverLevel().dimension().location().toString());
+                .latestIn(player.level().dimension().identifier().toString());
         if (deployment == null || !"small_realm".equals(deployment.scenarioId())) {
             source.sendFailure(Component.literal("当前维度没有裂冠河谷场景。"));
             return 0;
@@ -490,9 +492,9 @@ public final class FixedScenarioCommand {
 
         BlockPos anchor = deployment.anchor();
         int radius = definition.radius();
-        ServerLevel level = player.serverLevel();
-        AABB bounds = new AABB(anchor.getX() - radius, level.getMinBuildHeight(), anchor.getZ() - radius,
-                anchor.getX() + radius + 1, level.getMaxBuildHeight(), anchor.getZ() + radius + 1);
+        ServerLevel level = player.level();
+        AABB bounds = new AABB(anchor.getX() - radius, level.getMinY(), anchor.getZ() - radius,
+                anchor.getX() + radius + 1, (level.getMaxY() + 1), anchor.getZ() + radius + 1);
         var drops = level.getEntitiesOfClass(ItemEntity.class, bounds,
                 entity -> entity.isAlive() && reclaimDestination(entity.getItem()) != ReclaimDestination.NONE);
         java.util.Map<String, Integer> totals = new java.util.TreeMap<>();
@@ -599,7 +601,7 @@ public final class FixedScenarioCommand {
     private static FixedScenarioDeployment nearestDeployment(CommandSourceStack source,
                                                              boolean labsOnly,
                                                              boolean completeOnly) {
-        String dimension = source.getLevel().dimension().location().toString();
+        String dimension = source.getLevel().dimension().identifier().toString();
         BlockPos origin = BlockPos.containing(source.getPosition());
         return FixedScenarioData.get(source.getServer()).deployments().stream()
                 .filter(deployment -> deployment.dimension().equals(dimension))
@@ -644,7 +646,7 @@ public final class FixedScenarioCommand {
                     .getConfig(placement.templateId());
             String path = config == null ? placement.templateId() : config.getNbtFileName();
             var template = level.getStructureManager().get(
-                    net.minecraft.resources.ResourceLocation.fromNamespaceAndPath("sagadyssey", path));
+                    net.minecraft.resources.Identifier.fromNamespaceAndPath("sagadyssey", path));
             if (template.isEmpty()) return false;
             BoundingBox box = template.get().getBoundingBox(
                     new StructurePlaceSettings().setRotation(placement.rotation()), origin);
@@ -731,8 +733,8 @@ public final class FixedScenarioCommand {
 
     private static void drawPreview(ServerPlayer player, BlockPos anchor,
                                     FixedScenarioDefinition definition) {
-        ServerLevel level = player.serverLevel();
-        DustParticleOptions border = new DustParticleOptions(new Vector3f(0.2F, 0.85F, 1.0F), 0.8F);
+        ServerLevel level = player.level();
+        DustParticleOptions border = new DustParticleOptions(MinecraftApi.particleColor(new Vector3f(0.2F, 0.85F, 1.0F)), 0.8F);
         int radius = definition.radius();
         for (int offset = -radius; offset <= radius; offset += 8) {
             send(level, player, border, anchor.getX() + offset, anchor.getY() + 1, anchor.getZ() - radius);
@@ -740,14 +742,14 @@ public final class FixedScenarioCommand {
             send(level, player, border, anchor.getX() - radius, anchor.getY() + 1, anchor.getZ() + offset);
             send(level, player, border, anchor.getX() + radius, anchor.getY() + 1, anchor.getZ() + offset);
         }
-        DustParticleOptions center = new DustParticleOptions(new Vector3f(1.0F, 0.72F, 0.15F), 1.2F);
+        DustParticleOptions center = new DustParticleOptions(MinecraftApi.particleColor(new Vector3f(1.0F, 0.72F, 0.15F)), 1.2F);
         for (var settlement : definition.settlements()) {
             BlockPos pos = anchor.offset(settlement.x(), 1, settlement.z());
-            level.sendParticles(player, center, true, pos.getX() + 0.5D, pos.getY(), pos.getZ() + 0.5D,
+            level.sendParticles(player, center, true, false, pos.getX() + 0.5D, pos.getY(), pos.getZ() + 0.5D,
                     24, 1.5D, 1.0D, 1.5D, 0.01D);
             player.sendSystemMessage(Component.literal("§e" + settlement.name() + " §7中心 " + pos.toShortString()));
         }
-        DustParticleOptions farmland = new DustParticleOptions(new Vector3f(0.2F, 0.95F, 0.25F), 0.9F);
+        DustParticleOptions farmland = new DustParticleOptions(MinecraftApi.particleColor(new Vector3f(0.2F, 0.95F, 0.25F)), 0.9F);
         for (var farm : definition.farms()) {
             int minX = anchor.getX() + farm.x() - 1;
             int maxX = anchor.getX() + farm.x() + farm.size();
@@ -766,7 +768,7 @@ public final class FixedScenarioCommand {
 
     private static void send(ServerLevel level, ServerPlayer player, DustParticleOptions particle,
                              double x, double y, double z) {
-        level.sendParticles(player, particle, true, x + 0.5D, y, z + 0.5D,
+        level.sendParticles(player, particle, true, false, x + 0.5D, y, z + 0.5D,
                 1, 0.0D, 0.0D, 0.0D, 0.0D);
     }
 }

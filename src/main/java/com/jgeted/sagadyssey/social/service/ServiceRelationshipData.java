@@ -7,7 +7,7 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.world.level.saveddata.SavedData;
+import com.jgeted.sagadyssey.worldsim.NbtSavedData;
 
 import javax.annotation.Nullable;
 import java.nio.charset.StandardCharsets;
@@ -22,7 +22,7 @@ import java.util.Map;
 import java.util.UUID;
 
 /** Durable authority source. Legacy entity owner fields are only a compatibility projection. */
-public final class ServiceRelationshipData extends SavedData {
+public final class ServiceRelationshipData extends NbtSavedData {
     public static final String DATA_NAME = "sagadyssey_service_relationships_v2";
     private static final int MAX_AUDITS = 2048;
     public static final Factory<ServiceRelationshipData> FACTORY =
@@ -267,7 +267,7 @@ public final class ServiceRelationshipData extends SavedData {
         ListTag relations = com.jgeted.sagadyssey.worldsim.PersistentDataAccess.compounds(tag, "Relationships");
         for (int index = 0; index < relations.size(); index++) {
             try {
-                data.putLoaded(ServiceRelationship.load(relations.getCompound(index)));
+                data.putLoaded(ServiceRelationship.load(relations.getCompoundOrEmpty(index)));
             } catch (RuntimeException exception) {
                 throw new IllegalArgumentException("Invalid service relationship at " + index, exception);
             }
@@ -276,7 +276,7 @@ public final class ServiceRelationshipData extends SavedData {
         int start = Math.max(0, audits.size() - MAX_AUDITS);
         for (int index = 0; index < audits.size(); index++) {
             try {
-                var audit = ServiceAuthorityAudit.load(audits.getCompound(index));
+                var audit = ServiceAuthorityAudit.load(audits.getCompoundOrEmpty(index));
                 if (index >= start) data.putLoaded(audit);
             } catch (RuntimeException exception) {
                 throw new IllegalArgumentException("Invalid service audit at " + index, exception);

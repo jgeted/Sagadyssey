@@ -1,5 +1,8 @@
 package com.jgeted.sagadyssey.npc.brain.life;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+import net.minecraft.core.UUIDUtil;
+
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.Tag;
@@ -61,7 +64,7 @@ public record ConversationSession(UUID id, UUID first, UUID second, String dimen
 
     public CompoundTag save() {
         var tag = new CompoundTag();
-        tag.putUUID("Id", id); tag.putUUID("First", first); tag.putUUID("Second", second);
+        tag.store("Id", UUIDUtil.CODEC, id); tag.store("First", UUIDUtil.CODEC, first); tag.store("Second", UUIDUtil.CODEC, second);
         tag.putString("Dimension", dimension); tag.putLong("Place", place.asLong());
         tag.putInt("Duration", durationTicks); tag.putLong("Created", createdAt);
         tag.putLong("Expires", expiresAt); tag.putLong("Started", startedAt);
@@ -71,14 +74,14 @@ public record ConversationSession(UUID id, UUID first, UUID second, String dimen
 
     public static ConversationSession load(CompoundTag tag) {
         for (String field : new String[]{"Id", "First", "Second"})
-            if (!tag.hasUUID(field)) throw new IllegalArgumentException("missing " + field);
+            if (!tag.read(field, UUIDUtil.CODEC).isPresent()) throw new IllegalArgumentException("missing " + field);
         for (String field : new String[]{"Place", "Created", "Expires", "Started", "Updated"})
-            if (!tag.contains(field, Tag.TAG_LONG)) throw new IllegalArgumentException("missing/wrong " + field);
-        if (!tag.contains("Duration", Tag.TAG_INT) || !tag.contains("Dimension", Tag.TAG_STRING)
-                || !tag.contains("Status", Tag.TAG_STRING)) throw new IllegalArgumentException("malformed checkpoint");
-        return new ConversationSession(tag.getUUID("Id"), tag.getUUID("First"), tag.getUUID("Second"),
-                tag.getString("Dimension"), BlockPos.of(tag.getLong("Place")), tag.getInt("Duration"),
-                tag.getLong("Created"), tag.getLong("Expires"), tag.getLong("Started"),
-                tag.getLong("Updated"), Status.valueOf(tag.getString("Status")));
+            if (!MinecraftApi.containsTag(tag, field, Tag.TAG_LONG)) throw new IllegalArgumentException("missing/wrong " + field);
+        if (!MinecraftApi.containsTag(tag, "Duration", Tag.TAG_INT) || !MinecraftApi.containsTag(tag, "Dimension", Tag.TAG_STRING)
+                || !MinecraftApi.containsTag(tag, "Status", Tag.TAG_STRING)) throw new IllegalArgumentException("malformed checkpoint");
+        return new ConversationSession(tag.read("Id", UUIDUtil.CODEC).orElseThrow(), tag.read("First", UUIDUtil.CODEC).orElseThrow(), tag.read("Second", UUIDUtil.CODEC).orElseThrow(),
+                tag.getStringOr("Dimension", ""), BlockPos.of(tag.getLongOr("Place", 0L)), tag.getIntOr("Duration", 0),
+                tag.getLongOr("Created", 0L), tag.getLongOr("Expires", 0L), tag.getLongOr("Started", 0L),
+                tag.getLongOr("Updated", 0L), Status.valueOf(tag.getStringOr("Status", "")));
     }
 }

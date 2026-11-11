@@ -1,5 +1,8 @@
 package com.jgeted.sagadyssey.social.life;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+import net.minecraft.core.UUIDUtil;
+
 import com.jgeted.sagadyssey.npc.entity.NpcBase;
 import com.jgeted.sagadyssey.social.character.CharacterRegistryData;
 import com.jgeted.sagadyssey.social.household.HouseholdData;
@@ -12,7 +15,7 @@ import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.world.level.saveddata.SavedData;
+import com.jgeted.sagadyssey.worldsim.NbtSavedData;
 
 import javax.annotation.Nullable;
 import java.util.Collection;
@@ -21,7 +24,7 @@ import java.util.Map;
 import java.util.UUID;
 
 /** 世界级 NPC 生活档案：服务端唯一真相，不依赖实体是否正在加载。 */
-public final class NpcLifeData extends SavedData {
+public final class NpcLifeData extends NbtSavedData {
     private static final String DATA_NAME = "sagadyssey_npc_life";
     private static final Factory<NpcLifeData> FACTORY = new Factory<>(NpcLifeData::new, NpcLifeData::load);
    private final Map<UUID, NpcLifeRecord> records = new HashMap<>();
@@ -37,7 +40,7 @@ public final class NpcLifeData extends SavedData {
     private final Map<UUID, Map<String, NpcActionDecisionRecord>> actionDecisions = new HashMap<>();
 
     public static NpcLifeData get(MinecraftServer server) {
-        return server.overworld().getDataStorage().computeIfAbsent(FACTORY, DATA_NAME);
+        return server.overworld().getDataStorage().computeIfAbsent(FACTORY.type(DATA_NAME));
     }
 
     @Nullable
@@ -539,7 +542,7 @@ public final class NpcLifeData extends SavedData {
         NpcLifeRecord existing = records.get(npc.getCharacterId());
         if (existing != null) return existing;
         UUID home = npc.getHomeSettlementId();
-        String dimension = npc.level().dimension().location().toString();
+        String dimension = npc.level().dimension().identifier().toString();
         if (home != null) {
             NpcLifeRecord created = NpcLifeRecord.institution(npc.getCharacterId(), dimension, home,
                     npc.blockPosition(), "旧存档住宅待分配", null, null, NpcWorkShift.DAY, gameTime);
@@ -590,44 +593,44 @@ public final class NpcLifeData extends SavedData {
     private static NpcLifeData load(CompoundTag tag, HolderLookup.Provider registries) {
         NpcLifeData data = new NpcLifeData();
         com.jgeted.sagadyssey.social.combat.CombatImpact.load(tag,data.combatImpacts);
-        ListTag list = tag.getList("Records", Tag.TAG_COMPOUND);
+        ListTag list = MinecraftApi.listOfType(tag, "Records", Tag.TAG_COMPOUND);
         for (int index = 0; index < list.size(); index++) {
-            NpcLifeRecord record = NpcLifeRecord.load(list.getCompound(index));
+            NpcLifeRecord record = NpcLifeRecord.load(list.getCompoundOrEmpty(index));
             if (record != null) data.records.put(record.npcId(), record);
         }
-        ListTag zoneList = tag.getList("WorkZones", Tag.TAG_COMPOUND);
+        ListTag zoneList = MinecraftApi.listOfType(tag, "WorkZones", Tag.TAG_COMPOUND);
         for (int index = 0; index < zoneList.size(); index++) {
-            CompoundTag zoneTag = zoneList.getCompound(index);
-            if (!zoneTag.hasUUID("Npc")) continue;
+            CompoundTag zoneTag = zoneList.getCompoundOrEmpty(index);
+            if (!zoneTag.read("Npc", UUIDUtil.CODEC).isPresent()) continue;
             NpcWorkZoneRecord zone = NpcWorkZoneRecord.load(zoneTag);
             data.workZones.put(zone.npcId(), zone);
         }
-        ListTag contractList = tag.getList("Contracts", Tag.TAG_COMPOUND);
+        ListTag contractList = MinecraftApi.listOfType(tag, "Contracts", Tag.TAG_COMPOUND);
         for (int index = 0; index < contractList.size(); index++) {
-            CompoundTag contractTag = contractList.getCompound(index);
-            if (!contractTag.hasUUID("Npc") || !contractTag.hasUUID("Employer")
-                    || !contractTag.hasUUID("Settlement")) continue;
+            CompoundTag contractTag = contractList.getCompoundOrEmpty(index);
+            if (!contractTag.read("Npc", UUIDUtil.CODEC).isPresent() || !contractTag.read("Employer", UUIDUtil.CODEC).isPresent()
+                    || !contractTag.read("Settlement", UUIDUtil.CODEC).isPresent()) continue;
             NpcEmploymentContract contract = NpcEmploymentContract.load(contractTag);
             data.contracts.put(contract.npcId(), contract);
         }
-        ListTag needsList = tag.getList("Needs", Tag.TAG_COMPOUND);
+        ListTag needsList = MinecraftApi.listOfType(tag, "Needs", Tag.TAG_COMPOUND);
         for (int index = 0; index < needsList.size(); index++) {
-            CompoundTag needsTag = needsList.getCompound(index);
-            if (!needsTag.hasUUID("Npc")) continue;
+            CompoundTag needsTag = needsList.getCompoundOrEmpty(index);
+            if (!needsTag.read("Npc", UUIDUtil.CODEC).isPresent()) continue;
             NpcNeedsRecord record = NpcNeedsRecord.load(needsTag);
             data.needs.put(record.npcId(), record);
         }
-        ListTag scheduleList = tag.getList("Schedules", Tag.TAG_COMPOUND);
+        ListTag scheduleList = MinecraftApi.listOfType(tag, "Schedules", Tag.TAG_COMPOUND);
         for (int index = 0; index < scheduleList.size(); index++) {
-            CompoundTag scheduleTag = scheduleList.getCompound(index);
-            if (!scheduleTag.hasUUID("Npc")) continue;
+            CompoundTag scheduleTag = scheduleList.getCompoundOrEmpty(index);
+            if (!scheduleTag.read("Npc", UUIDUtil.CODEC).isPresent()) continue;
             NpcScheduleRecord record = NpcScheduleRecord.load(scheduleTag);
             data.schedules.put(record.npcId(), record);
         }
-        ListTag decisionList = tag.getList("ActionDecisions", Tag.TAG_COMPOUND);
+        ListTag decisionList = MinecraftApi.listOfType(tag, "ActionDecisions", Tag.TAG_COMPOUND);
         for (int index = 0; index < decisionList.size(); index++) {
-            CompoundTag decisionTag = decisionList.getCompound(index);
-            if (!decisionTag.hasUUID("Npc") || decisionTag.getString("Action").isBlank()) continue;
+            CompoundTag decisionTag = decisionList.getCompoundOrEmpty(index);
+            if (!decisionTag.read("Npc", UUIDUtil.CODEC).isPresent() || decisionTag.getStringOr("Action", "").isBlank()) continue;
             NpcActionDecisionRecord record = NpcActionDecisionRecord.load(decisionTag);
             data.actionDecisions.computeIfAbsent(record.npcId(), ignored -> new HashMap<>())
                     .put(record.action(), record);

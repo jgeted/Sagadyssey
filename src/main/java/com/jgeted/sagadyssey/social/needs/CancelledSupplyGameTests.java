@@ -1,5 +1,9 @@
 package com.jgeted.sagadyssey.social.needs;
 
+import com.jgeted.sagadyssey.gametest.PortedGameTests.*;
+
+import net.minecraft.core.UUIDUtil;
+
 import com.jgeted.sagadyssey.npc.brain.execution.NpcBrainRuntime;
 import com.jgeted.sagadyssey.npc.brain.fieldwork.*;
 import com.jgeted.sagadyssey.npc.entity.*;
@@ -12,11 +16,11 @@ import net.minecraft.core.*;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.gametest.framework.*;
 import net.minecraft.nbt.*;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.*;
 import net.minecraft.world.Container;
 import net.minecraft.world.item.*;
-import net.minecraft.world.level.GameRules;
+import net.minecraft.world.level.gamerules.GameRules;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.storage.LevelResource;
@@ -45,23 +49,23 @@ public final class CancelledSupplyGameTests {
     @net.neoforged.bus.api.SubscribeEvent public static void boot(net.neoforged.neoforge.event.server.ServerStartedEvent e){
         original=null;result=null;if(!(e.getServer() instanceof GameTestServer)||!Boolean.getBoolean("sagadyssey.cancelled.enabled"))return;
         try{
-            var s=e.getServer();var l=s.overworld();l.getStructureManager().getOrCreate(ResourceLocation.parse("sagadyssey_cancelled_recovery:empty"))
-                    .load(l.holderLookup(Registries.BLOCK),TagParser.parseTag("{size:[24,8,24],entities:[],blocks:[],palette:[{Name:\"minecraft:air\"}]}"));
+            var s=e.getServer();var l=s.overworld();l.getStructureManager().getOrCreate(Identifier.parse("sagadyssey_cancelled_recovery:empty"))
+                    .load(l.holderLookup(Registries.BLOCK),TagParser.parseCompoundFully("{size:[24,8,24],entities:[],blocks:[],palette:[{Name:\"minecraft:air\"}]}"));
             rules(l);
             if(!phase().equals("cases")){
                 var path=s.getWorldPath(LevelResource.ROOT);original=NbtIo.readCompressed(path.resolve("industry-ab-checkpoint.nbt"),NbtAccounter.unlimitedHeap());
-                var saved=NbtIo.readCompressed(path.resolve("level.dat"),NbtAccounter.unlimitedHeap()).getCompound("Data");
-                s.getWorldData().overworldData().setGameTime(saved.getLong("Time")+1);resumedAt=saved.getLong("Time")+1;
+                var saved=NbtIo.readCompressed(path.resolve("level.dat"),NbtAccounter.unlimitedHeap()).getCompoundOrEmpty("Data");
+                s.getWorldData().overworldData().setGameTime(saved.getLongOr("Time", 0L)+1);resumedAt=saved.getLongOr("Time", 0L)+1;
                 rules(l);var cp=new ChunkPos(BASE);for(int x=cp.x-1;x<=cp.x+2;x++)for(int z=cp.z-1;z<=cp.z+2;z++){l.setChunkForced(x,z,true);l.getChunk(x,z);}
                 if(phase().equals("restart"))result=NbtIo.readCompressed(path.resolve("cancel-recovery-result.nbt"),NbtAccounter.unlimitedHeap());
             }
         }catch(Exception x){throw new IllegalStateException("require exact complete failed/recovered world; never reconstruct people",x);}
     }
-    private static void rules(ServerLevel l){l.setDayTime(1000);l.getGameRules().getRule(GameRules.RULE_DAYLIGHT).set(false,l.getServer());l.getGameRules().getRule(GameRules.RULE_DOMOBSPAWNING).set(false,l.getServer());l.getGameRules().getRule(GameRules.RULE_RANDOMTICKING).set(0,l.getServer());}
-    private static void sprint(GameTestHelper h,int n){try{h.getLevel().getServer().getCommands().getDispatcher().execute("tick sprint "+n,h.getLevel().getServer().createCommandSourceStack().withPermission(4).withSuppressedOutput());}catch(Exception x){throw new IllegalStateException(x);}}
+    private static void rules(ServerLevel l){l.setDayTime(1000);l.getGameRules().set(GameRules.ADVANCE_TIME, false,l.getServer());l.getGameRules().set(GameRules.SPAWN_MOBS, false,l.getServer());l.getGameRules().set(GameRules.RANDOM_TICK_SPEED, 0,l.getServer());}
+    private static void sprint(GameTestHelper h,int n){try{h.getLevel().getServer().getCommands().getDispatcher().execute("tick sprint "+n,h.getLevel().getServer().createCommandSourceStack().withPermission(net.minecraft.server.permissions.LevelBasedPermissionSet.OWNER).withSuppressedOutput());}catch(Exception x){throw new IllegalStateException(x);}}
     private static ItemFingerprint pick(){return new ItemFingerprint("minecraft:iron_pickaxe",0);}
     private record Fixture(NpcBase owner,FieldworkStorage source,FieldworkStorage target,NeedRequest need,ProductionOrder order){}
-    private static FieldworkStorage point(GameTestHelper h,int x,SubjectRef owner){var l=h.getLevel();var p=h.absolutePos(new BlockPos(x,1,5));l.setBlockAndUpdate(p,Blocks.BARREL.defaultBlockState());var id=ProductionContainerIds.resolve(l.getServer(),l.dimension().location().toString(),p);RightsStateData.get(l.getServer()).ensureContext(id,"cancel-case:"+p.asLong(),owner,owner,AccessPolicy.PRIVATE);var t=new FieldworkStorage(l.dimension().location().toString(),p,id,owner,AccessPolicy.PRIVATE,TransferIntent.DELIVERY,"finite cancelled-link fixture");SupplyFlowData.get(l.getServer()).register(t);return t;}
+    private static FieldworkStorage point(GameTestHelper h,int x,SubjectRef owner){var l=h.getLevel();var p=h.absolutePos(new BlockPos(x,1,5));l.setBlockAndUpdate(p,Blocks.BARREL.defaultBlockState());var id=ProductionContainerIds.resolve(l.getServer(),l.dimension().identifier().toString(),p);RightsStateData.get(l.getServer()).ensureContext(id,"cancel-case:"+p.asLong(),owner,owner,AccessPolicy.PRIVATE);var t=new FieldworkStorage(l.dimension().identifier().toString(),p,id,owner,AccessPolicy.PRIVATE,TransferIntent.DELIVERY,"finite cancelled-link fixture");SupplyFlowData.get(l.getServer()).register(t);return t;}
     private static Fixture fixture(GameTestHelper h,String purpose,int quantity,boolean stock,boolean cancelled){
         var l=h.getLevel();var s=l.getServer();long now=l.getGameTime();for(int x=0;x<20;x++)for(int z=0;z<12;z++)h.setBlock(x,0,z,Blocks.STONE);
         var n=h.spawn(NpcEntityTypes.NPC_BASE.get(),new BlockPos(3,1,3));n.setPersistenceRequired();n.setCommand(NpcCommand.STAY);n.getPersonalInventory().clearContent();n.getTransportInventory().clearContent();var principal=SubjectRef.character(n.getCharacterId());
@@ -97,7 +101,7 @@ public final class CancelledSupplyGameTests {
         }
         com.jgeted.sagadyssey.Sagadyssey.LOGGER.info("CANCEL_CASE_RESULT kind={} tick={} need={} oldOrder={} sourcePhysical={} routes={} reserved={} detail={}",kind,now,f.need().id(),f.order().id(),sourceQty,routes(h,f.need().id()),needs.request(f.need().id()).reserved(),needs.request(f.need().id()).detail());h.succeed();
     }
-    private static NpcBase person(GameTestHelper h,String key){var n=h.getLevel().getEntity(original.getUUID(key));h.assertTrue(n instanceof NpcBase,"original "+key+" body, no replacement");var p=(NpcBase)n;h.assertTrue(p.getCharacterId().equals(original.getUUID(key+"Person")),"same persistent "+key);return p;}
+    private static NpcBase person(GameTestHelper h,String key){var n=h.getLevel().getEntity(original.read(key, UUIDUtil.CODEC).orElseThrow());h.assertTrue(n instanceof NpcBase,"original "+key+" body, no replacement");var p=(NpcBase)n;h.assertTrue(p.getCharacterId().equals(original.read(key+"Person", UUIDUtil.CODEC).orElseThrow()),"same persistent "+key);return p;}
     private static int count(Container c,Item item){int n=0;for(int i=0;i<c.getContainerSize();i++)if(c.getItem(i).is(item))n+=c.getItem(i).getCount();return n;}
     private static void originalInvariant(GameTestHelper h){var s=h.getLevel().getServer();person(h,"Miner");person(h,"Operator");person(h,"Smith");person(h,"Courier");h.assertTrue(ProductionOrderData.get(s).byId(ORIGINAL_CANCELLED).orElseThrow().status()==ProductionOrderStatus.CANCELLED,"original cancelled order history retained");h.assertTrue(SupplyFlowData.get(s).production(ORIGINAL_NEED).equals(ORIGINAL_CANCELLED),"do not delete or replace original linkage");}
     private static boolean usedOriginalPick(NpcBase n){
@@ -106,7 +110,7 @@ public final class CancelledSupplyGameTests {
         return total==1&&worn;
     }
     private static long mined(GameTestHelper h,NpcBase n){return FieldworkData.get(h.getLevel().getServer()).receiptsFor(n.getUUID()).stream().filter(r->r.action().operation()==FieldworkAction.Operation.MINE).count();}
-    private static void save(GameTestHelper h,CompoundTag mark){try{NbtIo.writeCompressed(mark,h.getLevel().getServer().getWorldPath(LevelResource.ROOT).resolve("cancel-recovery-result.nbt"));h.getLevel().getServer().saveEverything(true,false,true);net.neoforged.neoforge.common.IOUtilities.waitUntilIOWorkerComplete();}catch(Exception x){throw new IllegalStateException(x);}}
+    private static void save(GameTestHelper h,CompoundTag mark){try{NbtIo.writeCompressed(mark,h.getLevel().getServer().getWorldPath(LevelResource.ROOT).resolve("cancel-recovery-result.nbt"));h.getLevel().getServer().saveEverything(true,false,true);}catch(Exception x){throw new IllegalStateException(x);}}
     private static void recover(GameTestHelper h){
         if(original==null)throw new IllegalStateException("original failed world's complete copy required");var l=h.getLevel();var s=l.getServer();sprint(h,3000);var seen=new HashSet<UUID>();long[] lastDelivery={-1};
         h.onEachTick(()->{var r=NeedRequestData.get(s).request(ORIGINAL_NEED);if(r.delivered()>0&&lastDelivery[0]<0)lastDelivery[0]=l.getGameTime();for(var route:SupplyFlowData.get(s).routes())if(route.need().equals(ORIGINAL_NEED)&&seen.add(route.id()))com.jgeted.sagadyssey.Sagadyssey.LOGGER.info("CANCEL_ORIGINAL_ROUTE tick={} need={} route={} stage={} quantity={} principal={}",l.getGameTime(),r.id(),route.id(),route.stage(),route.quantity(),route.principal());});
@@ -116,11 +120,11 @@ public final class CancelledSupplyGameTests {
             h.assertTrue(mined(h,n)==6&&l.getBlockState(BASE.offset(8,0,5)).isAir(),"original miner really mines the original remaining stone");
             var rawStore=(Container)l.getBlockEntity(BASE.offset(3,0,8));h.assertTrue(count(n.getPersonalInventory(),Items.COBBLESTONE)+count(rawStore,Items.COBBLESTONE)==1,"one actual new cobblestone exists, not only a receipt");
             h.assertTrue(usedOriginalPick(n),"same newly forged real pick worn once");
-            var tool=FieldworkStorage.load(original.getCompound("ToolStock"));var pantry=FieldworkStorage.load(original.getCompound("Pantry"));h.assertTrue(count(SupplyFlowService.container(s,tool),Items.IRON_PICKAXE)==0&&count(SupplyFlowService.container(s,pantry),Items.IRON_PICKAXE)==0,"original real pick now with miner, no copies in stores");
+            var tool=FieldworkStorage.load(original.getCompoundOrEmpty("ToolStock"));var pantry=FieldworkStorage.load(original.getCompoundOrEmpty("Pantry"));h.assertTrue(count(SupplyFlowService.container(s,tool),Items.IRON_PICKAXE)==0&&count(SupplyFlowService.container(s,pantry),Items.IRON_PICKAXE)==0,"original real pick now with miner, no copies in stores");
             var courier=person(h,"Courier");h.assertTrue(count(courier.getTransportInventory(),Items.IRON_PICKAXE)==0,"original cargo cleared only by true delivery");
             var mark=new CompoundTag();mark.putLong("Started",resumedAt);mark.putLong("Finished",l.getGameTime());mark.putLong("DeliveredAt",lastDelivery[0]);mark.putInt("RouteCount",(int)SupplyFlowData.get(s).routes().stream().filter(r->r.need().equals(ORIGINAL_NEED)).count());mark.putInt("OrderCount",ProductionOrderData.get(s).openOrders().size());save(h,mark);
             com.jgeted.sagadyssey.Sagadyssey.LOGGER.info("CANCEL_ORIGINAL_RECOVERED tick={} started={} elapsed={} miner={} need={} cancelled={} delivered=1 remaining=1 mineReceipts=6 newPickDamage=1 deliveryAt={}",l.getGameTime(),resumedAt,l.getGameTime()-resumedAt,n.getCharacterId(),ORIGINAL_NEED,ORIGINAL_CANCELLED,lastDelivery[0]);
         });
     }
-    private static void restart(GameTestHelper h){if(original==null||result==null)throw new IllegalStateException("complete recovered world required");var l=h.getLevel();sprint(h,1000);h.runAtTickTime(600,()->{originalInvariant(h);var n=person(h,"Miner");var r=NeedRequestData.get(l.getServer()).request(ORIGINAL_NEED);h.assertTrue(r.delivered()==1&&r.remaining()==1&&r.reserved()==0&&r.inTransit()==0,"partial obligation persists, no repeat reward/tool delivery");h.assertTrue(mined(h,n)==6&&usedOriginalPick(n),"same original work and pick after full process restart");h.assertTrue(SupplyFlowData.get(l.getServer()).routes().stream().filter(x->x.need().equals(ORIGINAL_NEED)).count()==result.getInt("RouteCount"),"no duplicate route or assignment");com.jgeted.sagadyssey.Sagadyssey.LOGGER.info("CANCEL_RESTART_ACCEPT tick={} originalMiner={} need={} delivered=1 remaining=1 mineReceipts=6 routes={}",l.getGameTime(),n.getCharacterId(),ORIGINAL_NEED,result.getInt("RouteCount"));h.succeed();});}
+    private static void restart(GameTestHelper h){if(original==null||result==null)throw new IllegalStateException("complete recovered world required");var l=h.getLevel();sprint(h,1000);h.runAtTickTime(600,()->{originalInvariant(h);var n=person(h,"Miner");var r=NeedRequestData.get(l.getServer()).request(ORIGINAL_NEED);h.assertTrue(r.delivered()==1&&r.remaining()==1&&r.reserved()==0&&r.inTransit()==0,"partial obligation persists, no repeat reward/tool delivery");h.assertTrue(mined(h,n)==6&&usedOriginalPick(n),"same original work and pick after full process restart");h.assertTrue(SupplyFlowData.get(l.getServer()).routes().stream().filter(x->x.need().equals(ORIGINAL_NEED)).count()==result.getIntOr("RouteCount", 0),"no duplicate route or assignment");com.jgeted.sagadyssey.Sagadyssey.LOGGER.info("CANCEL_RESTART_ACCEPT tick={} originalMiner={} need={} delivered=1 remaining=1 mineReceipts=6 routes={}",l.getGameTime(),n.getCharacterId(),ORIGINAL_NEED,result.getIntOr("RouteCount", 0));h.succeed();});}
 }

@@ -3,7 +3,7 @@ package com.jgeted.sagadyssey.social.growth;
 import com.jgeted.sagadyssey.core.structure.*;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.world.item.*;
 import net.minecraft.world.level.block.*;
 import net.minecraft.world.level.block.state.BlockState;
@@ -12,8 +12,8 @@ import java.util.*;
 
 /** A bounded design inside the registered v5 parcel, not a general town planner. */
 public final class GrowthLayout {
-    public static final ResourceLocation COORDINATED=ResourceLocation.parse("sagadyssey:vilg_2_coordinated_v6");
-    public static final ResourceLocation TEMPLATE=ResourceLocation.parse("sagadyssey:vilg_2_growth_v5");
+    public static final Identifier COORDINATED=Identifier.parse("sagadyssey:vilg_2_coordinated_v6");
+    public static final Identifier TEMPLATE=Identifier.parse("sagadyssey:vilg_2_growth_v5");
     public static final BlockPos PEN_GATE=new BlockPos(7,1,18), BED_HEAD=new BlockPos(16,1,15);
     public static final int HERD_LIMIT=4, FOOD_RESERVE=64, BUILD_LABOR=40;
     private GrowthLayout() {}

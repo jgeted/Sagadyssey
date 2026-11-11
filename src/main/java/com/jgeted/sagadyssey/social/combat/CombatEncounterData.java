@@ -1,11 +1,13 @@
 package com.jgeted.sagadyssey.social.combat;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.world.level.saveddata.SavedData;
+import com.jgeted.sagadyssey.worldsim.NbtSavedData;
 
 import javax.annotation.Nullable;
 import java.util.HashMap;
@@ -13,7 +15,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
-public final class CombatEncounterData extends SavedData {
+public final class CombatEncounterData extends NbtSavedData {
     private static final String DATA_NAME = "sagadyssey_combat_encounters";
     private static final Factory<CombatEncounterData> FACTORY =
             new Factory<>(CombatEncounterData::new, CombatEncounterData::load);
@@ -23,9 +25,9 @@ public final class CombatEncounterData extends SavedData {
     private final Map<UUID,List<CombatImpact>> frozenByEncounter = new HashMap<>();
 
     public static CombatEncounterData get(MinecraftServer server) {
-        var storage=server.overworld().getDataStorage();var data=storage.get(FACTORY,DATA_NAME);if(data!=null)return data;
+        var storage=server.overworld().getDataStorage();var data=storage.get(FACTORY.type(DATA_NAME));if(data!=null)return data;
         if(java.nio.file.Files.exists(server.getWorldPath(net.minecraft.world.level.storage.LevelResource.ROOT).resolve("data").resolve(DATA_NAME+".dat"))) throw new IllegalStateException("unreadable combat ledger; explicit recovery required");
-        data=new CombatEncounterData();storage.set(DATA_NAME,data);return data;
+        data=new CombatEncounterData();storage.set(FACTORY.type(DATA_NAME),data);return data;
     }
 
     public boolean add(CombatEncounter encounter) {
@@ -59,7 +61,7 @@ public final class CombatEncounterData extends SavedData {
         return frozenByEncounter.containsKey(encounter);
     }
 
-    /** Freeze context, counts and timestamp once. Replaying another SavedData inbox uses exactly this snapshot. */
+    /** Freeze context, counts and timestamp once. Replaying another NbtSavedData inbox uses exactly this snapshot. */
     public List<CombatImpact> freeze(UUID encounter, java.util.function.Supplier<List<CombatImpact>> snapshot) {
         var existing=frozenByEncounter.get(encounter);
         if (existing!=null) return existing;
@@ -88,11 +90,11 @@ public final class CombatEncounterData extends SavedData {
 
     public static CombatEncounterData load(CompoundTag tag, HolderLookup.Provider registries) {
         CombatEncounterData data = new CombatEncounterData();
-        if (tag.contains("Schema") && (!tag.contains("Schema",Tag.TAG_INT)||tag.getInt("Schema")!=1)) throw new IllegalArgumentException("unknown combat schema");
-        if (!(tag.get("Encounters") instanceof ListTag rows)||rows.size()>4096||!rows.isEmpty()&&rows.getElementType()!=Tag.TAG_COMPOUND) throw new IllegalArgumentException("invalid combat ledger");
-        ListTag list = tag.getList("Encounters", Tag.TAG_COMPOUND);
+        if (tag.contains("Schema") && (!MinecraftApi.containsTag(tag, "Schema",Tag.TAG_INT)||tag.getIntOr("Schema", 0)!=1)) throw new IllegalArgumentException("unknown combat schema");
+        if (!(tag.get("Encounters") instanceof ListTag rows)||rows.size()>4096||!rows.isEmpty()&&MinecraftApi.elementType(rows)!=Tag.TAG_COMPOUND) throw new IllegalArgumentException("invalid combat ledger");
+        ListTag list = MinecraftApi.listOfType(tag, "Encounters", Tag.TAG_COMPOUND);
         for (int index = 0; index < list.size(); index++) {
-            CombatEncounter value = CombatEncounter.load(list.getCompound(index));
+            CombatEncounter value = CombatEncounter.load(list.getCompoundOrEmpty(index));
             if(data.encounters.putIfAbsent(value.id(), value)!=null) throw new IllegalArgumentException("duplicate encounter");
             data.index(value);
         }

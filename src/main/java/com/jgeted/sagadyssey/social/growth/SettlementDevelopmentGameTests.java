@@ -1,4 +1,8 @@
 package com.jgeted.sagadyssey.social.growth;
+
+import com.jgeted.sagadyssey.gametest.PortedGameTests.*;
+
+import com.jgeted.sagadyssey.core.MinecraftApi;
 import com.jgeted.sagadyssey.Sagadyssey;
 import com.jgeted.sagadyssey.core.structure.*;
 import com.jgeted.sagadyssey.knowledge.*;
@@ -14,7 +18,7 @@ import net.minecraft.gametest.framework.*;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.Container;
 import net.minecraft.world.item.*;
-import net.minecraft.world.level.GameRules;
+import net.minecraft.world.level.gamerules.GameRules;
 import net.minecraft.world.level.block.Blocks;
 import net.neoforged.neoforge.gametest.*;
 import java.util.*;
@@ -23,25 +27,25 @@ import java.util.*;
 @PrefixGameTestTemplate(false)
 @net.neoforged.fml.common.EventBusSubscriber(modid="sagadyssey")
 public final class SettlementDevelopmentGameTests {
-    private static final net.minecraft.server.level.TicketType<net.minecraft.world.level.ChunkPos> OBSERVER=
-            net.minecraft.server.level.TicketType.create("development-observer",java.util.Comparator.comparingLong(net.minecraft.world.level.ChunkPos::toLong));
+    private static final com.jgeted.sagadyssey.worldsim.ChunkTickets.Kind OBSERVER=
+            com.jgeted.sagadyssey.worldsim.ChunkTickets.kind("development-observer");
     @net.neoforged.bus.api.SubscribeEvent public static void install(net.neoforged.neoforge.event.server.ServerStartedEvent e){
         if(!(e.getServer() instanceof GameTestServer))return;var l=e.getServer().overworld();try{
             if(System.getProperty("sagadyssey.development.phase","").equals("resume")){
                 var world=net.minecraft.nbt.NbtIo.readCompressed(e.getServer().getWorldPath(net.minecraft.world.level.storage.LevelResource.ROOT).resolve("level.dat"),net.minecraft.nbt.NbtAccounter.unlimitedHeap());
                 // GameTest intentionally installs fresh world time; restore the full checkpoint's clock before any original entity tick.
-                e.getServer().getWorldData().overworldData().setGameTime(world.getCompound("Data").getLong("Time")+1);
-                e.getServer().getWorldData().overworldData().setDayTime(world.getCompound("Data").getLong("DayTime")+1);
+                e.getServer().getWorldData().overworldData().setGameTime(world.getCompoundOrEmpty("Data").getLongOr("Time", 0L)+1);
+                e.getServer().getWorldData().overworldData().setDayTime(world.getCompoundOrEmpty("Data").getLongOr("DayTime", 0L)+1);
             }
-            l.getStructureManager().getOrCreate(net.minecraft.resources.ResourceLocation.parse("sagadyssey_development:empty")).load(
-                    l.holderLookup(net.minecraft.core.registries.Registries.BLOCK),net.minecraft.nbt.TagParser.parseTag("{size:[16,8,16],entities:[],blocks:[],palette:[{Name:\"minecraft:air\"}]}"));
+            l.getStructureManager().getOrCreate(net.minecraft.resources.Identifier.parse("sagadyssey_development:empty")).load(
+                    l.holderLookup(net.minecraft.core.registries.Registries.BLOCK),net.minecraft.nbt.TagParser.parseCompoundFully("{size:[16,8,16],entities:[],blocks:[],palette:[{Name:\"minecraft:air\"}]}"));
         }catch(Exception x){throw new IllegalStateException(x);}
     }
     @BeforeBatch(batch="development") public static void setup(ServerLevel l){
         l.getServer().setDifficulty(net.minecraft.world.Difficulty.NORMAL,true);
-        l.getGameRules().getRule(GameRules.RULE_DOMOBSPAWNING).set(false,l.getServer());
-        l.getGameRules().getRule(GameRules.RULE_DAYLIGHT).set(true,l.getServer());
-        l.getGameRules().getRule(GameRules.RULE_RANDOMTICKING).set(3,l.getServer());
+        l.getGameRules().set(GameRules.SPAWN_MOBS, false,l.getServer());
+        l.getGameRules().set(GameRules.ADVANCE_TIME, true,l.getServer());
+        l.getGameRules().set(GameRules.RANDOM_TICK_SPEED, 3,l.getServer());
         l.getServer().tickRateManager().requestGameToSprint(240000);
     }
     @GameTestGenerator public static Collection<TestFunction> tests(){
@@ -58,7 +62,7 @@ public final class SettlementDevelopmentGameTests {
             var d=SettlementDevelopmentData.existing(h.getLevel().getServer());if(d==null||d.site(b.buildingKey())==null)return;
             var row=d.site(b.buildingKey());var homes=HouseholdData.get(h.getLevel().getServer());
             h.assertTrue(homes.byId(NaturalVillageLifeData.home(b)).members().size()==3,"exactly original three people");
-            h.assertTrue(row.getList("Projects",net.minecraft.nbt.Tag.TAG_COMPOUND).isEmpty(),"no invented growth or incoming people");
+            h.assertTrue(MinecraftApi.listOfType(row, "Projects",net.minecraft.nbt.Tag.TAG_COMPOUND).isEmpty(),"no invented growth or incoming people");
             for(int lot=0;lot<2;lot++)for(var bed:SettlementDevelopmentLayout.beds(b,lot))
                 h.assertTrue(h.getLevel().getBlockState(bed).isAir(),"new beds are not prebuilt");
             h.assertTrue(count(NaturalPolityData.inventory(h.getLevel().getServer(),b,3),Items.WHITE_WOOL)==21,"declared finite wool for original and incoming beds");
@@ -74,8 +78,8 @@ public final class SettlementDevelopmentGameTests {
     private static void resume(GameTestHelper h){
         var l=h.getLevel();var d=SettlementDevelopmentData.existing(l.getServer());
         h.assertTrue(d!=null&&d.sites().size()==1,"must recover the prior full world, never recreate the fixture");
-        var target=NaturalVillageLifeData.decode(d.sites().getFirst().getCompound("Village"));
-        var sources=d.applications().stream().map(a->NaturalVillageLifeData.decode(a.getCompound("Source"))).toList();
+        var target=NaturalVillageLifeData.decode(d.sites().getFirst().getCompoundOrEmpty("Village"));
+        var sources=d.applications().stream().map(a->NaturalVillageLifeData.decode(a.getCompoundOrEmpty("Source"))).toList();
         h.assertTrue(sources.size()==2,"same two pending source households");
         var list=List.of(target,sources.get(0),sources.get(1));
         var ticket=OBSERVER;
@@ -84,7 +88,7 @@ public final class SettlementDevelopmentGameTests {
             for(int x=(Math.min(a.getX(),z.getX())>>4)-1;x<=(Math.max(a.getX(),z.getX())>>4)+1;x++)
                 for(int k=(Math.min(a.getZ(),z.getZ())>>4)-1;k<=(Math.max(a.getZ(),z.getZ())>>4)+1;k++){
                     l.setChunkForced(x,k,true);l.getChunk(x,k);var c=new net.minecraft.world.level.ChunkPos(x,k);
-                    l.getChunkSource().addRegionTicket(ticket,c,2,c,true);
+                    com.jgeted.sagadyssey.worldsim.ChunkTickets.add(l.getChunkSource(), ticket,c,2,c,true);
                 }
         }
         Sagadyssey.LOGGER.info("DEVELOPMENT_DIAGNOSTIC_RESUME sameWorld=true originGameTime={} priorProjects={} peopleNotRecreated=true trueUnloadClaimed=false",l.getGameTime(),d.sites().getFirst().get("Projects"));
@@ -95,7 +99,7 @@ public final class SettlementDevelopmentGameTests {
         h.onEachTick(()->{
             var s=l.getServer();var d=SettlementDevelopmentData.existing(s);if(d==null||d.site(target.buildingKey())==null)return;
             if(java.nio.file.Files.exists(s.getServerDirectory().resolve("stop-calibration.flag"))){h.fail("校准由操作者停止，保留失败与完整世界，不计通过");return;}
-            var natural=NaturalVillageLifeData.existing(s);if(villages.stream().anyMatch(b->{var r=natural.village(b.buildingKey());return r==null||!r.getBoolean("Ready");}))return;
+            var natural=NaturalVillageLifeData.existing(s);if(villages.stream().anyMatch(b->{var r=natural.village(b.buildingKey());return r==null||!r.getBooleanOr("Ready", false);}))return;
             long now=l.getGameTime();
             if(started[0]<0){
                 started[0]=now;
@@ -136,7 +140,7 @@ public final class SettlementDevelopmentGameTests {
             var l=h.getLevel();var s=l.getServer();long now=l.getGameTime();var d=SettlementDevelopmentData.existing(s);var villages=List.of(target,source1,source2);
             if((now-started)%2000==0){
                 var r=d.site(target.buildingKey());
-                Sagadyssey.LOGGER.info("DEVELOPMENT_PROGRESS age={} rounds={} projects={} applications={}",now-started,r.getInt("CompletedRounds"),r.get("Projects"),d.applications());
+                Sagadyssey.LOGGER.info("DEVELOPMENT_PROGRESS age={} rounds={} projects={} applications={}",now-started,r.getIntOr("CompletedRounds", 0),r.get("Projects"),d.applications());
                 for(var b:villages)for(int i=0;i<3;i++){
                     var n=NaturalVillageR1GameTests.actor(l,b,i);if(n!=null)Sagadyssey.LOGGER.info("DEVELOPMENT_PERSON id={} pos={} activity={} plan={}",n.getCharacterId(),n.blockPosition(),n.getWorkActivityDetail(),NpcBrainRuntime.data(s).active(n.getUUID()));
                     if(n!=null){
@@ -149,18 +153,18 @@ public final class SettlementDevelopmentGameTests {
                 }
             }
             for(var person:ids)h.assertTrue(CharacterRegistryData.get(s).byId(person)!=null&&CharacterRegistryData.get(s).byId(person).alive(),"original person retained");
-            if(d.site(target.buildingKey()).getInt("CompletedRounds")<2)return;
+            if(d.site(target.buildingKey()).getIntOr("CompletedRounds", 0)<2)return;
             var homes=HouseholdData.get(s).households().stream().filter(home->target.settlementId().equals(home.settlementId())).toList();
             h.assertTrue(homes.size()==3&&homes.stream().mapToInt(home->home.members().size()).sum()==9,"three actual households in destination");
             h.assertTrue(homes.stream().allMatch(home->SettlementDevelopmentData.capacity(s,home).stableFloor()),"per-home stable food and beds");
             for(var from:List.of(source1,source2)){
-                var app=d.application(NaturalVillageLifeData.home(from));h.assertTrue(app.getString("State").equals("STABLE"),"original application completed normally");
-                h.assertTrue(app.getLong("Departed")>=app.getLong("Applied")&&app.getLong("Arrived")>=app.getLong("Departed"),"real application departure and arrival timeline");
+                var app=d.application(NaturalVillageLifeData.home(from));h.assertTrue(app.getStringOr("State", "").equals("STABLE"),"original application completed normally");
+                h.assertTrue(app.getLongOr("Departed", 0L)>=app.getLongOr("Applied", 0L)&&app.getLongOr("Arrived", 0L)>=app.getLongOr("Departed", 0L),"real application departure and arrival timeline");
             }
             Sagadyssey.LOGGER.info("DEVELOPMENT_TWO_ROUNDS_ACCEPT age={} targetPeople=9 distinctOriginalPeople={} worldsReset=false",now-started,ids.size());h.succeed();
     }
     private static net.minecraft.nbt.ListTag NaturalVillageEconomyItems(NpcBase n){
-        return com.jgeted.sagadyssey.worldsim.lod.NaturalVillageEconomyData.items(n.getPersonalInventory(),n.getServer().registryAccess());
+        return com.jgeted.sagadyssey.worldsim.lod.NaturalVillageEconomyData.items(n.getPersonalInventory(),MinecraftApi.server(n).registryAccess());
     }
     /** Declared loaded bounded corridor, no teleport or demand/identity manipulation. */
     static void observeRoute(ServerLevel l,List<NaturalVillageBuilding> villages){
@@ -170,21 +174,21 @@ public final class SettlementDevelopmentGameTests {
         int minX=corners.stream().mapToInt(BlockPos::getX).min().orElseThrow()-2,maxX=corners.stream().mapToInt(BlockPos::getX).max().orElseThrow()+2;
         int minZ=corners.stream().mapToInt(BlockPos::getZ).min().orElseThrow()-2,maxZ=corners.stream().mapToInt(BlockPos::getZ).max().orElseThrow()+2;
         int count=0;for(int x=minX>>4;x<=maxX>>4;x++)for(int z=minZ>>4;z<=maxZ>>4;z++){
-            var c=new net.minecraft.world.level.ChunkPos(x,z);l.setChunkForced(x,z,true);l.getChunk(x,z);l.getChunkSource().addRegionTicket(OBSERVER,c,2,c,true);count++;
+            var c=new net.minecraft.world.level.ChunkPos(x,z);l.setChunkForced(x,z,true);l.getChunk(x,z);com.jgeted.sagadyssey.worldsim.ChunkTickets.add(l.getChunkSource(), OBSERVER,c,2,c,true);count++;
         }
         Sagadyssey.LOGGER.info("DEVELOPMENT_LOADED_CORRIDOR minX={} maxX={} minZ={} maxZ={} chunks={} testConfiguration=true unloadClaimed=false",minX,maxX,minZ,maxZ,count);
     }
     static void releaseObservation(ServerLevel l,List<NaturalVillageBuilding> villages){
         // Capture before visiting(false): it removes forced flags but not our own observer tickets.
-        var observed=l.getForcedChunks().toLongArray();
+        var observed=l.getForceLoadedChunks().toLongArray();
         for(var b:villages)NaturalVillageR1GameTests.visiting(l,b,false);
         for(long value:observed){
             var c=new net.minecraft.world.level.ChunkPos(value);l.setChunkForced(c.x,c.z,false);
-            l.getChunkSource().removeRegionTicket(OBSERVER,c,2,c,true);
+            com.jgeted.sagadyssey.worldsim.ChunkTickets.remove(l.getChunkSource(), OBSERVER,c,2,c,true);
         }
         // Vanilla setChunkForced(false) calls setDirty(false) on a no-op. Bulk overlapping
         // fixture removals must not leave a stale on-disk Forced set after a true unload.
-        var saved=l.getDataStorage().get(net.minecraft.world.level.ForcedChunksSavedData.factory(),"chunks");
+        var saved=l.getDataStorage().get(net.minecraft.world.level.TicketStorage.TYPE);
         if(saved!=null)saved.setDirty();
     }
 }

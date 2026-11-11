@@ -1,5 +1,9 @@
 package com.jgeted.sagadyssey.worldsim.lod;
 
+import com.jgeted.sagadyssey.gametest.PortedGameTests.*;
+
+import com.jgeted.sagadyssey.core.MinecraftApi;
+
 import com.jgeted.sagadyssey.npc.brain.execution.NpcBrainRuntime;
 import com.jgeted.sagadyssey.npc.entity.NpcBase;
 import com.jgeted.sagadyssey.npc.profession.NpcProfession;
@@ -40,8 +44,8 @@ public final class LodPerformanceGameTests {
         h.runAtTickTime(6000+duration,()->{
             if(recording[0]!=null)try(var flight=recording[0]){flight.stop();flight.dump(level.getServer().getWorldPath(net.minecraft.world.level.storage.LevelResource.ROOT).resolve("phase10-profile.jfr"));}catch(java.io.IOException ex){throw new IllegalStateException("save actual tick profiling evidence",ex);}
             for(var n:actors){h.assertTrue(n.isAlive()&&n.tickCount-ticks.get(n.getUUID())>=duration-2,"all hundred actors remained loaded and active throughout the sample");
-                h.assertTrue(n.getPersonalInventory().count(s->s.is(Items.BREAD))<=4&&NpcLifeData.get(n.getServer()).needs(n.getCharacterId()).hunger()<800,"real finite food only, survival still progresses");
-                h.assertTrue(NpcBrainRuntime.data(n.getServer()).history(n.getUUID()).size()<=32,"bounded history");
+                h.assertTrue(n.getPersonalInventory().count(s->s.is(Items.BREAD))<=4&&NpcLifeData.get(MinecraftApi.server(n)).needs(n.getCharacterId()).hunger()<800,"real finite food only, survival still progresses");
+                h.assertTrue(NpcBrainRuntime.data(MinecraftApi.server(n)).history(n.getUUID()).size()<=32,"bounded history");
             }
             for(var d:orders){h.assertTrue(ProductionOrderData.get(level.getServer()).byId(d.id()).orElseThrow().status()==ProductionOrderStatus.COMPLETED,"25 actual orders completed through entity labor");var box=(net.minecraft.world.Container)level.getBlockEntity(d.targetContainerPosition());int outputs=0;for(int i=0;i<box.getContainerSize();i++){var s=box.getItem(i);if(s.is(Items.IRON_PICKAXE))outputs+=s.getCount();}h.assertTrue(outputs==1,"one real output per order, never double settlement");}
             var budget=NpcLodBudgets.planning(level.getServer()).snapshot();var metric=LodMetrics.snapshot(level.getServer(),LodMetrics.Kind.SERVER_TICK);

@@ -42,7 +42,7 @@ public final class NpcResidenceFixtures {
         // 沿床轴偏移一格，正是录像中身体伸出床外的原因。
         BlockPos bed = origin.offset(1, 0, 2).north();
         BlockPos storage = origin.offset(3, 0, 1);
-        String dimension = level.dimension().location().toString();
+        String dimension = level.dimension().identifier().toString();
         if (lifeData.bedAssigned(bed, dimension) || lifeData.privateStorageAssigned(storage, dimension)) {
             return new Result(settlementName + "住宅登记冲突", origin, null, null);
         }

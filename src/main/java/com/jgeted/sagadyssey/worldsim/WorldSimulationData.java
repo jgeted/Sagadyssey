@@ -1,18 +1,20 @@
 package com.jgeted.sagadyssey.worldsim;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.StringTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.world.level.saveddata.SavedData;
+import com.jgeted.sagadyssey.worldsim.NbtSavedData;
 
 import java.util.EnumSet;
 import java.util.Set;
 
 /** Persisted, per-world rollout state for the v2 migration. */
-public final class WorldSimulationData extends SavedData {
+public final class WorldSimulationData extends NbtSavedData {
     public static final String DATA_NAME = "sagadyssey_world_simulation_v2";
     public static final Factory<WorldSimulationData> FACTORY =
             new Factory<>(WorldSimulationData::new, WorldSimulationData::load);
@@ -24,7 +26,7 @@ public final class WorldSimulationData extends SavedData {
     private int lastDryRunIssueCount;
 
     public static WorldSimulationData get(MinecraftServer server) {
-        return server.overworld().getDataStorage().computeIfAbsent(FACTORY, DATA_NAME);
+        return server.overworld().getDataStorage().computeIfAbsent(FACTORY.type(DATA_NAME));
     }
 
     public int sourceSchemaVersion() { return sourceSchemaVersion; }
@@ -70,21 +72,21 @@ public final class WorldSimulationData extends SavedData {
     private static WorldSimulationData load(CompoundTag tag, HolderLookup.Provider registries) {
         WorldSimulationData data = new WorldSimulationData();
         data.sourceSchemaVersion = tag.contains("SourceSchemaVersion")
-                ? tag.getInt("SourceSchemaVersion") : WorldSimulationSchema.LEGACY_VERSION;
+                ? tag.getIntOr("SourceSchemaVersion", 0) : WorldSimulationSchema.LEGACY_VERSION;
         EnumSet<WorldSimulationFeature> loaded = EnumSet.noneOf(WorldSimulationFeature.class);
-        ListTag featureTags = tag.getList("EnabledFeatures", Tag.TAG_STRING);
+        ListTag featureTags = MinecraftApi.listOfType(tag, "EnabledFeatures", Tag.TAG_STRING);
         for (int index = 0; index < featureTags.size(); index++) {
-            WorldSimulationFeature feature = WorldSimulationFeature.byKey(featureTags.getString(index));
+            WorldSimulationFeature feature = WorldSimulationFeature.byKey(featureTags.getStringOr(index, ""));
             if (feature != null) loaded.add(feature);
         }
         for (WorldSimulationFeature feature : WorldSimulationFeature.values()) {
             if (!loaded.contains(feature)) continue;
             data.features.enable(feature);
         }
-        data.lastDryRunDigest = tag.getString("LastDryRunDigest");
+        data.lastDryRunDigest = tag.getStringOr("LastDryRunDigest", "");
         data.lastDryRunGameTime = tag.contains("LastDryRunGameTime")
-                ? tag.getLong("LastDryRunGameTime") : -1L;
-        data.lastDryRunIssueCount = tag.getInt("LastDryRunIssueCount");
+                ? tag.getLongOr("LastDryRunGameTime", 0L) : -1L;
+        data.lastDryRunIssueCount = tag.getIntOr("LastDryRunIssueCount", 0);
         return data;
     }
 }

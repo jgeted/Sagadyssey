@@ -1,5 +1,7 @@
 package com.jgeted.sagadyssey.social.needs;
 
+import com.jgeted.sagadyssey.gametest.PortedGameTests.*;
+
 import static com.jgeted.sagadyssey.social.needs.HouseholdStockReconciliationGameTests.*;
 import com.jgeted.sagadyssey.social.household.HouseholdData;
 import com.jgeted.sagadyssey.worldsim.rights.*;
@@ -170,7 +172,7 @@ public final class HouseholdSupplyDestinationGameTests {
             var restored=SupplyFlowData.load(flows.save(new CompoundTag(),server.registryAccess()),server.registryAccess());
             h.assertTrue(restored.route(originalRoute.id()).destination().equals(original.key().destination()),"serialized route still identifies original destination");
             conserved(h,f,inventory);
-            h.assertTrue(SupplyFlowService.count((Container)h.getBlockEntity(new BlockPos(14,1,11)),original.key().item())==0,
+            h.assertTrue(SupplyFlowService.count((Container)com.jgeted.sagadyssey.gametest.PortedGameTests.blockEntity(h, new BlockPos(14,1,11)),original.key().item())==0,
                     "new pantry receives no remote or copied cargo");
         });
     }

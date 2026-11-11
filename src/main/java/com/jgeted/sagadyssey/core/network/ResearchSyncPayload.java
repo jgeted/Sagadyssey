@@ -6,7 +6,7 @@ import com.jgeted.sagadyssey.core.research.ClientResearchCache;
 import io.netty.buffer.ByteBuf;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
 
 import java.util.HashSet;
@@ -18,7 +18,7 @@ import java.util.Set;
 public record ResearchSyncPayload(int points, Set<String> unlocked) implements CustomPacketPayload {
 
     public static final Type<ResearchSyncPayload> TYPE = new Type<>(
-            ResourceLocation.fromNamespaceAndPath(Sagadyssey.MOD_ID, "research_sync")
+            Identifier.fromNamespaceAndPath(Sagadyssey.MOD_ID, "research_sync")
     );
 
     public static final StreamCodec<ByteBuf, ResearchSyncPayload> STREAM_CODEC = StreamCodec.of(

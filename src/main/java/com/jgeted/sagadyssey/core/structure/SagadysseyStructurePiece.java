@@ -3,7 +3,7 @@ package com.jgeted.sagadyssey.core.structure;
 import com.jgeted.sagadyssey.Sagadyssey;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.StructureManager;
@@ -32,10 +32,10 @@ import java.util.Optional;
 public class SagadysseyStructurePiece extends StructurePiece {
     private static final Logger LOGGER = LoggerFactory.getLogger(Sagadyssey.MOD_ID);
 
-    private final ResourceLocation templateLocation;
+    private final Identifier templateLocation;
     private final Rotation rotation;
 
-    public SagadysseyStructurePiece(ResourceLocation templateLocation, BlockPos pos, Rotation rotation) {
+    public SagadysseyStructurePiece(Identifier templateLocation, BlockPos pos, Rotation rotation) {
         super(SagadysseyStructures.STRUCTURE_PIECE_TYPE.get(), 0, makeBoundingBox(templateLocation, pos, rotation));
         this.templateLocation = templateLocation;
         this.rotation = rotation;
@@ -44,8 +44,8 @@ public class SagadysseyStructurePiece extends StructurePiece {
     /** NBT 反序列化构造器 */
     public SagadysseyStructurePiece(CompoundTag tag) {
         super(SagadysseyStructures.STRUCTURE_PIECE_TYPE.get(), tag);
-        this.templateLocation = ResourceLocation.parse(tag.getString("Template"));
-        this.rotation = Rotation.valueOf(tag.getString("Rot"));
+        this.templateLocation = Identifier.parse(tag.getStringOr("Template", ""));
+        this.rotation = Rotation.valueOf(tag.getStringOr("Rot", ""));
     }
 
     @Override
@@ -89,7 +89,7 @@ public class SagadysseyStructurePiece extends StructurePiece {
         String structureId = templateLocation.getPath();
         String category = config == null ? "unknown" : config.getCategory();
         String size = config == null ? "unknown" : config.getSize();
-        String dimension = serverLevel.dimension().location().toString();
+        String dimension = serverLevel.dimension().identifier().toString();
         BlockPos registeredPos = placePos.immutable();
         long gameTime = serverLevel.getGameTime();
         serverLevel.getServer().execute(() -> SettlementRegistryData.get(serverLevel.getServer())
@@ -99,7 +99,7 @@ public class SagadysseyStructurePiece extends StructurePiece {
         LOGGER.debug("已放置结构: {} at {}", templateLocation, placePos);
     }
 
-    private static BoundingBox makeBoundingBox(ResourceLocation templateLocation, BlockPos origin, Rotation rotation) {
+    private static BoundingBox makeBoundingBox(Identifier templateLocation, BlockPos origin, Rotation rotation) {
         // 先用占位尺寸，实际放置时模板会自动适配
         int size = 32;
         return new BoundingBox(

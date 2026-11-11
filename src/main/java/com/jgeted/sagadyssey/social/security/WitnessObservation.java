@@ -1,5 +1,7 @@
 package com.jgeted.sagadyssey.social.security;
 
+import net.minecraft.core.UUIDUtil;
+
 import com.jgeted.sagadyssey.worldsim.rights.SubjectRef;
 import net.minecraft.nbt.CompoundTag;
 
@@ -19,7 +21,7 @@ public record WitnessObservation(UUID id, SubjectRef witness,
 
     CompoundTag save() {
         CompoundTag tag = new CompoundTag();
-        tag.putUUID("Id", id);
+        tag.store("Id", UUIDUtil.CODEC, id);
         tag.put("Witness", witness.save());
         if (allegedOffender != null) tag.put("AllegedOffender", allegedOffender.save());
         tag.putInt("Confidence", confidence);
@@ -30,11 +32,11 @@ public record WitnessObservation(UUID id, SubjectRef witness,
     }
 
     static WitnessObservation load(CompoundTag tag) {
-        return new WitnessObservation(tag.getUUID("Id"),
-                SubjectRef.load(tag.getCompound("Witness")),
+        return new WitnessObservation(tag.read("Id", UUIDUtil.CODEC).orElseThrow(),
+                SubjectRef.load(tag.getCompoundOrEmpty("Witness")),
                 tag.contains("AllegedOffender")
-                        ? SubjectRef.load(tag.getCompound("AllegedOffender")) : null,
-                tag.getInt("Confidence"), tag.getLong("ObservedAt"),
-                tag.getLong("ReportedAt"), tag.getString("Account"));
+                        ? SubjectRef.load(tag.getCompoundOrEmpty("AllegedOffender")) : null,
+                tag.getIntOr("Confidence", 0), tag.getLongOr("ObservedAt", 0L),
+                tag.getLongOr("ReportedAt", 0L), tag.getStringOr("Account", ""));
     }
 }

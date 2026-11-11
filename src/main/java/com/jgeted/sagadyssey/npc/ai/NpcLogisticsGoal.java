@@ -28,7 +28,7 @@ import com.jgeted.sagadyssey.worldsim.transfer.TransferRequest;
 import com.jgeted.sagadyssey.worldsim.transfer.TransferService;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.Container;
 import net.minecraft.world.entity.ai.goal.Goal;
@@ -68,7 +68,7 @@ public final class NpcLogisticsGoal extends Goal {
     @Override
     public boolean canUse() {
         if (com.jgeted.sagadyssey.npc.brain.execution.NpcBrainRuntime.isPlanned(npc)) return false;
-        if (npc.level().isClientSide || !npc.isAlive()) return false;
+        if (npc.level().isClientSide() || !npc.isAlive()) return false;
         if (!isTransportProfession() || npc.getCommand() != NpcCommand.WORK
                 || npc.getTransportSlotLimit() <= 0
                 || !com.jgeted.sagadyssey.social.life.NpcSchedulePlanner.allowsWork(npc)) return false;
@@ -78,7 +78,7 @@ public final class NpcLogisticsGoal extends Goal {
         ServerLevel level = (ServerLevel) npc.level();
         LogisticsData data = LogisticsData.get(level.getServer());
         LogisticsOrderRecord order = data.claimNextOrder(npc.getCharacterId(), workContext,
-                level.dimension().location().toString(), level.getGameTime());
+                level.dimension().identifier().toString(), level.getGameTime());
         if (order == null) {
             npc.reportWorkActivity("物流等待", null,
                     workContext.describe() + "；当前没有可领取订单");
@@ -131,7 +131,7 @@ public final class NpcLogisticsGoal extends Goal {
         data.touchOrder(order.id(), npc.getCharacterId(), level.getGameTime());
         WarehouseRecord warehouse = data.warehouse(stage == Stage.TO_SOURCE
                 ? order.sourceWarehouseId() : order.destinationWarehouseId());
-        if (warehouse == null || !warehouse.dimension().equals(level.dimension().location().toString())) {
+        if (warehouse == null || !warehouse.dimension().equals(level.dimension().identifier().toString())) {
             finished = true;
             return;
         }
@@ -188,7 +188,7 @@ public final class NpcLogisticsGoal extends Goal {
         Container container = containerAt(level, pos);
         if (container == null) return;
 
-        Item item = BuiltInRegistries.ITEM.get(ResourceLocation.parse(order.itemId()));
+        Item item = BuiltInRegistries.ITEM.getValue(Identifier.parse(order.itemId()));
         if (stage == Stage.TO_SOURCE) {
             int moved = transferOrderItems(level, order, warehouse, container, item, true);
             if (moved <= 0) return;
@@ -299,7 +299,7 @@ public final class NpcLogisticsGoal extends Goal {
                 ? new org.joml.Vector3f(1.0F, 0.78F, 0.18F)
                 : new org.joml.Vector3f(0.18F, 0.85F, 1.0F);
         net.minecraft.core.particles.DustParticleOptions particle =
-                new net.minecraft.core.particles.DustParticleOptions(color, 0.7F);
+                new net.minecraft.core.particles.DustParticleOptions(com.jgeted.sagadyssey.core.MinecraftApi.particleColor(color), 0.7F);
         if (npc.getActiveOwner() instanceof net.minecraft.server.level.ServerPlayer owner) {
             if (owner.level() == level && owner.distanceToSqr(npc) <= 96.0D * 96.0D) {
                 drawRouteLine(level, owner, particle, start, step);
@@ -320,7 +320,7 @@ public final class NpcLogisticsGoal extends Goal {
                                       net.minecraft.world.phys.Vec3 step) {
         for (int i = 1; i <= 6; i++) {
             net.minecraft.world.phys.Vec3 point = start.add(step.scale(i));
-            level.sendParticles(player, particle, true, point.x, point.y, point.z,
+            level.sendParticles(player, particle, true, false, point.x, point.y, point.z,
                     1, 0.0D, 0.0D, 0.0D, 0.0D);
         }
     }
@@ -345,9 +345,9 @@ public final class NpcLogisticsGoal extends Goal {
     }
 
     private int cargoCount(String itemId) {
-        ResourceLocation id = ResourceLocation.tryParse(itemId);
+        Identifier id = Identifier.tryParse(itemId);
         if (id == null) return 0;
-        Item item = BuiltInRegistries.ITEM.get(id);
+        Item item = BuiltInRegistries.ITEM.getValue(id);
         int count = 0;
         int slots = Math.min(npc.getTransportSlotLimit(), npc.getTransportInventory().getContainerSize());
         for (int slot = 0; slot < slots; slot++) {

@@ -10,7 +10,7 @@ import com.mojang.blaze3d.vertex.VertexConsumer;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.LevelRenderer;
 import net.minecraft.client.renderer.MultiBufferSource;
-import net.minecraft.client.renderer.RenderType;
+import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.phys.AABB;
@@ -28,8 +28,7 @@ public final class CommandSelectionRenderer {
     private CommandSelectionRenderer() {}
 
     @SubscribeEvent
-    public static void render(RenderLevelStageEvent event) {
-        if (event.getStage() != RenderLevelStageEvent.Stage.AFTER_ENTITIES) return;
+    public static void render(RenderLevelStageEvent.AfterEntities event) {
         Minecraft mc = Minecraft.getInstance();
         if (mc.player == null || mc.level == null) return;
         if (!mc.player.getMainHandItem().is(ModItems.NPC_COMMAND_WAND.get())
@@ -37,9 +36,9 @@ public final class CommandSelectionRenderer {
 
         CommandGroupSyncPayload snapshot = ClientCommandGroupState.snapshot();
         PoseStack pose = event.getPoseStack();
-        Vec3 camera = event.getCamera().getPosition();
+        Vec3 camera = event.getLevelRenderState().cameraRenderState.pos;
         MultiBufferSource.BufferSource buffers = mc.renderBuffers().bufferSource();
-        VertexConsumer lines = buffers.getBuffer(RenderType.lines());
+        VertexConsumer lines = buffers.getBuffer(net.minecraft.client.renderer.rendertype.RenderTypes.lines());
         pose.pushPose();
         pose.translate(-camera.x, -camera.y, -camera.z);
 
@@ -51,9 +50,9 @@ public final class CommandSelectionRenderer {
             float g = ((member.color() >> 8) & 0xFF) / 255.0F;
             float b = (member.color() & 0xFF) / 255.0F;
             AABB box = entity.getBoundingBox().inflate(member.selected() ? 0.13 : 0.05);
-            LevelRenderer.renderLineBox(pose, lines, box, r, g, b, member.selected() ? 1.0F : 0.45F);
+            lineBox(pose, lines, box, r, g, b, member.selected() ? 1.0F : 0.45F);
             if (member.selected()) {
-                LevelRenderer.renderLineBox(pose, lines, box.inflate(0.06), 1.0F, 1.0F, 1.0F, 0.85F);
+                lineBox(pose, lines, box.inflate(0.06), 1.0F, 1.0F, 1.0F, 0.85F);
             }
         }
 
@@ -68,10 +67,18 @@ public final class CommandSelectionRenderer {
             float r = ((color >> 16) & 0xFF) / 255.0F;
             float g = ((color >> 8) & 0xFF) / 255.0F;
             float bl = (color & 0xFF) / 255.0F;
-            LevelRenderer.renderLineBox(pose, lines, region, r, g, bl, 1.0F);
+            lineBox(pose, lines, region, r, g, bl, 1.0F);
         }
         pose.popPose();
-        buffers.endBatch(RenderType.lines());
+        buffers.endBatch(net.minecraft.client.renderer.rendertype.RenderTypes.lines());
+    }
+
+    private static void lineBox(PoseStack pose, VertexConsumer consumer, AABB box,
+            float red, float green, float blue, float alpha) {
+        int argb = Math.round(alpha * 255) << 24 | Math.round(red * 255) << 16
+                | Math.round(green * 255) << 8 | Math.round(blue * 255);
+        net.minecraft.client.renderer.ShapeRenderer.renderShape(pose, consumer,
+                net.minecraft.world.phys.shapes.Shapes.create(box), 0, 0, 0, argb, 1.0F);
     }
 
     private static UUID parseUuid(String value) {

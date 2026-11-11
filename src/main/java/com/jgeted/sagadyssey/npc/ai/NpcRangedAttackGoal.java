@@ -6,7 +6,7 @@ import net.minecraft.sounds.SoundEvents;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.ai.goal.Goal;
 import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.entity.projectile.AbstractArrow;
+import net.minecraft.world.entity.projectile.arrow.AbstractArrow;
 import net.minecraft.world.entity.projectile.ProjectileUtil;
 import net.minecraft.world.item.ArrowItem;
 import net.minecraft.world.item.BowItem;
@@ -170,7 +170,7 @@ public class NpcRangedAttackGoal extends Goal {
         ItemStack ammo = getAmmoStack();
         if(ammo.isEmpty()){npc.stopUsingItem();return;}
         AbstractArrow arrow = ProjectileUtil.getMobArrow(npc, ammo, power, bow);
-        arrow.setBaseDamage(arrow.getBaseDamage() * npc.getMoraleDamageMultiplier());
+        arrow.setBaseDamage(((com.jgeted.sagadyssey.mixin.AbstractArrowDamageAccessor) arrow).sagadyssey$getBaseDamage() * npc.getMoraleDamageMultiplier());
 
         double d0 = target.getX() - npc.getX();
         double d1 = target.getY(0.3333333333333333) - arrow.getY();
@@ -222,7 +222,7 @@ public class NpcRangedAttackGoal extends Goal {
         }
 
         AbstractArrow arrow = ProjectileUtil.getMobArrow(npc, ammo, 1.0F, crossbow);
-        arrow.setBaseDamage(arrow.getBaseDamage() * npc.getMoraleDamageMultiplier());
+        arrow.setBaseDamage(((com.jgeted.sagadyssey.mixin.AbstractArrowDamageAccessor) arrow).sagadyssey$getBaseDamage() * npc.getMoraleDamageMultiplier());
         double dx = target.getX() - npc.getX();
         double dy = target.getY(0.3333333333333333D) - arrow.getY();
         double dz = target.getZ() - npc.getZ();

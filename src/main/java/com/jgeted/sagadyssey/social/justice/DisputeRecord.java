@@ -1,5 +1,8 @@
 package com.jgeted.sagadyssey.social.justice;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+import net.minecraft.core.UUIDUtil;
+
 import com.jgeted.sagadyssey.worldsim.rights.SubjectRef;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
@@ -47,9 +50,9 @@ public record DisputeRecord(UUID id, UUID forumInstitutionId, UUID settlementId,
 
     CompoundTag save() {
         CompoundTag tag = new CompoundTag();
-        tag.putUUID("Id", id);
-        tag.putUUID("Forum", forumInstitutionId);
-        tag.putUUID("Settlement", settlementId);
+        tag.store("Id", UUIDUtil.CODEC, id);
+        tag.store("Forum", UUIDUtil.CODEC, forumInstitutionId);
+        tag.store("Settlement", UUIDUtil.CODEC, settlementId);
         tag.put("Claimant", claimant.save());
         tag.put("Respondent", respondent.save());
         tag.putString("Type", type.name());
@@ -63,26 +66,26 @@ public record DisputeRecord(UUID id, UUID forumInstitutionId, UUID settlementId,
         tag.putLong("DecidedAt", decidedAt);
         tag.putString("Decision", decision);
         tag.putString("Sanction", sanction.name());
-        if (enforcementRecordId != null) tag.putUUID("Enforcement", enforcementRecordId);
+        if (enforcementRecordId != null) tag.store("Enforcement", UUIDUtil.CODEC, enforcementRecordId);
         tag.putInt("Revision", revision);
         return tag;
     }
 
     static DisputeRecord load(CompoundTag tag) {
         List<EvidenceRef> evidence = new ArrayList<>();
-        ListTag evidenceTags = tag.getList("Evidence", Tag.TAG_COMPOUND);
+        ListTag evidenceTags = MinecraftApi.listOfType(tag, "Evidence", Tag.TAG_COMPOUND);
         for (int index = 0; index < evidenceTags.size(); index++) {
-            evidence.add(EvidenceRef.load(evidenceTags.getCompound(index)));
+            evidence.add(EvidenceRef.load(evidenceTags.getCompoundOrEmpty(index)));
         }
-        return new DisputeRecord(tag.getUUID("Id"), tag.getUUID("Forum"),
-                tag.getUUID("Settlement"), SubjectRef.load(tag.getCompound("Claimant")),
-                SubjectRef.load(tag.getCompound("Respondent")),
-                DisputeType.valueOf(tag.getString("Type")), tag.getString("Claim"), evidence,
-                tag.getLong("FiledAt"), DisputeStatus.valueOf(tag.getString("Status")),
-                tag.contains("DecidedBy") ? SubjectRef.load(tag.getCompound("DecidedBy")) : null,
-                tag.getLong("DecidedAt"), tag.getString("Decision"),
-                JudgmentSanction.valueOf(tag.getString("Sanction")),
-                tag.hasUUID("Enforcement") ? tag.getUUID("Enforcement") : null,
-                tag.getInt("Revision"));
+        return new DisputeRecord(tag.read("Id", UUIDUtil.CODEC).orElseThrow(), tag.read("Forum", UUIDUtil.CODEC).orElseThrow(),
+                tag.read("Settlement", UUIDUtil.CODEC).orElseThrow(), SubjectRef.load(tag.getCompoundOrEmpty("Claimant")),
+                SubjectRef.load(tag.getCompoundOrEmpty("Respondent")),
+                DisputeType.valueOf(tag.getStringOr("Type", "")), tag.getStringOr("Claim", ""), evidence,
+                tag.getLongOr("FiledAt", 0L), DisputeStatus.valueOf(tag.getStringOr("Status", "")),
+                tag.contains("DecidedBy") ? SubjectRef.load(tag.getCompoundOrEmpty("DecidedBy")) : null,
+                tag.getLongOr("DecidedAt", 0L), tag.getStringOr("Decision", ""),
+                JudgmentSanction.valueOf(tag.getStringOr("Sanction", "")),
+                tag.read("Enforcement", UUIDUtil.CODEC).isPresent() ? tag.read("Enforcement", UUIDUtil.CODEC).orElseThrow() : null,
+                tag.getIntOr("Revision", 0));
     }
 }

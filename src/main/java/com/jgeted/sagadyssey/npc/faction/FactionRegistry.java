@@ -4,7 +4,7 @@ import com.jgeted.sagadyssey.Sagadyssey;
 import net.minecraft.core.Registry;
 import net.minecraft.core.RegistryAccess;
 import net.minecraft.resources.ResourceKey;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.world.level.Level;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.neoforge.registries.DataPackRegistryEvent;
@@ -32,7 +32,7 @@ public final class FactionRegistry {
     /** Registry 的 ResourceKey */
     public static final ResourceKey<Registry<Faction>> KEY =
             ResourceKey.createRegistryKey(
-                    ResourceLocation.fromNamespaceAndPath(Sagadyssey.MOD_ID, "faction")
+                    Identifier.fromNamespaceAndPath(Sagadyssey.MOD_ID, "faction")
             );
 
     /** player 阵营的硬编码兜底（Registry 未加载或 JSON 丢失时使用） */
@@ -43,7 +43,7 @@ public final class FactionRegistry {
             100,
             false,   // canBeHostile
             false,   // canRecruit
-            ResourceLocation.fromNamespaceAndPath(Sagadyssey.MOD_ID, "textures/gui/faction/player.png"),
+            Identifier.fromNamespaceAndPath(Sagadyssey.MOD_ID, "textures/gui/faction/player.png"),
             Optional.empty(),
             Optional.of(new int[]{200, 200}),
             1.0f,
@@ -72,7 +72,7 @@ public final class FactionRegistry {
      * 同时更新全局缓存（如有数据）。
      */
     public static Registry<Faction> fromRegistryAccess(RegistryAccess access) {
-        Registry<Faction> reg = access.registryOrThrow(KEY);
+        Registry<Faction> reg = access.lookupOrThrow(KEY);
         if (reg.size() > 0) {
             cachedRegistry = reg;
         }
@@ -104,7 +104,7 @@ public final class FactionRegistry {
             return cachedRegistry;
         }
         // 客户端：从当前 level 获取
-        if (net.neoforged.fml.loading.FMLEnvironment.dist != net.neoforged.api.distmarker.Dist.CLIENT) {
+        if (net.neoforged.fml.loading.FMLLoader.getCurrent().getDist() != net.neoforged.api.distmarker.Dist.CLIENT) {
             var server = net.neoforged.neoforge.server.ServerLifecycleHooks.getCurrentServer();
             return server == null ? cachedRegistry : fromRegistryAccess(server.registryAccess());
         }
@@ -120,16 +120,16 @@ public final class FactionRegistry {
 
     // === 便捷查询 ===
 
-    public static Optional<Faction> getOptional(ResourceLocation id) {
+    public static Optional<Faction> getOptional(Identifier id) {
         Registry<Faction> reg = getActiveRegistry();
         if (reg == null) return Optional.empty();
         return reg.getOptional(id);
     }
 
-    public static Faction get(ResourceLocation id) {
+    public static Faction get(Identifier id) {
         Registry<Faction> reg = getActiveRegistry();
         if (reg == null) return null;
-        return reg.get(id);
+        return reg.getValue(id);
     }
 
     /**
@@ -139,13 +139,13 @@ public final class FactionRegistry {
     public static Faction get(String id) {
         Registry<Faction> reg = getActiveRegistry();
         if (reg == null) return null;
-        ResourceLocation rl = ResourceLocation.tryParse(id);
+        Identifier rl = Identifier.tryParse(id);
         if (rl == null) return null;
         // 无命名空间时默认补全为 sagadyssey:
         if (rl.getNamespace().equals("minecraft") && !id.contains(":")) {
-            rl = ResourceLocation.fromNamespaceAndPath(Sagadyssey.MOD_ID, rl.getPath());
+            rl = Identifier.fromNamespaceAndPath(Sagadyssey.MOD_ID, rl.getPath());
         }
-        return reg.get(rl);
+        return reg.getValue(rl);
     }
 
     public static Collection<Faction> getAllFactions() {
@@ -176,8 +176,8 @@ public final class FactionRegistry {
         if (cachedRegistry == null) {
             return PLAYER_FALLBACK;
         }
-        Faction fromRegistry = cachedRegistry.get(
-                ResourceLocation.fromNamespaceAndPath(Sagadyssey.MOD_ID, "player"));
+        Faction fromRegistry = cachedRegistry.getValue(
+                Identifier.fromNamespaceAndPath(Sagadyssey.MOD_ID, "player"));
         if (fromRegistry != null) {
             return fromRegistry;
         }

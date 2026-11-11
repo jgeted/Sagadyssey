@@ -21,8 +21,8 @@ public final class NaturalVillageDiscoveryGameTests {
     @SubscribeEvent public static void start(ServerStartedEvent e){
         if(!enabled())return;var server=e.getServer();var l=server.overworld();
         if(l.getChunkSource().getGenerator() instanceof net.minecraft.world.level.levelgen.FlatLevelSource||!server.getWorldData().worldGenOptions().generateStructures())throw new IllegalStateException("Normal terrain with structure generation required");
-        var registry=l.registryAccess().registryOrThrow(Registries.STRUCTURE);
-        var holder=registry.getHolderOrThrow(net.minecraft.resources.ResourceKey.create(Registries.STRUCTURE,NaturalVillageBuilding.SUPPORTED));
+        var registry=l.registryAccess().lookupOrThrow(Registries.STRUCTURE);
+        var holder=registry.getOrThrow(net.minecraft.resources.ResourceKey.create(Registries.STRUCTURE,NaturalVillageBuilding.SUPPORTED));
         var found=l.getChunkSource().getGenerator().findNearestMapStructure(l,HolderSet.direct(holder),BlockPos.ZERO,24,false);
         if(found==null)throw new IllegalStateException("Supported natural village not found in frozen discovery region");
         located=found.getFirst();var cp=new ChunkPos(located);
@@ -36,7 +36,7 @@ public final class NaturalVillageDiscoveryGameTests {
         if(elapsed<200||elapsed%20!=0)return;
         var data=NaturalVillageLifeData.existing(server);
         if(data!=null)for(var v:data.villages()){
-            var b=NaturalVillageLifeData.decode(v);if(b.settlementCenter().distSqr(located)>128*128||!v.getBoolean("Ready"))continue;
+            var b=NaturalVillageLifeData.decode(v);if(b.settlementCenter().distSqr(located)>128*128||!v.getBooleanOr("Ready", false))continue;
             if(SettlementRegistryData.get(server).building(b.buildingKey())==null)throw new IllegalStateException("Natural identity absent");
             for(int i=0;i<3;i++)if(!(l.getEntity(NaturalVillageLifeData.body(b,i)) instanceof com.jgeted.sagadyssey.npc.entity.NpcBase n)||!n.getCharacterId().equals(NaturalVillageLifeData.person(b,i)))throw new IllegalStateException("Natural resident missing");
             try{var marker=new CompoundTag();marker.putLong("Seed",server.getWorldData().worldGenOptions().seed());marker.putLong("Located",located.asLong());marker.put("Village",v);NbtIo.writeCompressed(marker,server.getWorldPath(LevelResource.ROOT).resolve("society-r1-natural-discovery.nbt"));server.saveEverything(true,true,true);}

@@ -1,5 +1,7 @@
 package com.jgeted.sagadyssey.social.market;
 
+import net.minecraft.core.UUIDUtil;
+
 import com.jgeted.sagadyssey.worldsim.rights.ItemFingerprint;
 import com.jgeted.sagadyssey.worldsim.rights.SubjectRef;
 import net.minecraft.nbt.CompoundTag;
@@ -32,10 +34,10 @@ public record AppraisalRecord(UUID markId, SubjectRef appraiser, SubjectRef owne
 
     CompoundTag save() {
         CompoundTag tag = new CompoundTag();
-        tag.putUUID("Mark", markId);
+        tag.store("Mark", UUIDUtil.CODEC, markId);
         tag.put("Appraiser", appraiser.save());
         tag.put("Owner", owner.save());
-        tag.putUUID("Container", containerId);
+        tag.store("Container", UUIDUtil.CODEC, containerId);
         tag.putInt("Slot", slot);
         tag.put("Fingerprint", fingerprint.save());
         tag.putInt("Count", measuredCount);
@@ -44,17 +46,17 @@ public record AppraisalRecord(UUID markId, SubjectRef appraiser, SubjectRef owne
         tag.putString("Grade", grade.name());
         tag.putLong("IssuedAt", issuedAt);
         tag.putLong("ExpiresAt", expiresAt);
-        tag.putUUID("Signature", signature);
+        tag.store("Signature", UUIDUtil.CODEC, signature);
         return tag;
     }
 
     static AppraisalRecord load(CompoundTag tag) {
-        return new AppraisalRecord(tag.getUUID("Mark"),
-                SubjectRef.load(tag.getCompound("Appraiser")),
-                SubjectRef.load(tag.getCompound("Owner")), tag.getUUID("Container"),
-                tag.getInt("Slot"), ItemFingerprint.load(tag.getCompound("Fingerprint")),
-                tag.getInt("Count"), tag.getInt("Damage"), tag.getInt("MaximumDamage"),
-                QualityGrade.valueOf(tag.getString("Grade")), tag.getLong("IssuedAt"),
-                tag.getLong("ExpiresAt"), tag.getUUID("Signature"));
+        return new AppraisalRecord(tag.read("Mark", UUIDUtil.CODEC).orElseThrow(),
+                SubjectRef.load(tag.getCompoundOrEmpty("Appraiser")),
+                SubjectRef.load(tag.getCompoundOrEmpty("Owner")), tag.read("Container", UUIDUtil.CODEC).orElseThrow(),
+                tag.getIntOr("Slot", 0), ItemFingerprint.load(tag.getCompoundOrEmpty("Fingerprint")),
+                tag.getIntOr("Count", 0), tag.getIntOr("Damage", 0), tag.getIntOr("MaximumDamage", 0),
+                QualityGrade.valueOf(tag.getStringOr("Grade", "")), tag.getLongOr("IssuedAt", 0L),
+                tag.getLongOr("ExpiresAt", 0L), tag.read("Signature", UUIDUtil.CODEC).orElseThrow());
     }
 }

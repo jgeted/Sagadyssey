@@ -18,9 +18,9 @@ public final class LodP8DiagnosticGameTests {
         if(!enabled()||!(e.getServer() instanceof net.minecraft.gametest.framework.GameTestServer))return;
         var s=e.getServer();if(System.getProperty("sagadyssey.society.phase","").equals("r2-cargo")&&s.getTickCount()>40&&started.add(s))s.getCommands().performPrefixedCommand(s.createCommandSourceStack().withSuppressedOutput(),"tick rate 200");
         if(s.getTickCount()%500!=0)return;var d=NaturalVillageEconomyData.existing(s);if(d==null)return;
-        for(var r:d.rows()){var b=NaturalVillageLifeData.decode(r.getCompound("Village"));var l=s.overworld();
+        for(var r:d.rows()){var b=NaturalVillageLifeData.decode(r.getCompoundOrEmpty("Village"));var l=s.overworld();
             var bodies=new ArrayList<String>();for(int i=0;i<3;i++){var n=NaturalVillageR1GameTests.actor(l,b,i);bodies.add(n==null?"ABSENT":n.getUUID()+"@"+n.blockPosition()+" NoAI="+n.isNoAi());}
-            Sagadyssey.LOGGER.info("P8_OLD_DIAG tick={} village={} origin={} rotation={} phase={} reason={} forced={} bodies={} routes={} tickets={}",s.getTickCount(),b.buildingKey(),b.buildingOrigin(),b.rotation(),r.getString("Phase"),r.getString("Reason")+" flags="+r.getBoolean("ObservedAway")+"/"+r.getBoolean("ReturnRequested")+" retained="+NaturalVillageLayout.stores(b).stream().map(p->NaturalVillageLayout.at(b,p)).map(p->p+":"+(((NaturalVillageEconomyData.RetainedChunks)(Object)l.getChunkSource().chunkMap).sagadyssey$retained(new ChunkPos(p).toLong())!=null)).toList(),l.getForcedChunks(),bodies,SupplyFlowData.get(s).routes(),tickets(l,b));
+            Sagadyssey.LOGGER.info("P8_OLD_DIAG tick={} village={} origin={} rotation={} phase={} reason={} forced={} bodies={} routes={} tickets={}",s.getTickCount(),b.buildingKey(),b.buildingOrigin(),b.rotation(),r.getStringOr("Phase", ""),r.getStringOr("Reason", "")+" flags="+r.getBooleanOr("ObservedAway", false)+"/"+r.getBooleanOr("ReturnRequested", false)+" retained="+NaturalVillageLayout.stores(b).stream().map(p->NaturalVillageLayout.at(b,p)).map(p->p+":"+(((NaturalVillageEconomyData.RetainedChunks)(Object)l.getChunkSource().chunkMap).sagadyssey$retained(new ChunkPos(p).toLong())!=null)).toList(),l.getForceLoadedChunks(),bodies,SupplyFlowData.get(s).routes(),tickets(l,b));
         }
     }
     private static List<String> tickets(ServerLevel l,NaturalVillageBuilding b){

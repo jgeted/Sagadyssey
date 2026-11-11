@@ -152,7 +152,7 @@ public final class CommandTactics {
     private static int enemyRank(ServerPlayer owner, LivingEntity target) {
         if (target instanceof Player) return CommandRank.COMMANDER.priority();
         if (target instanceof NpcBase npc && npc.getOwnerUUID() != null) {
-            ServerPlayer enemyOwner = owner.server.getPlayerList().getPlayer(npc.getOwnerUUID());
+            ServerPlayer enemyOwner = owner.level().getServer().getPlayerList().getPlayer(npc.getOwnerUUID());
             if (enemyOwner != null) return CommandGroupAttachments.get(enemyOwner).rankOf(npc.getCharacterId()).priority();
         }
         return CommandRank.MEMBER.priority();

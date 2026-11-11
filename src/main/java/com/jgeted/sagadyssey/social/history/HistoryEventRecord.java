@@ -1,5 +1,7 @@
 package com.jgeted.sagadyssey.social.history;
 
+import net.minecraft.core.UUIDUtil;
+
 import net.minecraft.nbt.CompoundTag;
 
 import javax.annotation.Nullable;
@@ -11,10 +13,10 @@ public record HistoryEventRecord(UUID id, long gameTime, String type,
                                  String detail, int importance) {
     public CompoundTag save() {
         CompoundTag tag = new CompoundTag();
-        tag.putUUID("Id", id);
+        tag.store("Id", UUIDUtil.CODEC, id);
         tag.putLong("Time", gameTime);
         tag.putString("Type", type);
-        if (subjectId != null) tag.putUUID("Subject", subjectId);
+        if (subjectId != null) tag.store("Subject", UUIDUtil.CODEC, subjectId);
         tag.putString("Name", subjectName);
         tag.putString("Detail", detail);
         tag.putInt("Importance", importance);
@@ -23,9 +25,9 @@ public record HistoryEventRecord(UUID id, long gameTime, String type,
 
     public static HistoryEventRecord load(CompoundTag tag) {
         return new HistoryEventRecord(
-                tag.hasUUID("Id") ? tag.getUUID("Id") : UUID.randomUUID(),
-                tag.getLong("Time"), tag.getString("Type"),
-                tag.hasUUID("Subject") ? tag.getUUID("Subject") : null,
-                tag.getString("Name"), tag.getString("Detail"), tag.getInt("Importance"));
+                tag.read("Id", UUIDUtil.CODEC).isPresent() ? tag.read("Id", UUIDUtil.CODEC).orElseThrow() : UUID.randomUUID(),
+                tag.getLongOr("Time", 0L), tag.getStringOr("Type", ""),
+                tag.read("Subject", UUIDUtil.CODEC).isPresent() ? tag.read("Subject", UUIDUtil.CODEC).orElseThrow() : null,
+                tag.getStringOr("Name", ""), tag.getStringOr("Detail", ""), tag.getIntOr("Importance", 0));
     }
 }

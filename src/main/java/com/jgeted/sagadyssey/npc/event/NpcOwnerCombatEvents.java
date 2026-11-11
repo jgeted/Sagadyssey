@@ -1,5 +1,7 @@
 package com.jgeted.sagadyssey.npc.event;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+
 import com.jgeted.sagadyssey.npc.entity.NpcBase;
 import com.jgeted.sagadyssey.npc.command.CommandTactics;
 import com.jgeted.sagadyssey.social.life.NpcAgencyDecision;
@@ -22,7 +24,7 @@ public final class NpcOwnerCombatEvents {
     @SubscribeEvent
     public static void onLivingDamage(LivingDamageEvent.Pre event) {
         LivingEntity victim = event.getEntity();
-        if (victim.level().isClientSide || event.getNewDamage() <= 0.0F) return;
+        if (victim.level().isClientSide() || event.getNewDamage() <= 0.0F) return;
 
         if (victim instanceof Player owner
                 && event.getSource().getEntity() instanceof LivingEntity attacker
@@ -50,7 +52,7 @@ public final class NpcOwnerCombatEvents {
         if (victim instanceof NpcBase relatedVictim
                 && event.getSource().getEntity() instanceof LivingEntity attacker
                 && !relatedVictim.isCombatAlly(attacker)) {
-            NpcLifeData lifeData = NpcLifeData.get(relatedVictim.getServer());
+            NpcLifeData lifeData = NpcLifeData.get(MinecraftApi.server(relatedVictim));
             if (lifeData.record(relatedVictim.getUUID()) == null) return;
             relatedVictim.level().getEntitiesOfClass(NpcBase.class,
                             relatedVictim.getBoundingBox().inflate(48.0D),

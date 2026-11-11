@@ -1,5 +1,7 @@
 package com.jgeted.sagadyssey.npc.network;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+
 import com.jgeted.sagadyssey.Sagadyssey;
 import com.jgeted.sagadyssey.core.network.NetworkStrings;
 import com.jgeted.sagadyssey.core.network.NetworkRateLimiter;
@@ -33,11 +35,11 @@ import io.netty.buffer.ByteBuf;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.Leashable;
-import net.minecraft.world.entity.animal.horse.AbstractHorse;
+import net.minecraft.world.entity.animal.equine.AbstractHorse;
 import net.minecraft.world.entity.decoration.LeashFenceKnotEntity;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -62,7 +64,7 @@ public record NpcInteractionPacket(int npcId, String action) implements CustomPa
     private static long expectedStatsUntilNanos;
 
     public static final Type<NpcInteractionPacket> TYPE = new Type<>(
-            ResourceLocation.fromNamespaceAndPath(Sagadyssey.MOD_ID, "npc_interact")
+            Identifier.fromNamespaceAndPath(Sagadyssey.MOD_ID, "npc_interact")
     );
 
     public static final StreamCodec<ByteBuf, NpcInteractionPacket> STREAM_CODEC = StreamCodec.of(
@@ -82,7 +84,7 @@ public record NpcInteractionPacket(int npcId, String action) implements CustomPa
     public static void requestStats(int npcId) {
         expectedStatsNpcId = npcId;
         expectedStatsUntilNanos = System.nanoTime() + 3_000_000_000L;
-        PacketDistributor.sendToServer(new NpcInteractionPacket(npcId, "request_stats"));
+        net.neoforged.neoforge.client.network.ClientPacketDistributor.sendToServer(new NpcInteractionPacket(npcId, "request_stats"));
     }
 
     public static boolean consumeExpectedStatsResponse(int npcId) {
@@ -99,7 +101,7 @@ public record NpcInteractionPacket(int npcId, String action) implements CustomPa
         context.enqueueWork(() -> {
             ServerPlayer player = (ServerPlayer) context.player();
             if (!NetworkRateLimiter.allow(player, "npc_interaction", 1)) return;
-            Entity entity = player.serverLevel().getEntity(data.npcId);
+            Entity entity = player.level().getEntity(data.npcId);
 
             // NPC 不存在或已消失
             if (!(entity instanceof NpcBase npc)) {
@@ -174,7 +176,7 @@ public record NpcInteractionPacket(int npcId, String action) implements CustomPa
             return;
         }
 
-        if (ScenarioLabController.isLabNpc(player.getServer(), npc.getUUID())) {
+        if (ScenarioLabController.isLabNpc(MinecraftApi.server(player), npc.getUUID())) {
             player.displayClientMessage(Component.literal("§e这是实验场固定角色，会保留原有岗位；"
                     + "你仍可与其交谈、交易并观察工作。"), false);
             return;
@@ -185,17 +187,17 @@ public record NpcInteractionPacket(int npcId, String action) implements CustomPa
             player.sendSystemMessage(Component.literal("当前没有可用的在生人物，不能招募。"));
             return;
         }
-        ServiceRelationshipData services = ServiceRelationshipData.get(player.getServer());
-        if (!services.activeForAgent(npc.getCharacterId(), player.serverLevel().getGameTime()).isEmpty()
+        ServiceRelationshipData services = ServiceRelationshipData.get(MinecraftApi.server(player));
+        if (!services.activeForAgent(npc.getCharacterId(), player.level().getGameTime()).isEmpty()
                 && !services.hasActiveBetween(playerCharacterId, npc.getCharacterId(),
-                player.serverLevel().getGameTime())) {
+                player.level().getGameTime())) {
             player.displayClientMessage(
                     Component.literal("§c这个 NPC 正在履行另一份服务关系"), true);
             return;
         }
 
         if (services.hasActiveBetween(playerCharacterId, npc.getCharacterId(),
-                player.serverLevel().getGameTime())) {
+                player.level().getGameTime())) {
             player.displayClientMessage(
                     Component.literal("§e你们之间已经有生效中的服务关系"), true);
             return;
@@ -224,14 +226,14 @@ public record NpcInteractionPacket(int npcId, String action) implements CustomPa
 
         // 旧字段只供旧客户端显示；权威来自 onRecruited 创建的服务关系。
         npc.setOwner(player);
-        NpcLifeData.get(player.getServer()).onRecruited(npc,
-                playerCharacterId, player.serverLevel().getGameTime());
-        NpcLifeData.get(player.getServer()).remember(npc.getCharacterId(),
+        NpcLifeData.get(MinecraftApi.server(player)).onRecruited(npc,
+                playerCharacterId, player.level().getGameTime());
+        NpcLifeData.get(MinecraftApi.server(player)).remember(npc.getCharacterId(),
                 new com.jgeted.sagadyssey.social.life.NpcMemoryRecord("recruitment",
                         playerCharacterId, "与 " + player.getName().getString() + " 建立有限服务关系",
-                        35, 55, player.serverLevel().getGameTime(),
-                        player.serverLevel().getGameTime() + 96000L),
-                player.serverLevel().getGameTime());
+                        35, 55, player.level().getGameTime(),
+                        player.level().getGameTime() + 96000L),
+                player.level().getGameTime());
         CommandGroupAttachments.registerNpc(player, npc);
 
         // 通知玩家
@@ -245,7 +247,7 @@ public record NpcInteractionPacket(int npcId, String action) implements CustomPa
      */
     private static boolean hasEnoughEmeralds(ServerPlayer player, int cost) {
         int count = 0;
-        for (ItemStack stack : player.getInventory().items) {
+        for (ItemStack stack : player.getInventory().getNonEquipmentItems()) {
             if (stack.is(Items.EMERALD)) {
                 count += stack.getCount();
                 if (count >= cost) return true;
@@ -256,7 +258,7 @@ public record NpcInteractionPacket(int npcId, String action) implements CustomPa
 
     private static boolean paySigningFee(ServerPlayer player, NpcBase npc,
                                          UUID playerCharacterId, int cost) {
-        RightsStateData rights = RightsStateData.get(player.getServer());
+        RightsStateData rights = RightsStateData.get(MinecraftApi.server(player));
         SubjectRef payer = SubjectRef.character(playerCharacterId);
         SubjectRef recipient = SubjectRef.character(npc.getCharacterId());
         UUID sourceId = ContainerIds.playerPersonal(playerCharacterId);
@@ -265,7 +267,7 @@ public record NpcInteractionPacket(int npcId, String action) implements CustomPa
                 payer, payer, AccessPolicy.PRIVATE);
         rights.ensureContext(destinationId, "npc:" + npc.getCharacterId() + ":personal",
                 recipient, recipient, AccessPolicy.PRIVATE);
-        long now = player.serverLevel().getGameTime();
+        long now = player.level().getGameTime();
         TransferRequest request = new TransferRequest(ContainerIds.named("signing_fee:"
                 + playerCharacterId + ':' + npc.getCharacterId() + ':' + now), payer,
                 TransferIntent.PAYMENT,
@@ -274,7 +276,7 @@ public record NpcInteractionPacket(int npcId, String action) implements CustomPa
                 List.of(new ExpectedRevision(sourceId, rights.context(sourceId).revision()),
                         new ExpectedRevision(destinationId, rights.context(destinationId).revision())),
                 "voluntary_employment_signing_gift", now);
-        return new TransferService(rights, TransferLedgerData.get(player.getServer()))
+        return new TransferService(rights, TransferLedgerData.get(MinecraftApi.server(player)))
                 .submit(request, Map.of(sourceId, new TransferEndpoint(sourceId, player.getInventory()),
                         destinationId, new TransferEndpoint(destinationId,
                                 npc.getEquipmentInventory())), now).successful();
@@ -368,8 +370,8 @@ public record NpcInteractionPacket(int npcId, String action) implements CustomPa
         var mounts = new java.util.ArrayList<String>();
         for (var horse : player.level().getEntitiesOfClass(AbstractHorse.class,
                 npc.getBoundingBox().inflate(10))) {
-            if (horse.isTamed() && horse.getOwnerUUID() != null
-                    && horse.getOwnerUUID().equals(player.getUUID())) {
+            if (horse.isTamed() && MinecraftApi.ownerId(horse) != null
+                    && MinecraftApi.ownerId(horse).equals(player.getUUID())) {
                 mounts.add(String.format("%d|%s|%.0f/%.0f",
                         horse.getId(), horse.getName().getString(),
                         horse.getHealth(), horse.getMaxHealth()));
@@ -441,7 +443,7 @@ public record NpcInteractionPacket(int npcId, String action) implements CustomPa
             if (leashable.getLeashHolder() instanceof LeashFenceKnotEntity) {
                 npc.addLeadToInventory();
             }
-            leashable.dropLeash(true, false);
+            leashable.removeLeash();
         }
         // 如果 NPC 已经是乘客，先下马（防止重复）
         if (npc.isPassenger()) {
@@ -475,7 +477,7 @@ public record NpcInteractionPacket(int npcId, String action) implements CustomPa
         if (!requireAuthority(player, npc, AuthorityScope.END_SERVICE, false)) return;
         CommandGroupAttachments.unregisterNpc(player, npc);
         npc.dismiss();
-        NpcLifeData.get(player.getServer()).onDismissed(npc, player.serverLevel().getGameTime());
+        NpcLifeData.get(MinecraftApi.server(player)).onDismissed(npc, player.level().getGameTime());
         player.displayClientMessage(
                 Component.literal("§a服务关系已解除；NPC 的家庭、私人财产和社会身份保持不变"), true);
     }
@@ -487,9 +489,9 @@ public record NpcInteractionPacket(int npcId, String action) implements CustomPa
             player.sendSystemMessage(Component.literal("当前没有可用的在生人物，不能行使授权。"));
             return false;
         }
-        ServiceAuthorityVerdict verdict = ServiceRelationshipData.get(player.getServer())
+        ServiceAuthorityVerdict verdict = ServiceRelationshipData.get(MinecraftApi.server(player))
                 .authorize(principal, npc.getCharacterId(), scope, dangerous,
-                        player.serverLevel().getGameTime());
+                        player.level().getGameTime());
         if (verdict.allowed()) return true;
         player.displayClientMessage(Component.literal((verdict.status()
                 == ServiceAuthorityVerdict.Status.REFUSED ? "§eNPC 拒绝：" : "§c没有授权：")

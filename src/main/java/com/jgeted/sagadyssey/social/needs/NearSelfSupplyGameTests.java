@@ -1,5 +1,12 @@
 package com.jgeted.sagadyssey.social.needs;
 
+import net.minecraft.world.level.gamerules.GameRules;
+
+import com.jgeted.sagadyssey.gametest.PortedGameTests.*;
+
+import com.jgeted.sagadyssey.core.MinecraftApi;
+import net.minecraft.core.UUIDUtil;
+
 import com.jgeted.sagadyssey.Sagadyssey;
 import com.jgeted.sagadyssey.npc.brain.execution.*;
 import com.jgeted.sagadyssey.npc.brain.fieldwork.*;
@@ -32,7 +39,7 @@ import java.util.*;
 @net.neoforged.fml.common.EventBusSubscriber(modid="sagadyssey")
 public final class NearSelfSupplyGameTests {
     private static final String MARKER="near-self-supply.nbt";
-    private static final TicketType<ChunkPos> NATIVE_TICKS=TicketType.create("sagadyssey-self-supply-test",Comparator.comparingLong(ChunkPos::toLong));
+    private static final com.jgeted.sagadyssey.worldsim.ChunkTickets.Kind NATIVE_TICKS=com.jgeted.sagadyssey.worldsim.ChunkTickets.kind("sagadyssey-self-supply-test");
     private static CompoundTag previous;
     private static final Map<UUID,P1Audit> P1_AUDITS=new HashMap<>();
     private static final Set<UUID> RESTORED_BODIES=new HashSet<>();
@@ -57,25 +64,25 @@ public final class NearSelfSupplyGameTests {
         previous=null;if(!(e.getServer() instanceof GameTestServer)||!(phase().equals("self-restart")||phase().equals("p1-resume")))return;
         try{var s=e.getServer();previous=NbtIo.readCompressed(s.getWorldPath(LevelResource.ROOT).resolve(MARKER),NbtAccounter.unlimitedHeap());
             var world=NbtIo.readCompressed(s.getWorldPath(LevelResource.ROOT).resolve("level.dat"),NbtAccounter.unlimitedHeap());
-            s.getWorldData().overworldData().setGameTime(Math.max(world.getCompound("Data").getLong("Time"),previous.getLong("Time"))+1);
-            s.getWorldData().overworldData().setDayTime(world.getCompound("Data").getLong("DayTime")+1);
+            s.getWorldData().overworldData().setGameTime(Math.max(world.getCompoundOrEmpty("Data").getLongOr("Time", 0L),previous.getLongOr("Time", 0L))+1);
+            s.getWorldData().overworldData().setDayTime(world.getCompoundOrEmpty("Data").getLongOr("DayTime", 0L)+1);
             if(phase().equals("p1-resume")){
-                var current=ledgers(s.overworld());var expected=previous.getCompound("Ledgers");
-                for(String key:current.getAllKeys()){
+                var current=ledgers(s.overworld());var expected=previous.getCompoundOrEmpty("Ledgers");
+                for(String key:current.keySet()){
                     var actualTag=current.get(key);var expectedTag=expected.get(key);
                     if(key.equals("Transfers")){actualTag=transferMapOrder((CompoundTag)actualTag);expectedTag=transferMapOrder((CompoundTag)expectedTag);}
                     if(!actualTag.equals(expectedTag))throw new IllegalStateException("P1 linked ledger mismatch before ticks: "+key);
                 }
                 RESTORED_BODIES.clear();Sagadyssey.LOGGER.info("P1_RESTORE linked ledgers verified before ticks");
-                s.getCommands().getDispatcher().execute("tick sprint 48000",s.createCommandSourceStack().withPermission(4).withSuppressedOutput());
+                s.getCommands().getDispatcher().execute("tick sprint 48000",s.createCommandSourceStack().withPermission(net.minecraft.server.permissions.LevelBasedPermissionSet.OWNER).withSuppressedOutput());
             }
-            force(s.overworld(),BlockPos.of(previous.getLong("Base")));
+            force(s.overworld(),BlockPos.of(previous.getLongOr("Base", 0L)));
         }catch(Exception x){throw new IllegalStateException("original running self-supply checkpoint required",x);}
     }
     private static void force(ServerLevel l,BlockPos p){for(int x=-1;x<=2;x++)for(int z=-1;z<=2;z++){
         var cp=new ChunkPos((p.getX()>>4)+x,(p.getZ()>>4)+z);l.setChunkForced(cp.x,cp.z,true);l.getChunk(cp.x,cp.z);
         // No nearby players exist on GameTestServer; native block ticking is forced, not crop growth.
-        l.getChunkSource().addRegionTicket(NATIVE_TICKS,cp,2,cp,true);
+        com.jgeted.sagadyssey.worldsim.ChunkTickets.add(l.getChunkSource(), NATIVE_TICKS,cp,2,cp,true);
     }}
     private static Container box(ServerLevel l,BlockPos p){return (Container)l.getBlockEntity(p);}
     private static NpcBase actor(ServerLevel l,BlockPos p,NpcProfession profession){
@@ -87,12 +94,12 @@ public final class NearSelfSupplyGameTests {
                         UUID home,NpcBase farmer,NpcBase courier,NpcBase miner){}
     private static void set(ServerLevel l,BlockPos p,net.minecraft.world.level.block.state.BlockState s){l.setBlockAndUpdate(p,s);}
     private static void barrel(ServerLevel l,BlockPos p){set(l,p,Blocks.BARREL.defaultBlockState());}
-    private static int command(ServerLevel l,NpcBase actor,String text){try{return l.getServer().getCommands().getDispatcher().execute(text.replace(actor.getUUID().toString(),"@s"),l.getServer().createCommandSourceStack().withEntity(actor).withLevel(l).withPermission(2).withSuppressedOutput());}catch(Exception e){throw new IllegalStateException("formal command failed: "+text,e);}}
+    private static int command(ServerLevel l,NpcBase actor,String text){try{return l.getServer().getCommands().getDispatcher().execute(text.replace(actor.getUUID().toString(),"@s"),l.getServer().createCommandSourceStack().withEntity(actor).withLevel(l).withPermission(net.minecraft.server.permissions.LevelBasedPermissionSet.GAMEMASTER).withSuppressedOutput());}catch(Exception e){throw new IllegalStateException("formal command failed: "+text,e);}}
     private static String at(BlockPos p){return p.getX()+" "+p.getY()+" "+p.getZ();}
     private static Farm setup(GameTestHelper h){
         var l=h.getLevel();var s=l.getServer();var base=h.absolutePos(new BlockPos(8192,1,8192));force(l,base);
-        l.setDayTime(1000);l.getGameRules().getRule(GameRules.RULE_DAYLIGHT).set(true,s);l.getGameRules().getRule(GameRules.RULE_RANDOMTICKING).set(3,s);
-        l.getGameRules().getRule(GameRules.RULE_DOMOBSPAWNING).set(false,s);
+        l.setDayTime(1000);l.getGameRules().set(GameRules.ADVANCE_TIME, true,s);l.getGameRules().set(GameRules.RANDOM_TICK_SPEED, 3,s);
+        l.getGameRules().set(GameRules.SPAWN_MOBS, false,s);
         for(int x=0;x<30;x++)for(int z=0;z<24;z++)set(l,base.offset(x,-1,z),Blocks.STONE.defaultBlockState());
         for(int x=2;x<=8;x+=2)for(int z=2;z<=6;z+=2){var p=base.offset(x,0,z);set(l,p.below(),Blocks.FARMLAND.defaultBlockState().setValue(FarmBlock.MOISTURE,7));
             set(l,p.south().below(),Blocks.WATER.defaultBlockState());set(l,p.south(),Blocks.STONE.defaultBlockState());set(l,p,Blocks.POTATOES.defaultBlockState());set(l,p.above(3),Blocks.GLOWSTONE.defaultBlockState());}
@@ -109,7 +116,7 @@ public final class NearSelfSupplyGameTests {
         miner.setItemSlot(EquipmentSlot.MAINHAND,new ItemStack(Items.IRON_PICKAXE));
         for(int x=2;x<=8;x++)for(int z=14;z<=16;z++)set(l,base.offset(x,0,z),Blocks.COAL_ORE.defaultBlockState());
         miner.setWorkZone(base.offset(2,0,14),base.offset(8,0,16));
-        var life=NpcLifeData.get(s);String dim=l.dimension().location().toString();
+        var life=NpcLifeData.get(s);String dim=l.dimension().identifier().toString();
         h.assertTrue(life.assignPrivateStorage(s,farmer.getCharacterId(),dim,raw,l.getGameTime()),"real farmer store");
         h.assertTrue(life.assignPrivateStorage(s,miner.getCharacterId(),dim,oreStock,l.getGameTime()),"real miner store");
         var homes=HouseholdData.get(s);var home=homes.create("ordinary self-supply",dim,null,courier.getCharacterId(),pantry,l.getGameTime());
@@ -136,7 +143,7 @@ public final class NearSelfSupplyGameTests {
             NpcLifeData.get(s).setShift(courier.getCharacterId(),NpcWorkShift.NIGHT,l.getGameTime());
             var spare=base.offset(26,0,15);barrel(l,spare);
             h.assertTrue(command(l,courier,"saga supply household-source "+courier.getUUID()+" "+at(spare)+" register-empty")==1,"initial legal empty spare source");box(l,spare).setItem(0,new ItemStack(Items.IRON_PICKAXE));
-            var rights=RightsStateData.get(s);String dim2=l.dimension().location().toString();var family=SubjectRef.household(home.id());
+            var rights=RightsStateData.get(s);String dim2=l.dimension().identifier().toString();var family=SubjectRef.household(home.id());
             var sourceId=ProductionContainerIds.resolve(s,dim2,spare);rights.ensureContext(sourceId,dim2+":"+spare.asLong(),family,family,AccessPolicy.HOUSEHOLD);
             var point=new FieldworkStorage(dim2,spare,sourceId,family,AccessPolicy.HOUSEHOLD,TransferIntent.DELIVERY,"initial_p1_spare");
             SupplyFlowData.get(s).register(point);SupplyFlowData.get(s).reveal(family,sourceId);
@@ -145,16 +152,16 @@ public final class NearSelfSupplyGameTests {
             rights.grant(new RightGrant(ContainerIds.named("p1-tool-pickup:"+home.id()),pantryId,SubjectRef.character(miner.getCharacterId()),Set.of(AssetRight.ACCESS,AssetRight.USE,AssetRight.TRANSFER),"initial explicit P1 spare gift",l.getGameTime(),null,true));
             miner.getMainHandItem().setDamageValue(miner.getMainHandItem().getMaxDamage()-1);
         }
-        if(phase().equals("p1-right"))RightsStateData.get(s).revoke(ContainerIds.named("household-supply-transfer:"+home.id()+":"+ProductionContainerIds.resolve(s,l.dimension().location().toString(),oreStock)));
-        if(phase().startsWith("p1-")){P1_AUDITS.put(home.id(),new P1Audit(l,farm));try{s.getCommands().getDispatcher().execute("tick sprint 150000",s.createCommandSourceStack().withPermission(4).withSuppressedOutput());}catch(Exception e){throw new IllegalStateException(e);}}
+        if(phase().equals("p1-right"))RightsStateData.get(s).revoke(ContainerIds.named("household-supply-transfer:"+home.id()+":"+ProductionContainerIds.resolve(s,l.dimension().identifier().toString(),oreStock)));
+        if(phase().startsWith("p1-")){P1_AUDITS.put(home.id(),new P1Audit(l,farm));try{s.getCommands().getDispatcher().execute("tick sprint 150000",s.createCommandSourceStack().withPermission(net.minecraft.server.permissions.LevelBasedPermissionSet.OWNER).withSuppressedOutput());}catch(Exception e){throw new IllegalStateException(e);}}
         return farm;
     }
     private static void entry(GameTestHelper h){
-        var l=h.getLevel();var f=setup(h);var id=ProductionContainerIds.resolve(l.getServer(),l.dimension().location().toString(),f.output());
+        var l=h.getLevel();var f=setup(h);var id=ProductionContainerIds.resolve(l.getServer(),l.dimension().identifier().toString(),f.output());
         h.assertTrue(SupplyFlowData.get(l.getServer()).known(SubjectRef.household(f.home())).contains(id),"household, not only character, knows configured source");
         h.assertTrue(RightsStateData.get(l.getServer()).context(id).defaultBeneficialOwner().equals(SubjectRef.household(f.home())),"empty household output has explicit title");
         var rights=RightsStateData.get(l.getServer());var principal=SubjectRef.household(f.home());
-        var rawId=ProductionContainerIds.resolve(l.getServer(),l.dimension().location().toString(),f.raw());
+        var rawId=ProductionContainerIds.resolve(l.getServer(),l.dimension().identifier().toString(),f.raw());
         rights.revoke(ContainerIds.named("household-supply-transfer:"+f.home()+":"+rawId));
         box(l,f.raw()).setItem(0,new ItemStack(Items.POTATO,2));
         h.assertTrue(command(l,f.farmer(),"saga supply household-source "+f.farmer().getUUID()+" "+at(f.raw()))==1,"knowledge-only source entry");
@@ -167,7 +174,7 @@ public final class NearSelfSupplyGameTests {
         h.assertTrue(rights.grantsFor(rawId,principal,l.getGameTime()).isEmpty(),"rejected third-party authorization leaves no grant");
         var foreign=f.base().offset(26,0,20);barrel(l,foreign);
         var other=actor(l,f.base().offset(28,0,20),NpcProfession.COURIER);other.setNoAi(true);
-        var home=com.jgeted.sagadyssey.social.household.HouseholdData.get(l.getServer()).create("other household",l.dimension().location().toString(),null,other.getCharacterId(),foreign,l.getGameTime());
+        var home=com.jgeted.sagadyssey.social.household.HouseholdData.get(l.getServer()).create("other household",l.dimension().identifier().toString(),null,other.getCharacterId(),foreign,l.getGameTime());
         h.assertTrue(HouseholdData.get(l.getServer()).assignSharedStorage(home.id(),home.dimension(),foreign,foreign),"existing other household assignment without a rights context");
         h.assertTrue(command(l,f.courier(),"saga supply household-source "+f.courier().getUUID()+" "+at(foreign)+" register-empty")==0,"empty declaration cannot take another household's registered store");
         h.assertTrue(rights.context(ContainerIds.block("household_storage",home.dimension(),foreign))==null,"rejected declaration leaves original ownership state unchanged");
@@ -176,9 +183,9 @@ public final class NearSelfSupplyGameTests {
     private static int count(Container c,Item item){int n=0;for(int i=0;i<c.getContainerSize();i++)if(c.getItem(i).is(item))n+=c.getItem(i).getCount();return n;}
     private static int count(ServerLevel l,Farm f,Item item){int n=0;for(var p:List.of(f.raw(),f.input(),f.input().below(),f.furnace(),f.furnace().below(),f.output(),f.pantry(),f.oreStock(),f.fuel(),f.fuel().below(),f.fuel().below().east()))n+=count(box(l,p),item);
         for(var actor:List.of(f.farmer(),f.courier(),f.miner()))n+=count(actor.getPersonalInventory(),item)+count(actor.getTransportInventory(),item);return n;}
-    private static int delta(NpcBase actor,Item item){String key=net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(item)+"#0";return FieldworkData.get(actor.getServer()).receiptsFor(actor.getUUID()).stream().flatMap(r->r.inventoryDeltas().stream()).filter(d->d.fingerprint().equals(key)).mapToInt(FieldworkActionReceipt.ItemDelta::quantity).sum();}
-    private static int cooked(ServerLevel l,Farm f){return l.getBlockEntity(f.furnace()).saveWithoutMetadata(l.registryAccess()).getCompound("RecipesUsed").getInt("minecraft:baked_potato");}
-    private static void observeMeals(Farm f,Set<String> meals){var s=f.farmer().getServer();for(var actor:List.of(f.farmer(),f.courier(),f.miner()))for(var p:NpcBrainRuntime.data(s).history(actor.getUUID()))
+    private static int delta(NpcBase actor,Item item){String key=net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(item)+"#0";return FieldworkData.get(MinecraftApi.server(actor)).receiptsFor(actor.getUUID()).stream().flatMap(r->r.inventoryDeltas().stream()).filter(d->d.fingerprint().equals(key)).mapToInt(FieldworkActionReceipt.ItemDelta::quantity).sum();}
+    private static int cooked(ServerLevel l,Farm f){return l.getBlockEntity(f.furnace()).saveWithoutMetadata(l.registryAccess()).getCompoundOrEmpty("RecipesUsed").getIntOr("minecraft:baked_potato", 0);}
+    private static void observeMeals(Farm f,Set<String> meals){var s=MinecraftApi.server(f.farmer());for(var actor:List.of(f.farmer(),f.courier(),f.miner()))for(var p:NpcBrainRuntime.data(s).history(actor.getUUID()))
         if(p.providerId().equals(LifePlanFactory.PROVIDER)&&p.status()==NpcPlanStatus.SUCCEEDED&&"EAT".equals(p.steps().getFirst().params().get("operation"))) {
             String key=p.id()+":2";if("DONE".equals(LifeActivityData.get(s).settlement(key)))meals.add(actor.getUUID()+"/"+key);
         }}
@@ -197,7 +204,7 @@ public final class NearSelfSupplyGameTests {
             balance(h,f,meals);
             for(var n:List.of(f.farmer(),f.courier(),f.miner()))h.assertTrue(meals.stream().filter(k->k.startsWith(n.getUUID()+"/")).count()>=3&&NpcLifeData.get(l.getServer()).needs(n.getCharacterId()).hunger()<800,"each original worker is repeatedly fed");
             h.assertTrue(delta(f.miner(),Items.COAL)>0&&count(l,f,Items.COAL)<delta(f.miner(),Items.COAL),"zero initial coal; newly mined fuel was actually burned");
-            h.assertTrue(l.getGameRules().getInt(GameRules.RULE_RANDOMTICKING)==3&&l.getGameRules().getBoolean(GameRules.RULE_DAYLIGHT)&&l.getDayTime()>=121000,"default growth and real days remain enabled");
+            h.assertTrue(l.getGameRules().get(GameRules.RANDOM_TICK_SPEED)==3&&l.getGameRules().get(GameRules.ADVANCE_TIME)&&l.getDayTime()>=121000,"default growth and real days remain enabled");
             boolean carrying=SupplyFlowData.get(l.getServer()).routes().stream().anyMatch(r->r.principal().equals(SubjectRef.household(f.home()))&&r.stage()==SupplyFlowData.Stage.CARRYING);
             boolean processing=l.getBlockState(f.furnace()).getValue(AbstractFurnaceBlock.LIT)&&count(box(l,f.furnace()),Items.POTATO)>0;
             h.assertTrue(carrying||processing,"checkpoint must capture real carrying or unfinished cooking, not a parked completed chain");
@@ -208,19 +215,19 @@ public final class NearSelfSupplyGameTests {
         });
     }
     private static void saveRunning(GameTestHelper h,Farm f,Set<String> meals){
-        var l=h.getLevel();var s=l.getServer();var marker=new CompoundTag();marker.putLong("Base",f.base().asLong());marker.putLong("Time",l.getGameTime());marker.putUUID("Home",f.home());
+        var l=h.getLevel();var s=l.getServer();var marker=new CompoundTag();marker.putLong("Base",f.base().asLong());marker.putLong("Time",l.getGameTime());marker.store("Home", UUIDUtil.CODEC,f.home());
         String[] names={"Raw","Input","Furnace","Output","Pantry","OreStock","Fuel"};BlockPos[] positions={f.raw(),f.input(),f.furnace(),f.output(),f.pantry(),f.oreStock(),f.fuel()};for(int i=0;i<names.length;i++)marker.putLong(names[i],positions[i].asLong());
-        marker.putUUID("Farmer",f.farmer().getUUID());marker.putUUID("Courier",f.courier().getUUID());marker.putUUID("Miner",f.miner().getUUID());
-        marker.putUUID("FarmerPerson",f.farmer().getCharacterId());marker.putUUID("CourierPerson",f.courier().getCharacterId());marker.putUUID("MinerPerson",f.miner().getCharacterId());
-        SupplyFlowData.get(s).routes().stream().filter(r->r.principal().equals(SubjectRef.household(f.home()))&&r.stage()==SupplyFlowData.Stage.CARRYING).findFirst().ifPresent(r->marker.putUUID("CarryingRoute",r.id()));
+        marker.store("Farmer", UUIDUtil.CODEC,f.farmer().getUUID());marker.store("Courier", UUIDUtil.CODEC,f.courier().getUUID());marker.store("Miner", UUIDUtil.CODEC,f.miner().getUUID());
+        marker.store("FarmerPerson", UUIDUtil.CODEC,f.farmer().getCharacterId());marker.store("CourierPerson", UUIDUtil.CODEC,f.courier().getCharacterId());marker.store("MinerPerson", UUIDUtil.CODEC,f.miner().getCharacterId());
+        SupplyFlowData.get(s).routes().stream().filter(r->r.principal().equals(SubjectRef.household(f.home()))&&r.stage()==SupplyFlowData.Stage.CARRYING).findFirst().ifPresent(r->marker.store("CarryingRoute", UUIDUtil.CODEC,r.id()));
         marker.putInt("Cooked",cooked(l,f));marker.putInt("Meals",meals.size());
         if(phase().startsWith("p1-")){
             marker.put("Ledgers",ledgers(l));marker.put("P1Audit",P1_AUDITS.get(f.home()).save());
-            for(var n:List.of(f.farmer(),f.courier(),f.miner()))marker.put("Body:"+n.getUUID(),n.saveWithoutId(new CompoundTag()));
+            for(var n:List.of(f.farmer(),f.courier(),f.miner()))marker.put("Body:"+n.getUUID(),MinecraftApi.saveEntity(n));
             marker.putInt("PhysicalCoal",count(l,f,Items.COAL));
         }
         var keys=new ListTag();meals.forEach(k->keys.add(StringTag.valueOf(k)));marker.put("MealKeys",keys);
-        try{NbtIo.writeCompressed(marker,s.getWorldPath(LevelResource.ROOT).resolve(MARKER));s.saveEverything(true,true,true);net.neoforged.neoforge.common.IOUtilities.waitUntilIOWorkerComplete();}catch(Exception e){throw new IllegalStateException("running food chain save",e);}
+        try{NbtIo.writeCompressed(marker,s.getWorldPath(LevelResource.ROOT).resolve(MARKER));s.saveEverything(true,true,true);}catch(Exception e){throw new IllegalStateException("running food chain save",e);}
     }
     private static void balance(GameTestHelper h,Farm f,Set<String> meals){
         var l=h.getLevel();observeMeals(f,meals);
@@ -259,7 +266,7 @@ public final class NearSelfSupplyGameTests {
     private static void blockedOutput(GameTestHelper h){
         var l=h.getLevel();var f=setup(h);var s=l.getServer();var principal=SubjectRef.household(f.home());Set<String> meals=new HashSet<>();boolean[] cleared={false};long start=l.getGameTime();
         for(int i=0;i<box(l,f.output()).getContainerSize();i++)box(l,f.output()).setItem(i,new ItemStack(Items.COBBLESTONE,64));
-        var escrow=f.base().offset(26,0,18);barrel(l,escrow);String dim=l.dimension().location().toString();var escrowId=ProductionContainerIds.resolve(s,dim,escrow);
+        var escrow=f.base().offset(26,0,18);barrel(l,escrow);String dim=l.dimension().identifier().toString();var escrowId=ProductionContainerIds.resolve(s,dim,escrow);
         var rights=RightsStateData.get(s);rights.ensureContext(escrowId,dim+":"+escrow.asLong(),principal,principal,AccessPolicy.HOUSEHOLD);
         var outputId=ProductionContainerIds.resolve(s,dim,f.output());
         h.onEachTick(()->{auditTick(h,f);if((l.getGameTime()-start)%20==0)observeMeals(f,meals);});
@@ -277,26 +284,26 @@ public final class NearSelfSupplyGameTests {
         });
     }
     private static void recover(GameTestHelper h){
-        h.assertTrue(previous!=null,"required running chain");var l=h.getLevel();Farm[] farm={null};Set<String> meals=new HashSet<>();for(var key:previous.getList("MealKeys",Tag.TAG_STRING))meals.add(key.getAsString());long start=l.getGameTime();
+        h.assertTrue(previous!=null,"required running chain");var l=h.getLevel();Farm[] farm={null};Set<String> meals=new HashSet<>();for(var key:MinecraftApi.listOfType(previous, "MealKeys",Tag.TAG_STRING))meals.add(key.asString().orElseThrow());long start=l.getGameTime();
         h.succeedWhen(()->{
-            if(farm[0]==null){var a=l.getEntity(previous.getUUID("Farmer"));var b=l.getEntity(previous.getUUID("Courier"));var c=l.getEntity(previous.getUUID("Miner"));if(a==null||b==null||c==null)java.util.concurrent.locks.LockSupport.parkNanos(1_000_000L);
+            if(farm[0]==null){var a=l.getEntity(previous.read("Farmer", UUIDUtil.CODEC).orElseThrow());var b=l.getEntity(previous.read("Courier", UUIDUtil.CODEC).orElseThrow());var c=l.getEntity(previous.read("Miner", UUIDUtil.CODEC).orElseThrow());if(a==null||b==null||c==null)java.util.concurrent.locks.LockSupport.parkNanos(1_000_000L);
                 h.assertTrue(a instanceof NpcBase&&b instanceof NpcBase&&c instanceof NpcBase,"original three bodies load from real entity regions");
-                farm[0]=new Farm(BlockPos.of(previous.getLong("Base")),BlockPos.of(previous.getLong("Raw")),BlockPos.of(previous.getLong("Input")),BlockPos.of(previous.getLong("Furnace")),BlockPos.of(previous.getLong("Output")),BlockPos.of(previous.getLong("Pantry")),BlockPos.of(previous.getLong("OreStock")),BlockPos.of(previous.getLong("Fuel")),previous.getUUID("Home"),(NpcBase)a,(NpcBase)b,(NpcBase)c);
+                farm[0]=new Farm(BlockPos.of(previous.getLongOr("Base", 0L)),BlockPos.of(previous.getLongOr("Raw", 0L)),BlockPos.of(previous.getLongOr("Input", 0L)),BlockPos.of(previous.getLongOr("Furnace", 0L)),BlockPos.of(previous.getLongOr("Output", 0L)),BlockPos.of(previous.getLongOr("Pantry", 0L)),BlockPos.of(previous.getLongOr("OreStock", 0L)),BlockPos.of(previous.getLongOr("Fuel", 0L)),previous.read("Home", UUIDUtil.CODEC).orElseThrow(),(NpcBase)a,(NpcBase)b,(NpcBase)c);
             }
             var f=farm[0];observeMeals(f,meals);
             if(phase().equals("p1-resume")){
                 h.assertTrue(RESTORED_BODIES.size()==3,"three original inventories verified before entity ticks");
-                if(!P1_AUDITS.containsKey(f.home())){var audit=new P1Audit(l,f);audit.load(previous.getCompound("P1Audit"));P1_AUDITS.put(f.home(),audit);}
+                if(!P1_AUDITS.containsKey(f.home())){var audit=new P1Audit(l,f);audit.load(previous.getCompoundOrEmpty("P1Audit"));P1_AUDITS.put(f.home(),audit);}
                 auditTick(h,f);
             }
-            h.assertTrue(f.farmer().getCharacterId().equals(previous.getUUID("FarmerPerson"))&&f.courier().getCharacterId().equals(previous.getUUID("CourierPerson"))&&f.miner().getCharacterId().equals(previous.getUUID("MinerPerson")),"original person identities survive independent restart");
+            h.assertTrue(f.farmer().getCharacterId().equals(previous.read("FarmerPerson", UUIDUtil.CODEC).orElseThrow())&&f.courier().getCharacterId().equals(previous.read("CourierPerson", UUIDUtil.CODEC).orElseThrow())&&f.miner().getCharacterId().equals(previous.read("MinerPerson", UUIDUtil.CODEC).orElseThrow()),"original person identities survive independent restart");
             for(var n:List.of(f.farmer(),f.courier(),f.miner()))h.assertTrue(NpcLifeData.get(l.getServer()).record(n.getCharacterId()).fatigue()<1000,"five-day normal rest prevented permanent exhaustion");
-            h.assertTrue(cooked(l,f)>previous.getInt("Cooked")&&meals.size()>previous.getInt("Meals"),"same running chain cooks and consumes new food after actual restart");
+            h.assertTrue(cooked(l,f)>previous.getIntOr("Cooked", 0)&&meals.size()>previous.getIntOr("Meals", 0),"same running chain cooks and consumes new food after actual restart");
             h.assertTrue(16+delta(f.farmer(),Items.POTATO)==count(l,f,Items.POTATO)+cooked(l,f),"running crop and recipe conservation after restart");
             h.assertTrue(cooked(l,f)==count(l,f,Items.BAKED_POTATO)+meals.size(),"no doubled consumption or output after restart");
-            if(previous.hasUUID("CarryingRoute"))h.assertTrue(SupplyFlowData.get(l.getServer()).route(previous.getUUID("CarryingRoute")).stage()==SupplyFlowData.Stage.DONE,"the original saved shipment settles before acceptance");
+            if(previous.read("CarryingRoute", UUIDUtil.CODEC).isPresent())h.assertTrue(SupplyFlowData.get(l.getServer()).route(previous.read("CarryingRoute", UUIDUtil.CODEC).orElseThrow()).stage()==SupplyFlowData.Stage.DONE,"the original saved shipment settles before acceptance");
             if(phase().equals("p1-resume")){balance(h,f,meals);finishAudit(h,f,meals);}
-            Sagadyssey.LOGGER.info("SELF_SUPPLY ACCEPT independent running restart elapsed={} cookedBefore={} cookedNow={} mealsBefore={} mealsNow={}",l.getGameTime()-start,previous.getInt("Cooked"),cooked(l,f),previous.getInt("Meals"),meals.size());
+            Sagadyssey.LOGGER.info("SELF_SUPPLY ACCEPT independent running restart elapsed={} cookedBefore={} cookedNow={} mealsBefore={} mealsNow={}",l.getGameTime()-start,previous.getIntOr("Cooked", 0),cooked(l,f),previous.getIntOr("Meals", 0),meals.size());
         });
     }
 
@@ -309,7 +316,7 @@ public final class NearSelfSupplyGameTests {
         final Map<Long,Integer> endBuckets=new TreeMap<>();
         final Map<String,Integer> completed=new TreeMap<>();
         P1Audit(ServerLevel l,Farm f){start=l.getGameTime();lastBurn=burn(l,f);}
-        static int burn(ServerLevel l,Farm f){return l.getBlockEntity(f.furnace()).saveWithoutMetadata(l.registryAccess()).getInt("BurnTime");}
+        static int burn(ServerLevel l,Farm f){return l.getBlockEntity(f.furnace()).saveWithoutMetadata(l.registryAccess()).getIntOr("BurnTime", 0);}
         void tick(GameTestHelper h,Farm f){
             var l=h.getLevel();int current=burn(l,f);if(current>lastBurn){ignitions++;h.assertTrue(current<=1600,"native coal burn duration");}lastBurn=current;
             h.assertTrue(delta(f.miner(),Items.COAL)==count(l,f,Items.COAL)+ignitions,"P1 independent ignition/physical coal balance");
@@ -357,8 +364,8 @@ public final class NearSelfSupplyGameTests {
                     h.assertTrue(r.stage()!=SupplyFlowData.Stage.REVIEW,"no unexplained in-flight obligations");
                     if(r.stage()==SupplyFlowData.Stage.DONE||r.stage()==SupplyFlowData.Stage.CANCELLED)h.assertTrue(RightsStateData.get(l.getServer()).reservationsForToken(r.token(),l.getGameTime()).isEmpty(),"closed route releases reservations");
                 }
-                for(var rawOrder:com.jgeted.sagadyssey.social.production.ProductionOrderData.get(l.getServer()).save(new CompoundTag(),l.registryAccess()).getList("Orders",Tag.TAG_COMPOUND))
-                    h.assertTrue(com.jgeted.sagadyssey.social.production.ProductionOrderStatus.valueOf(((CompoundTag)rawOrder).getString("Status")).terminal(),"no unexplained active production orders in native-processing contract");
+                for(var rawOrder:MinecraftApi.listOfType(com.jgeted.sagadyssey.social.production.ProductionOrderData.get(l.getServer()).save(new CompoundTag(),l.registryAccess()), "Orders",Tag.TAG_COMPOUND))
+                    h.assertTrue(com.jgeted.sagadyssey.social.production.ProductionOrderStatus.valueOf(((CompoundTag)rawOrder).getStringOr("Status", "")).terminal(),"no unexplained active production orders in native-processing contract");
                 if(phase().equals("p1-competition"))h.assertTrue(maxTypes>=2&&restHeld>0&&nightClaims>0&&delta(f.miner(),Items.COAL)>=2,"transport types compete, lawful rest delays service, original miner resumes");
             }
             var counts=new TreeMap<Long,Integer>();int harvest=0,plant=0;
@@ -377,8 +384,8 @@ public final class NearSelfSupplyGameTests {
             tag.putLong("Ticks",l.getGameTime()-start);tag.putInt("Ignitions",ignitions);tag.putInt("Coal",count(l,f,Items.COAL));tag.putInt("Harvests",harvest);tag.putInt("Plants",plant);tag.putInt("Meals",meals.size());tag.putLong("MaxWait",maxWait);tag.putLong("MaxRouteAge",maxRouteAge);tag.putInt("MaxOpen",maxOpen);tag.putInt("MaxHeld",maxHeld);tag.putInt("MaxCarrying",maxCarrying);
             try{NbtIo.writeCompressed(tag,l.getServer().getWorldPath(LevelResource.ROOT).resolve("p1-evidence.nbt"));}catch(Exception e){throw new IllegalStateException(e);}
         }
-        CompoundTag save(){var t=new CompoundTag();t.putLong("Started",start);t.putInt("Ignitions",ignitions);t.putInt("LastBurn",lastBurn);t.putLong("MaxWait",maxWait);t.putLong("MaxRouteAge",maxRouteAge);var births=new ListTag();routeStarts.forEach((id,time)->{var b=new CompoundTag();b.putUUID("Id",id);b.putLong("Time",time);births.add(b);});t.put("RouteStarts",births);return t;}
-        void load(CompoundTag t){start=t.getLong("Started");ignitions=t.getInt("Ignitions");lastBurn=t.getInt("LastBurn");maxWait=t.getLong("MaxWait");maxRouteAge=t.getLong("MaxRouteAge");for(var raw:t.getList("RouteStarts",Tag.TAG_COMPOUND)){var b=(CompoundTag)raw;routeStarts.put(b.getUUID("Id"),b.getLong("Time"));}}
+        CompoundTag save(){var t=new CompoundTag();t.putLong("Started",start);t.putInt("Ignitions",ignitions);t.putInt("LastBurn",lastBurn);t.putLong("MaxWait",maxWait);t.putLong("MaxRouteAge",maxRouteAge);var births=new ListTag();routeStarts.forEach((id,time)->{var b=new CompoundTag();b.store("Id", UUIDUtil.CODEC,id);b.putLong("Time",time);births.add(b);});t.put("RouteStarts",births);return t;}
+        void load(CompoundTag t){start=t.getLongOr("Started", 0L);ignitions=t.getIntOr("Ignitions", 0);lastBurn=t.getIntOr("LastBurn", 0);maxWait=t.getLongOr("MaxWait", 0L);maxRouteAge=t.getLongOr("MaxRouteAge", 0L);for(var raw:MinecraftApi.listOfType(t, "RouteStarts",Tag.TAG_COMPOUND)){var b=(CompoundTag)raw;routeStarts.put(b.read("Id", UUIDUtil.CODEC).orElseThrow(),b.getLongOr("Time", 0L));}}
     }
 
     private static CompoundTag ledgers(ServerLevel l){
@@ -388,14 +395,14 @@ public final class NearSelfSupplyGameTests {
         t.put("Logistics",com.jgeted.sagadyssey.social.logistics.LogisticsData.get(s).save(new CompoundTag(),r));return t;
     }
     private static CompoundTag transferMapOrder(CompoundTag source){
-        var t=source.copy();for(var raw:t.getList("Receipts",Tag.TAG_COMPOUND)){
-            var receipt=(CompoundTag)raw;var entries=new ArrayList<CompoundTag>();for(var value:receipt.getList("Revisions",Tag.TAG_COMPOUND))entries.add((CompoundTag)value);
-            entries.sort(Comparator.comparing(v->v.getUUID("Container").toString()));var list=new ListTag();entries.forEach(list::add);receipt.put("Revisions",list);
+        var t=source.copy();for(var raw:MinecraftApi.listOfType(t, "Receipts",Tag.TAG_COMPOUND)){
+            var receipt=(CompoundTag)raw;var entries=new ArrayList<CompoundTag>();for(var value:MinecraftApi.listOfType(receipt, "Revisions",Tag.TAG_COMPOUND))entries.add((CompoundTag)value);
+            entries.sort(Comparator.comparing(v->v.read("Container", UUIDUtil.CODEC).orElseThrow().toString()));var list=new ListTag();entries.forEach(list::add);receipt.put("Revisions",list);
         }return t;
     }
     @net.neoforged.bus.api.SubscribeEvent public static void restoredEntity(net.neoforged.neoforge.event.entity.EntityJoinLevelEvent e){
         if(!phase().equals("p1-resume")||previous==null||!(e.getEntity() instanceof NpcBase n)||!previous.contains("Body:"+n.getUUID()))return;
-        var a=n.saveWithoutId(new CompoundTag());var b=previous.getCompound("Body:"+n.getUUID());
+        var a=MinecraftApi.saveEntity(n);var b=previous.getCompoundOrEmpty("Body:"+n.getUUID());
         for(String key:List.of("Items","HandItems","PersonalInventoryRevision","HomeSettlementId"))if(!Objects.equals(a.get(key),b.get(key)))throw new IllegalStateException("P1 original entity mismatch before tick: "+key);
         RESTORED_BODIES.add(n.getUUID());Sagadyssey.LOGGER.info("P1_RESTORE original body verified {}",n.getUUID());
     }

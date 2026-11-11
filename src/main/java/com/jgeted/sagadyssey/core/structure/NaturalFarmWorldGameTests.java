@@ -23,13 +23,13 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtOps;
 import net.minecraft.nbt.NbtUtils;
 import net.minecraft.resources.ResourceKey;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.dedicated.DedicatedServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.Container;
 import net.minecraft.world.level.ChunkPos;
-import net.minecraft.world.level.GameRules;
+import net.minecraft.world.level.gamerules.GameRules;
 import net.minecraft.world.level.block.CropBlock;
 import net.minecraft.world.level.chunk.status.ChunkStatus;
 import net.minecraft.world.level.levelgen.FlatLevelSource;
@@ -305,7 +305,7 @@ public final class NaturalFarmWorldGameTests {
             var level = server.overworld();
             require(!(level.getChunkSource().getGenerator() instanceof FlatLevelSource), "flat generator rejected");
             require(server.getPlayerList().getPlayerCount() == 0, "PRECHECK has no player observer");
-            structure = level.registryAccess().registryOrThrow(Registries.STRUCTURE).getHolderOrThrow(
+            structure = level.registryAccess().lookupOrThrow(Registries.STRUCTURE).getOrThrow(
                     ResourceKey.create(Registries.STRUCTURE, NaturalVillageBuilding.SUPPORTED));
             var state = level.getChunkSource().getGeneratorState();
             var placements = state.getPlacementsForStructure(structure);
@@ -404,7 +404,7 @@ public final class NaturalFarmWorldGameTests {
             var piece = farms.getFirst();
             var anchor = start.getChunkPos().getWorldPosition();
             var center = new BlockPos(anchor.getX() + 8, start.getPieces().getFirst().getBoundingBox().minY(), anchor.getZ() + 8);
-            selected = new NaturalVillageBuilding(level.dimension().location().toString(), NaturalVillageBuilding.SUPPORTED.toString(),
+            selected = new NaturalVillageBuilding(level.dimension().identifier().toString(), NaturalVillageBuilding.SUPPORTED.toString(),
                     anchor, center, NaturalVillageLayout.FARM_V3.toString(), piece.getPosition(), piece.getRotation());
             footprint = pieceUnion(start);
             JsonObject chosen = building(selected);
@@ -459,20 +459,20 @@ public final class NaturalFarmWorldGameTests {
             if (life == null) return;
             for (var row : life.villages()) {
                 var b = NaturalVillageLifeData.decode(row);
-                if (row.getBoolean("Ready") && observedReady.add(b.buildingKey())) {
+                if (row.getBooleanOr("Ready", false) && observedReady.add(b.buildingKey())) {
                     if (selected != null && selected.buildingKey().equals(b.buildingKey())) {
                         require(t0 != null, "Ready exists without formal BuildingRecord");
                         firstReadyObservedAt = server.overworld().getGameTime();
                     }
                     emit("FIRST_READY_OBSERVED", objectWith("initialObservedState", snapshot(),
-                            "buildingKey", b.buildingKey(), "initializedGameTime", row.getLong("Initialized"),
+                            "buildingKey", b.buildingKey(), "initializedGameTime", row.getLongOr("Initialized", 0L),
                             "observedGameTime", server.overworld().getGameTime(), "neverBackdatedToT0", true));
                 }
             }
             // If normal spawn had already initialized the selected farm, still retain its original T0.
             if (selected != null && firstReadyObservedAt == null) {
                 var target = life.village(selected.buildingKey());
-                if (target != null && target.getBoolean("Ready")) {
+                if (target != null && target.getBooleanOr("Ready", false)) {
                     require(t0 != null, "selected spawn farm Ready without BuildingRecord");
                     firstReadyObservedAt = server.overworld().getGameTime();
                     emit("TARGET_ALREADY_READY_WHEN_SELECTED", snapshot());
@@ -504,13 +504,13 @@ public final class NaturalFarmWorldGameTests {
             var economy = NaturalVillageEconomyData.existing(server);
             out.add("allNaturalLifeIntents", life == null ? JsonNull.INSTANCE : nbt(life.save(new CompoundTag(), server.registryAccess())));
             out.add("allEconomyRegions", economy == null ? JsonNull.INSTANCE : nbt(economy.save(new CompoundTag(), server.registryAccess())));
-            var characters = level.getDataStorage().get(CharacterRegistryData.FACTORY, CharacterRegistryData.DATA_NAME);
-            var rights = level.getDataStorage().get(RightsStateData.FACTORY, RightsStateData.DATA_NAME);
-            var flows = level.getDataStorage().get(SupplyFlowData.FACTORY, SupplyFlowData.NAME);
+            var characters = level.getDataStorage().get(CharacterRegistryData.FACTORY.type(CharacterRegistryData.DATA_NAME));
+            var rights = level.getDataStorage().get(RightsStateData.FACTORY.type(RightsStateData.DATA_NAME));
+            var flows = level.getDataStorage().get(SupplyFlowData.FACTORY.type(SupplyFlowData.NAME));
             out.add("allCharacters", characters == null ? JsonNull.INSTANCE : nbt(characters.save(new CompoundTag(), server.registryAccess())));
             out.add("allRightsIncludingReservations", rights == null ? JsonNull.INSTANCE : nbt(rights.save(new CompoundTag(), server.registryAccess())));
             out.add("allSupplyKnowledgeAndRoutes", flows == null ? JsonNull.INSTANCE : nbt(flows.save(new CompoundTag(), server.registryAccess())));
-            boolean anyReady = life != null && life.villages().stream().anyMatch(v -> v.getBoolean("Ready"));
+            boolean anyReady = life != null && life.villages().stream().anyMatch(v -> v.getBooleanOr("Ready", false));
             // These APIs lack an existing() getter. Only read them after native Ready proves they already exist.
             out.add("allHouseholds", anyReady ? nbt(HouseholdData.get(server).save(new CompoundTag(), server.registryAccess())) : JsonNull.INSTANCE);
             out.add("allNpcLifeIncludingBedsNeedsAndAuthority", anyReady ? nbt(NpcLifeData.get(server).save(new CompoundTag(), server.registryAccess())) : JsonNull.INSTANCE);
@@ -530,7 +530,7 @@ public final class NaturalFarmWorldGameTests {
 
         JsonObject physical(NaturalVillageBuilding b) {
             JsonObject out = building(b);
-            ServerLevel level = server.getLevel(ResourceKey.create(Registries.DIMENSION, ResourceLocation.parse(b.dimension())));
+            ServerLevel level = server.getLevel(ResourceKey.create(Registries.DIMENSION, Identifier.parse(b.dimension())));
             if (level == null) { out.addProperty("dimensionLoaded", false); return out; }
             out.addProperty("dimensionLoaded", true);
             JsonArray stores = new JsonArray();
@@ -563,7 +563,7 @@ public final class NaturalFarmWorldGameTests {
             out.add("twelveOriginalCropPositionsActualAge", crops);
             JsonArray residents = new JsonArray();
             // Character storage is world/overworld scoped even if future supported dimensions change.
-            var registry = server.overworld().getDataStorage().get(CharacterRegistryData.FACTORY, CharacterRegistryData.DATA_NAME);
+            var registry = server.overworld().getDataStorage().get(CharacterRegistryData.FACTORY.type(CharacterRegistryData.DATA_NAME));
             for (int i = 0; i < 3; i++) {
                 var person = NaturalVillageLifeData.person(b, i);
                 var body = NaturalVillageLifeData.body(b, i);
@@ -581,7 +581,7 @@ public final class NaturalFarmWorldGameTests {
                     row.add("position", object("x", npc.getX(), "y", npc.getY(), "z", npc.getZ()));
                     row.add("personalInventory", nbt(NaturalVillageEconomyData.items(npc.getPersonalInventory(), server.registryAccess())));
                     row.add("transportInventory", nbt(NaturalVillageEconomyData.items(npc.getTransportInventory(), server.registryAccess())));
-                    row.add("entityNbtObserved", nbt(npc.saveWithoutId(new CompoundTag())));
+                    row.add("entityNbtObserved", nbt(com.jgeted.sagadyssey.core.MinecraftApi.saveEntity(npc)));
                 }
                 residents.add(row);
             }
@@ -607,11 +607,11 @@ public final class NaturalFarmWorldGameTests {
             var rules = level.getGameRules();
             return object("gameTime", level.getGameTime(), "dayTime", level.getDayTime(), "raining", level.isRaining(),
                     "thundering", level.isThundering(), "difficulty", level.getDifficulty().name(),
-                    "doDaylightCycle", rules.getBoolean(GameRules.RULE_DAYLIGHT),
-                    "doWeatherCycle", rules.getBoolean(GameRules.RULE_WEATHER_CYCLE),
-                    "doMobSpawning", rules.getBoolean(GameRules.RULE_DOMOBSPAWNING),
-                    "randomTickSpeed", rules.getInt(GameRules.RULE_RANDOMTICKING),
-                    "spawnChunkRadius", rules.getInt(GameRules.RULE_SPAWN_CHUNK_RADIUS),
+                    "doDaylightCycle", rules.get(GameRules.ADVANCE_TIME),
+                    "doWeatherCycle", rules.get(GameRules.ADVANCE_WEATHER),
+                    "doMobSpawning", rules.get(GameRules.SPAWN_MOBS),
+                    "randomTickSpeed", rules.get(GameRules.RANDOM_TICK_SPEED),
+                    "spawnChunkRadius", 0,
                     "trackedPlayers", server.getPlayerList().getPlayerCount(), "nightThreatValidated", false,
                     "randomCropGrowthValidated", false, "longAcceptance", "NOT_RUN");
         }
@@ -768,7 +768,7 @@ public final class NaturalFarmWorldGameTests {
         var encoded = SinglePoolElement.CODEC.codec().encodeStart(level.registryAccess().createSerializationContext(NbtOps.INSTANCE),
                 (SinglePoolElement) piece.getElement()).getOrThrow();
         require(encoded instanceof CompoundTag, "native single pool element did not encode as a compound");
-        return ((CompoundTag) encoded).getString("location");
+        return ((CompoundTag) encoded).getStringOr("location", "");
     }
 
     private static BoundingBox pieceUnion(StructureStart start) {

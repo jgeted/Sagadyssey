@@ -9,7 +9,7 @@ import com.jgeted.sagadyssey.npc.brain.plan.NpcPlanStep;
 import com.jgeted.sagadyssey.npc.brain.plan.NpcPlanStepStatus;
 import com.jgeted.sagadyssey.social.production.ProductionOrder;
 import net.minecraft.core.BlockPos;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -107,7 +107,7 @@ public final class BlacksmithOrderPlanFactory {
     }
 
     private static NpcPlanStep step(int index, NpcPlanPhase phase,
-                                    ResourceLocation executorId,
+                                    Identifier executorId,
                                     Map<String, String> params, long now) {
         return new NpcPlanStep(index, phase, executorId, params,
                 NpcPlanStepStatus.PENDING, now, "等待执行");

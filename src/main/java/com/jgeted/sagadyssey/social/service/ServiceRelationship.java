@@ -1,5 +1,8 @@
 package com.jgeted.sagadyssey.social.service;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+import net.minecraft.core.UUIDUtil;
+
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.StringTag;
@@ -45,9 +48,9 @@ public record ServiceRelationship(UUID id, UUID principalId, UUID agentId, Servi
 
     public CompoundTag save() {
         CompoundTag tag = new CompoundTag();
-        tag.putUUID("Id", id);
-        tag.putUUID("Principal", principalId);
-        tag.putUUID("Agent", agentId);
+        tag.store("Id", UUIDUtil.CODEC, id);
+        tag.store("Principal", UUIDUtil.CODEC, principalId);
+        tag.store("Agent", UUIDUtil.CODEC, agentId);
         tag.putString("Basis", basis.name());
         ListTag scopeList = new ListTag();
         new TreeSet<>(scopes.stream().map(Enum::name).toList())
@@ -67,20 +70,20 @@ public record ServiceRelationship(UUID id, UUID principalId, UUID agentId, Servi
 
     public static ServiceRelationship load(CompoundTag tag) {
         EnumSet<AuthorityScope> scopes = EnumSet.noneOf(AuthorityScope.class);
-        ListTag scopeList = tag.getList("Scopes", Tag.TAG_STRING);
+        ListTag scopeList = MinecraftApi.listOfType(tag, "Scopes", Tag.TAG_STRING);
         for (int index = 0; index < scopeList.size(); index++) {
-            scopes.add(AuthorityScope.valueOf(scopeList.getString(index)));
+            scopes.add(AuthorityScope.valueOf(scopeList.getStringOr(index, "")));
         }
         List<ServiceObligation> obligations = new ArrayList<>();
-        ListTag obligationList = tag.getList("Obligations", Tag.TAG_COMPOUND);
+        ListTag obligationList = MinecraftApi.listOfType(tag, "Obligations", Tag.TAG_COMPOUND);
         for (int index = 0; index < obligationList.size(); index++) {
-            obligations.add(ServiceObligation.load(obligationList.getCompound(index)));
+            obligations.add(ServiceObligation.load(obligationList.getCompoundOrEmpty(index)));
         }
-        return new ServiceRelationship(tag.getUUID("Id"), tag.getUUID("Principal"),
-                tag.getUUID("Agent"), ServiceBasis.valueOf(tag.getString("Basis")), scopes,
-                obligations, ServiceLimits.load(tag.getCompound("Limits")),
-                ServiceStatus.valueOf(tag.getString("Status")), tag.getLong("Started"),
-                tag.contains("Ends") ? tag.getLong("Ends") : null, tag.getLong("Revision"),
-                tag.getString("Reason"));
+        return new ServiceRelationship(tag.read("Id", UUIDUtil.CODEC).orElseThrow(), tag.read("Principal", UUIDUtil.CODEC).orElseThrow(),
+                tag.read("Agent", UUIDUtil.CODEC).orElseThrow(), ServiceBasis.valueOf(tag.getStringOr("Basis", "")), scopes,
+                obligations, ServiceLimits.load(tag.getCompoundOrEmpty("Limits")),
+                ServiceStatus.valueOf(tag.getStringOr("Status", "")), tag.getLongOr("Started", 0L),
+                tag.contains("Ends") ? tag.getLongOr("Ends", 0L) : null, tag.getLongOr("Revision", 0L),
+                tag.getStringOr("Reason", ""));
     }
 }

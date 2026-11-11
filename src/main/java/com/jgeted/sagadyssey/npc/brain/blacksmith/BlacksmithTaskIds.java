@@ -1,14 +1,14 @@
 package com.jgeted.sagadyssey.npc.brain.blacksmith;
 
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 
 /** 铁匠订单计划的稳定执行器与参数标识。 */
 public final class BlacksmithTaskIds {
-    public static final ResourceLocation PROVIDER = id("blacksmith_order");
-    public static final ResourceLocation RESERVE_ORDER = id("blacksmith_reserve_order");
-    public static final ResourceLocation MOVE_TO_BLOCK = id("move_to_block");
-    public static final ResourceLocation FORGE = id("blacksmith_forge");
-    public static final ResourceLocation SETTLE = id("blacksmith_settle");
+    public static final Identifier PROVIDER = id("blacksmith_order");
+    public static final Identifier RESERVE_ORDER = id("blacksmith_reserve_order");
+    public static final Identifier MOVE_TO_BLOCK = id("move_to_block");
+    public static final Identifier FORGE = id("blacksmith_forge");
+    public static final Identifier SETTLE = id("blacksmith_settle");
 
     public static final String ORDER_ID = "orderId";
     public static final String BATCH_ID = "batchId";
@@ -21,7 +21,7 @@ public final class BlacksmithTaskIds {
     private BlacksmithTaskIds() {
     }
 
-    private static ResourceLocation id(String path) {
-        return ResourceLocation.fromNamespaceAndPath("sagadyssey", path);
+    private static Identifier id(String path) {
+        return Identifier.fromNamespaceAndPath("sagadyssey", path);
     }
 }

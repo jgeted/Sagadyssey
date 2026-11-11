@@ -2,7 +2,7 @@ package com.jgeted.sagadyssey.npc.trade;
 
 import com.jgeted.sagadyssey.npc.faction.Faction;
 import com.jgeted.sagadyssey.npc.faction.FactionStandings;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import org.junit.jupiter.api.Test;
 
 import java.util.Optional;
@@ -14,7 +14,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class NpcTradeAccessPolicyTest {
     private static final Faction KINGDOM = new Faction("sagadyssey:kingdom", "test.kingdom",
             0x336699, 0, true, true,
-            ResourceLocation.fromNamespaceAndPath("sagadyssey", "textures/gui/faction/kingdom.png"),
+            Identifier.fromNamespaceAndPath("sagadyssey", "textures/gui/faction/kingdom.png"),
             Optional.empty(), Optional.empty(), 1.0F, true, 0, 1);
 
     @Test

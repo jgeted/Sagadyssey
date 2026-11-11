@@ -16,7 +16,7 @@ public record ProductionMaterial(ItemFingerprint fingerprint, int quantity) {
     }
 
     static ProductionMaterial load(CompoundTag tag) {
-        return new ProductionMaterial(ItemFingerprint.load(tag.getCompound("Fingerprint")),
-                tag.getInt("Quantity"));
+        return new ProductionMaterial(ItemFingerprint.load(tag.getCompoundOrEmpty("Fingerprint")),
+                tag.getIntOr("Quantity", 0));
     }
 }

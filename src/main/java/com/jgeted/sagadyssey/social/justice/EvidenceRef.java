@@ -1,5 +1,7 @@
 package com.jgeted.sagadyssey.social.justice;
 
+import net.minecraft.core.UUIDUtil;
+
 import com.jgeted.sagadyssey.worldsim.rights.SubjectRef;
 import net.minecraft.nbt.CompoundTag;
 
@@ -17,9 +19,9 @@ public record EvidenceRef(UUID id, EvidenceKind kind, UUID recordId,
 
     public CompoundTag save() {
         CompoundTag tag = new CompoundTag();
-        tag.putUUID("Id", id);
+        tag.store("Id", UUIDUtil.CODEC, id);
         tag.putString("Kind", kind.name());
-        tag.putUUID("Record", recordId);
+        tag.store("Record", UUIDUtil.CODEC, recordId);
         tag.put("SubmittedBy", submittedBy.save());
         tag.putLong("SubmittedAt", submittedAt);
         tag.putString("Note", note);
@@ -27,8 +29,8 @@ public record EvidenceRef(UUID id, EvidenceKind kind, UUID recordId,
     }
 
     public static EvidenceRef load(CompoundTag tag) {
-        return new EvidenceRef(tag.getUUID("Id"), EvidenceKind.valueOf(tag.getString("Kind")),
-                tag.getUUID("Record"), SubjectRef.load(tag.getCompound("SubmittedBy")),
-                tag.getLong("SubmittedAt"), tag.getString("Note"));
+        return new EvidenceRef(tag.read("Id", UUIDUtil.CODEC).orElseThrow(), EvidenceKind.valueOf(tag.getStringOr("Kind", "")),
+                tag.read("Record", UUIDUtil.CODEC).orElseThrow(), SubjectRef.load(tag.getCompoundOrEmpty("SubmittedBy")),
+                tag.getLongOr("SubmittedAt", 0L), tag.getStringOr("Note", ""));
     }
 }

@@ -1,9 +1,11 @@
 package com.jgeted.sagadyssey.social.combat;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+
 import com.jgeted.sagadyssey.npc.entity.NpcBase;
 import com.jgeted.sagadyssey.worldsim.rights.*;
 import com.jgeted.sagadyssey.worldsim.transfer.*;
-import net.minecraft.world.entity.projectile.AbstractArrow;
+import net.minecraft.world.entity.projectile.arrow.AbstractArrow;
 import net.minecraft.world.item.ItemStack;
 import java.util.Set;
 
@@ -11,8 +13,8 @@ import java.util.Set;
 public final class NpcAmmunitionService {
     private NpcAmmunitionService(){}
     public static boolean launch(NpcBase npc,AbstractArrow arrow,ItemStack ammo){
-        if(npc.level().isClientSide||ammo==null||ammo.isEmpty())return false;
-        var rights=RightsStateData.get(npc.getServer());var actor=SubjectRef.character(npc.getCharacterId());
+        if(npc.level().isClientSide()||ammo==null||ammo.isEmpty())return false;
+        var rights=RightsStateData.get(MinecraftApi.server(npc));var actor=SubjectRef.character(npc.getCharacterId());
         var container=ContainerIds.npcPersonal(npc.getCharacterId());var inventory=npc.getPersonalInventory();
         rights.ensureContext(container,"npc:"+npc.getCharacterId()+":personal",actor,actor,AccessPolicy.PRIVATE);
         var snapshot=new ItemStack[inventory.getContainerSize()];for(int i=0;i<snapshot.length;i++)snapshot[i]=inventory.getItem(i).copy();

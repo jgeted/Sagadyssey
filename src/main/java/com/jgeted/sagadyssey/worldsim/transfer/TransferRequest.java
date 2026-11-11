@@ -1,5 +1,7 @@
 package com.jgeted.sagadyssey.worldsim.transfer;
 
+import net.minecraft.core.UUIDUtil;
+
 import com.jgeted.sagadyssey.worldsim.rights.SubjectRef;
 
 import java.util.List;
@@ -30,8 +32,8 @@ public record TransferRequest(UUID transferId, SubjectRef initiatedBy, TransferI
         var legTags = new net.minecraft.nbt.ListTag();
         for (var leg : legs) {
             var entry = new net.minecraft.nbt.CompoundTag();
-            entry.putUUID("Source", leg.sourceContainerId());
-            entry.putUUID("Destination", leg.destinationContainerId());
+            entry.store("Source", UUIDUtil.CODEC, leg.sourceContainerId());
+            entry.store("Destination", UUIDUtil.CODEC, leg.destinationContainerId());
             entry.put("Item", leg.fingerprint().save());
             entry.putInt("Quantity", leg.quantity());
             legTags.add(entry);
@@ -42,7 +44,7 @@ public record TransferRequest(UUID transferId, SubjectRef initiatedBy, TransferI
                 .comparing((ExpectedRevision revision) -> revision.containerId().toString())
                 .thenComparingLong(ExpectedRevision::revision)).forEach(revision -> {
                     var entry = new net.minecraft.nbt.CompoundTag();
-                    entry.putUUID("Container", revision.containerId());
+                    entry.store("Container", UUIDUtil.CODEC, revision.containerId());
                     entry.putLong("Revision", revision.revision());
                     revisionTags.add(entry);
                 });
@@ -51,7 +53,7 @@ public record TransferRequest(UUID transferId, SubjectRef initiatedBy, TransferI
         sourceAuthorities.entrySet().stream()
                 .sorted(Map.Entry.comparingByKey()).forEach(authorityEntry -> {
                     var entry = new net.minecraft.nbt.CompoundTag();
-                    entry.putUUID("Container", authorityEntry.getKey());
+                    entry.store("Container", UUIDUtil.CODEC, authorityEntry.getKey());
                     entry.put("Actor", authorityEntry.getValue().save());
                     authorityTags.add(entry);
                 });

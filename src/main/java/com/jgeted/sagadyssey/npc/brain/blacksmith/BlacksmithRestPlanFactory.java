@@ -3,7 +3,7 @@ package com.jgeted.sagadyssey.npc.brain.blacksmith;
 import com.jgeted.sagadyssey.npc.brain.execution.WaitUntilTaskExecutor;
 import com.jgeted.sagadyssey.npc.brain.plan.*;
 import net.minecraft.core.BlockPos;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 
 import java.util.List;
 import java.util.Map;
@@ -11,8 +11,8 @@ import java.util.UUID;
 
 /** Last-resort rest at the current location; grants no work, property or social authority. */
 public final class BlacksmithRestPlanFactory {
-    public static final ResourceLocation PROVIDER =
-            ResourceLocation.fromNamespaceAndPath("sagadyssey", "blacksmith_rest");
+    public static final Identifier PROVIDER =
+            Identifier.fromNamespaceAndPath("sagadyssey", "blacksmith_rest");
     public static final int DURATION_TICKS = 100;
 
     private BlacksmithRestPlanFactory() {}

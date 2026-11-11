@@ -1,5 +1,8 @@
 package com.jgeted.sagadyssey.social.growth;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+import net.minecraft.core.UUIDUtil;
+
 import com.jgeted.sagadyssey.core.structure.NaturalVillageBuilding;
 import com.jgeted.sagadyssey.core.structure.NaturalVillageLayout;
 import com.jgeted.sagadyssey.knowledge.DisclosurePolicy;
@@ -47,8 +50,8 @@ final class SettlementResourceSurvey {
         var parcel = new CompoundTag();
         parcel.putLong("Min", new BlockPos(Math.min(a.getX(), b.getX()), a.getY(), Math.min(a.getZ(), b.getZ())).asLong());
         parcel.putLong("Max", new BlockPos(Math.max(a.getX(), b.getX()), b.getY(), Math.max(a.getZ(), b.getZ())).asLong());
-        parcel.putUUID("Institution", village.settlementId());
-        parcel.putUUID("AuthorizedBy", official);
+        parcel.store("Institution", UUIDUtil.CODEC, village.settlementId());
+        parcel.store("AuthorizedBy", UUIDUtil.CODEC, official);
         parcel.putLong("AuthorizedAt", now);
         parcel.putString("Rule", "template-y-minus3-to-plus5;preserve-return-path;no-buildings;no-player-edits;loaded-only");
         row.put("Parcel", parcel);
@@ -57,10 +60,10 @@ final class SettlementResourceSurvey {
     }
 
     static boolean inParcel(CompoundTag row, BlockPos position) {
-        var parcel = row.getCompound("Parcel");
-        if (!parcel.hasUUID("AuthorizedBy")) return false;
-        var min = BlockPos.of(parcel.getLong("Min"));
-        var max = BlockPos.of(parcel.getLong("Max"));
+        var parcel = row.getCompoundOrEmpty("Parcel");
+        if (!parcel.read("AuthorizedBy", UUIDUtil.CODEC).isPresent()) return false;
+        var min = BlockPos.of(parcel.getLongOr("Min", 0L));
+        var max = BlockPos.of(parcel.getLongOr("Max", 0L));
         return position.getX() >= min.getX() && position.getX() <= max.getX()
                 && position.getY() >= min.getY() && position.getY() <= max.getY()
                 && position.getZ() >= min.getZ() && position.getZ() <= max.getZ();
@@ -68,20 +71,19 @@ final class SettlementResourceSurvey {
 
     private static boolean natural(BlockState state) {
         // 不把人工圆石、木板、箱子、农田和功能方块当成新矿点。
-        return state.is(Blocks.STONE) || state.is(Blocks.DEEPSLATE) || state.is(Blocks.DIRT)
+        return SettlementMaterials.quarry(state) || state.is(Blocks.DIRT)
                 || state.is(Blocks.GRASS_BLOCK) || state.is(Blocks.GRAVEL)
-                || state.is(Blocks.IRON_ORE) || state.is(Blocks.COPPER_ORE) || state.is(Blocks.COAL_ORE)
-                || state.is(Blocks.GRANITE) || state.is(Blocks.DIORITE) || state.is(Blocks.ANDESITE);
+                || state.is(net.neoforged.neoforge.common.Tags.Blocks.ORES);
     }
 
     private static boolean safe(NpcBase npc, CompoundTag row, BlockPos position) {
         var level = (ServerLevel) npc.level();
         if (!inParcel(row, position) || level.getChunkSource().getChunkNow(position.getX() >> 4, position.getZ() >> 4) == null) return false;
-        for (String key : row.getCompound("ProtectedEdits").getAllKeys()) {
+        for (String key : row.getCompoundOrEmpty("ProtectedEdits").keySet()) {
             if (BlockPos.of(Long.parseLong(key)).distSqr(position) <= 9) return false;
         }
         var village = SettlementCoordinatorData.building(row);
-        for (var building : SettlementRegistryData.get(npc.getServer()).buildings()) {
+        for (var building : SettlementRegistryData.get(MinecraftApi.server(npc)).buildings()) {
             if (!building.dimension().equals(village.dimension()) || building.key().equals(village.buildingKey())) continue;
             if (building.position().distSqr(position) < 32 * 32) return false;
         }
@@ -99,26 +101,26 @@ final class SettlementResourceSurvey {
 
     static boolean allowed(NpcBase npc, CompoundTag row, BlockPos position) {
         if (npc.getProfession() != NpcProfession.WORKER) return false;
-        var observation = row.getCompound("ObservedResources").getCompound(Long.toString(position.asLong()));
-        if (!observation.hasUUID("Observer")) return false;
+        var observation = row.getCompoundOrEmpty("ObservedResources").getCompoundOrEmpty(Long.toString(position.asLong()));
+        if (!observation.read("Observer", UUIDUtil.CODEC).isPresent()) return false;
         var state = npc.level().getBlockState(position);
-        if (observation.getString("Purpose").equals("PUBLIC_EXIT_CLEARANCE")) {
+        if (observation.getStringOr("Purpose", "").equals("PUBLIC_EXIT_CLEARANCE")) {
             return safeExit(npc, row, position)
                     && (state.isAir() || state.is(BlockTags.LEAVES)
-                    && NbtUtils.writeBlockState(state).toString().equals(observation.getString("State")));
+                    && NbtUtils.writeBlockState(state).toString().equals(observation.getStringOr("State", "")));
         }
         if (!safe(npc, row, position)) return false;
         // 原计划采完后的交付阶段仍有权引用这个位置，但不能再次采出物品。
-        return state.isAir() || natural(state) && NbtUtils.writeBlockState(state).toString().equals(observation.getString("State"));
+        return state.isAir() || natural(state) && NbtUtils.writeBlockState(state).toString().equals(observation.getStringOr("State", ""));
     }
 
     private static boolean safeExit(NpcBase npc, CompoundTag row, BlockPos position) {
         var village = SettlementCoordinatorData.building(row);
         if (!exitClearanceCell(village, position)
                 || ((ServerLevel) npc.level()).getChunkSource().getChunkNow(position.getX() >> 4, position.getZ() >> 4) == null) return false;
-        for (String key : row.getCompound("ProtectedEdits").getAllKeys())
+        for (String key : row.getCompoundOrEmpty("ProtectedEdits").keySet())
             if (BlockPos.of(Long.parseLong(key)).distSqr(position) <= 9) return false;
-        for (var building : SettlementRegistryData.get(npc.getServer()).buildings()) {
+        for (var building : SettlementRegistryData.get(MinecraftApi.server(npc)).buildings()) {
             if (building.dimension().equals(village.dimension()) && !building.key().equals(village.buildingKey())
                     && building.position().distSqr(position) < 32 * 32) return false;
         }
@@ -133,15 +135,15 @@ final class SettlementResourceSurvey {
         for (var local : BlockPos.betweenClosed(new BlockPos(21, 1, 15), new BlockPos(24, 3, 19))) {
             var position = NaturalVillageLayout.at(village, local);
             if (((ServerLevel) npc.level()).getChunkSource().getChunkNow(position.getX() >> 4, position.getZ() >> 4) == null) return false;
-            if (npc.level().getBlockState(position).is(Blocks.STONE)) return false;
+            if (SettlementMaterials.quarry(npc.level().getBlockState(position))) return false;
         }
-        return clearedCount(npc, row) != row.getInt("LastSurveyClearedCount")
-                || npc.level().getGameTime() >= row.getLong("SurveyRetryAt");
+        return clearedCount(npc, row) != row.getIntOr("LastSurveyClearedCount", 0)
+                || npc.level().getGameTime() >= row.getLongOr("SurveyRetryAt", 0L);
     }
 
     private static int clearedCount(NpcBase npc, CompoundTag row) {
         int count = 0;
-        for (String key : row.getCompound("ObservedResources").getAllKeys()) {
+        for (String key : row.getCompoundOrEmpty("ObservedResources").keySet()) {
             var point = BlockPos.of(Long.parseLong(key));
             if (((ServerLevel) npc.level()).getChunkSource().getChunkNow(point.getX() >> 4, point.getZ() >> 4) != null
                     && npc.level().getBlockState(point).isAir()) count++;
@@ -150,33 +152,38 @@ final class SettlementResourceSurvey {
     }
 
     static Optional<NpcPlan> mining(NpcBase npc, CompoundTag row, long now) {
-        var resources = row.getCompound("ObservedResources");
-        var positions = resources.getAllKeys().stream().map(key -> BlockPos.of(Long.parseLong(key)))
-                .sorted(Comparator.<BlockPos>comparingInt(position -> resources.getCompound(Long.toString(position.asLong()))
-                        .getString("Purpose").equals("ACCESS_REPAIR") ? 0 : npc.level().getBlockState(position).is(Blocks.STONE) ? 1 : 2)
+        var resources = row.getCompoundOrEmpty("ObservedResources");
+        var positions = resources.keySet().stream().map(key -> BlockPos.of(Long.parseLong(key)))
+                .sorted(Comparator.<BlockPos>comparingInt(position -> resources.getCompoundOrEmpty(Long.toString(position.asLong()))
+                        .getStringOr("Purpose", "").equals("ACCESS_REPAIR") ? 0 : SettlementMaterials.quarry(npc.level().getBlockState(position)) ? 1 : 2)
                         .thenComparingDouble(position -> position.distSqr(npc.blockPosition()))).toList();
         for (var position : positions) {
             if (!allowed(npc, row, position) || npc.level().getBlockState(position).isAir()) continue;
-            String purpose = resources.getCompound(Long.toString(position.asLong())).getString("Purpose");
+            if(SettlementResourceStock.applies(npc)&&!resources.getCompoundOrEmpty(Long.toString(position.asLong())).getStringOr("Purpose", "").equals("ACCESS_REPAIR")
+                    &&!resources.getCompoundOrEmpty(Long.toString(position.asLong())).getStringOr("Purpose", "").equals("PUBLIC_EXIT_CLEARANCE")
+                    &&FieldworkDiscovery.mineTarget(npc.level().getBlockState(position))&&!SettlementResourceStock.wants(npc,npc.level().getBlockState(position)))continue;
+            String purpose = resources.getCompoundOrEmpty(Long.toString(position.asLong())).getStringOr("Purpose", "");
             if (row.contains("EscapeStand") && !purpose.equals("ACCESS_REPAIR")) continue;
             // 到达许可底界的泥土后，下面不再有合法可探层；不能为找石料继续剥无收益草皮。
-            if (purpose.isEmpty() && position.getY() == BlockPos.of(row.getCompound("Parcel").getLong("Min")).getY()
-                    && !npc.level().getBlockState(position).is(Blocks.STONE)) continue;
-            if (purpose.isEmpty() && !npc.level().getBlockState(position).is(Blocks.STONE)) {
+            if (purpose.isEmpty() && position.getY() == BlockPos.of(row.getCompoundOrEmpty("Parcel").getLongOr("Min", 0L)).getY()
+                    && !SettlementMaterials.quarry(npc.level().getBlockState(position))
+                    &&!(SettlementResourceStock.applies(npc)&&FieldworkDiscovery.mineTarget(npc.level().getBlockState(position))&&SettlementResourceStock.wants(npc,npc.level().getBlockState(position)))) continue;
+            if (purpose.isEmpty() && !SettlementMaterials.quarry(npc.level().getBlockState(position))
+                    &&!(SettlementResourceStock.applies(npc)&&FieldworkDiscovery.mineTarget(npc.level().getBlockState(position))&&SettlementResourceStock.wants(npc,npc.level().getBlockState(position)))) {
                 if (!row.contains("ProbeAnchor")) continue;
-                var anchor = BlockPos.of(row.getLong("ProbeAnchor"));
+                var anchor = BlockPos.of(row.getLongOr("ProbeAnchor", 0L));
                 if (Math.abs(position.getX() - anchor.getX()) > 1 || Math.abs(position.getZ() - anchor.getZ()) > 1) continue;
             }
-            if (FieldworkData.get(npc.getServer()).unreachable(npc.getUUID(), npc.level().dimension().location().toString(), position, now).isPresent()) continue;
+            if (FieldworkData.get(MinecraftApi.server(npc)).unreachable(npc.getUUID(), npc.level().dimension().identifier().toString(), position, now).isPresent()) continue;
             var route = FieldworkRoutes.plan(npc, position, false, true);
             if (route == null) continue;
             if (purpose.isEmpty() && !SettlementSurveyNavigation.connected(npc, route.stand(),
                     returnStand(row), position)) continue;
-            var operation = resources.getCompound(Long.toString(position.asLong())).getString("Purpose").equals("PUBLIC_EXIT_CLEARANCE")
+            var operation = resources.getCompoundOrEmpty(Long.toString(position.asLong())).getStringOr("Purpose", "").equals("PUBLIC_EXIT_CLEARANCE")
                     ? FieldworkAction.Operation.CHOP : FieldworkAction.Operation.MINE;
             var target = new FieldworkTarget(position, operation,
                     npc.level().getBlockState(position), Blocks.AIR.defaultBlockState(), null, null);
-            return Optional.of(FieldworkPlanFactory.work(npc.getUUID(), target, route, npc.level().dimension().location().toString(), now));
+            return Optional.of(FieldworkPlanFactory.work(npc.getUUID(), target, route, npc.level().dimension().identifier().toString(), now));
         }
         return Optional.empty();
     }
@@ -188,10 +195,10 @@ final class SettlementResourceSurvey {
     /** 保留原人物和货物，以真实挖掘形成上行台阶；不传送、不填账、不挖出授权区。 */
     private static String recoverAccess(NpcBase npc, CompoundTag row, CompoundTag task, long now) {
         if (row.contains("EscapeStand")) {
-            var stand = BlockPos.of(row.getLong("EscapeStand"));
+            var stand = BlockPos.of(row.getLongOr("EscapeStand", 0L));
             if (npc.blockPosition().equals(stand)) {
                 row.remove("EscapeStand");
-                row.putInt("EscapeSteps", row.getInt("EscapeSteps") + 1);
+                row.putInt("EscapeSteps", row.getIntOr("EscapeSteps", 0) + 1);
                 row.remove("EscapeCheckedAt");
                 task.putLong("LastProgress", now);
             } else if (FieldworkRoutes.walkable(npc, stand)) {
@@ -205,13 +212,13 @@ final class SettlementResourceSurvey {
                 return "YIELD";
             }
         }
-        if (now - row.getLong("EscapeCheckedAt") < 200 && row.getBoolean("EscapeConnected")) return null;
+        if (now - row.getLongOr("EscapeCheckedAt", 0L) < 200 && row.getBooleanOr("EscapeConnected", false)) return null;
         row.putLong("EscapeCheckedAt", now);
         boolean connected = SettlementSurveyNavigation.connected(npc, npc.blockPosition(), returnStand(row), null);
         row.putBoolean("EscapeConnected", connected);
         if (connected) return null;
         if (!inParcel(row, npc.blockPosition())) return null;
-        if (row.getInt("EscapeSteps") >= 8) return "返程修复达到八级上行预算，保留人员与货物等待核对";
+        if (row.getIntOr("EscapeSteps", 0) >= 8) return "返程修复达到八级上行预算，保留人员与货物等待核对";
         var options = new ArrayList<BlockPos>();
         for (var direction : net.minecraft.core.Direction.Plane.HORIZONTAL) {
             var stand = npc.blockPosition().relative(direction).above();
@@ -222,8 +229,8 @@ final class SettlementResourceSurvey {
         }
         if (options.isEmpty()) return "无合法上行修复位置，保留携货与原工作，不向未知地块挖掘";
         // 优先保留向地块内部继续上行的空间，避免在地块边界掏出另一处死角。
-        var parcel = row.getCompound("Parcel");
-        var min = BlockPos.of(parcel.getLong("Min")); var max = BlockPos.of(parcel.getLong("Max"));
+        var parcel = row.getCompoundOrEmpty("Parcel");
+        var min = BlockPos.of(parcel.getLongOr("Min", 0L)); var max = BlockPos.of(parcel.getLongOr("Max", 0L));
         options.sort(Comparator.<BlockPos>comparingInt(p -> -Math.min(Math.min(p.getX() - min.getX(), max.getX() - p.getX()),
                 Math.min(p.getZ() - min.getZ(), max.getZ() - p.getZ()))).thenComparingDouble(returnStand(row)::distSqr));
         row.putLong("EscapeStand", options.getFirst().asLong());
@@ -233,12 +240,12 @@ final class SettlementResourceSurvey {
 
     private static void observeAccess(NpcBase npc, CompoundTag row, BlockPos point, long now) {
         var observation = new CompoundTag();
-        observation.putUUID("Observer", npc.getCharacterId());
-        observation.putUUID("Body", npc.getUUID());
+        observation.store("Observer", UUIDUtil.CODEC, npc.getCharacterId());
+        observation.store("Body", UUIDUtil.CODEC, npc.getUUID());
         observation.putString("Purpose", "ACCESS_REPAIR");
         observation.putLong("ObservedAt", now);
         observation.putString("State", NbtUtils.writeBlockState(npc.level().getBlockState(point)).toString());
-        row.getCompound("ObservedResources").put(Long.toString(point.asLong()), observation);
+        row.getCompoundOrEmpty("ObservedResources").put(Long.toString(point.asLong()), observation);
     }
 
     private static List<BlockPos> waypoints(NaturalVillageBuilding village) {
@@ -252,15 +259,15 @@ final class SettlementResourceSurvey {
     static String work(NpcBase npc, CompoundTag row, CompoundTag task, long now) {
         var level = (ServerLevel) npc.level();
         var village = SettlementCoordinatorData.building(row);
-        var observations = row.getCompound("ObservedResources");
-        var parcel = row.getCompound("Parcel");
-        if (parcel.getString("Rule").equals("surface-test-pits-max-depth-3;no-buildings;no-player-edits;loaded-only")) {
-            parcel.putString("OriginalRuleText", parcel.getString("Rule"));
+        var observations = row.getCompoundOrEmpty("ObservedResources");
+        var parcel = row.getCompoundOrEmpty("Parcel");
+        if (parcel.getStringOr("Rule", "").equals("surface-test-pits-max-depth-3;no-buildings;no-player-edits;loaded-only")) {
+            parcel.putString("OriginalRuleText", parcel.getStringOr("Rule", ""));
             parcel.putString("Rule", "template-y-minus3-to-plus5;preserve-return-path;no-buildings;no-player-edits;loaded-only");
             parcel.putLong("RuleTextClarifiedAt", now); // 坐标范围完全不变，修正旧说明与实际检查不一致。
         }
         int cleared = clearedCount(npc, row);
-        if (cleared != row.getInt("LastSurveyClearedCount")) {
+        if (cleared != row.getIntOr("LastSurveyClearedCount", 0)) {
             row.putInt("LastSurveyClearedCount", cleared);
             row.putInt("SurveyIndex", 0);
             row.remove("SurveyRetryAt");
@@ -269,7 +276,7 @@ final class SettlementResourceSurvey {
             task.remove("Blocker");
         }
         if (!row.contains("EntranceNavigationVersion")) {
-            row.putInt("PreviousSurveyIndex", row.getInt("SurveyIndex"));
+            row.putInt("PreviousSurveyIndex", row.getIntOr("SurveyIndex", 0));
             row.putInt("EntranceNavigationVersion", 1);
             row.putInt("SurveyIndex", 0);
             row.remove("SurveyRetryAt");
@@ -280,8 +287,8 @@ final class SettlementResourceSurvey {
         if (exit != null) return exit;
         // 露头包含坑壁，不只是从上向下看到的草皮；分批读取有限邻域，优先接续已露出的石层。
         long scanOrigin = npc.blockPosition().asLong();
-        if (row.getLong("ProbeOrigin") != scanOrigin) { row.putLong("ProbeOrigin", scanOrigin); row.putInt("ProbeCursor", 0); }
-        int cursor = row.getInt("ProbeCursor");
+        if (row.getLongOr("ProbeOrigin", 0L) != scanOrigin) { row.putLong("ProbeOrigin", scanOrigin); row.putInt("ProbeCursor", 0); }
+        int cursor = row.getIntOr("ProbeCursor", 0);
         for (int probe = 0; probe < 64; probe++) {
             int index = (cursor + probe) % 567;
             var point = npc.blockPosition().offset(index % 9 - 4, index / 81 - 3, index / 9 % 9 - 4);
@@ -290,11 +297,11 @@ final class SettlementResourceSurvey {
             String key = Long.toString(point.asLong());
             if (!observations.contains(key)) {
                 var observation = new CompoundTag();
-                observation.putUUID("Observer", npc.getCharacterId()); observation.putUUID("Body", npc.getUUID());
+                observation.store("Observer", UUIDUtil.CODEC, npc.getCharacterId()); observation.store("Body", UUIDUtil.CODEC, npc.getUUID());
                 observation.putLong("ObservedAt", now); observation.putString("State", NbtUtils.writeBlockState(level.getBlockState(point)).toString());
                 observations.put(key, observation); task.putLong("LastProgress", now);
-                KnowledgeStateData.get(npc.getServer()).observe(npc.getCharacterId(),
-                        new FactKey(village.settlementId(), "authorized_surface_resource", key), observation.getString("State"),
+                KnowledgeStateData.get(MinecraftApi.server(npc)).observe(npc.getCharacterId(),
+                        new FactKey(village.settlementId(), "authorized_surface_resource", key), observation.getStringOr("State", ""),
                         PrecisionBand.EXACT, 1, "原居民现场观察可见坑壁", now, 24000, DisclosurePolicy.SHAREABLE);
             }
         }
@@ -312,13 +319,13 @@ final class SettlementResourceSurvey {
             String key = Long.toString(position.asLong());
             if (!observations.contains(key)) {
                 var observation = new CompoundTag();
-                observation.putUUID("Observer", npc.getCharacterId());
-                observation.putUUID("Body", npc.getUUID());
+                observation.store("Observer", UUIDUtil.CODEC, npc.getCharacterId());
+                observation.store("Body", UUIDUtil.CODEC, npc.getUUID());
                 observation.putLong("ObservedAt", now);
                 observation.putString("State", NbtUtils.writeBlockState(level.getBlockState(position)).toString());
                 observations.put(key, observation);
-                KnowledgeStateData.get(npc.getServer()).observe(npc.getCharacterId(),
-                        new FactKey(village.settlementId(), "authorized_surface_resource", key), observation.getString("State"),
+                KnowledgeStateData.get(MinecraftApi.server(npc)).observe(npc.getCharacterId(),
+                        new FactKey(village.settlementId(), "authorized_surface_resource", key), observation.getStringOr("State", ""),
                         PrecisionBand.EXACT, 1, "原居民现场视线观察", now, 24000, DisclosurePolicy.SHAREABLE);
                 task.putLong("LastProgress", now);
             }
@@ -327,7 +334,7 @@ final class SettlementResourceSurvey {
         String probe = probe(npc, row, task, now);
         if (probe != null) return probe;
         var points = waypoints(village);
-        int index = row.getInt("SurveyIndex");
+        int index = row.getIntOr("SurveyIndex", 0);
         if (index >= points.size()) {
             row.putLong("SurveyRetryAt", now + 24000);
             task.putString("Blocker", "AUTHORIZED_SURFACE_RANGE_EXHAUSTED");
@@ -348,13 +355,13 @@ final class SettlementResourceSurvey {
             row.putInt("SurveyIndex", index + 1);
             return "已到现场观察，继续下一明确观察点";
         }
-        if (!task.contains("PointStarted") || task.getInt("PointIndex") != index) {
+        if (!task.contains("PointStarted") || task.getIntOr("PointIndex", 0) != index) {
             task.putLong("PointStarted", now);
             task.putInt("PointIndex", index);
             task.putInt("PointWorkTicks", 0);
         }
-        task.putInt("PointWorkTicks", task.getInt("PointWorkTicks") + 1);
-        if (task.getInt("PointWorkTicks") > 2400) {
+        task.putInt("PointWorkTicks", task.getIntOr("PointWorkTicks", 0) + 1);
+        if (task.getIntOr("PointWorkTicks", 0) > 2400) {
             row.putInt("SurveyIndex", index + 1);
             task.putString("Blocker", "SURVEY_PATH_BLOCKED");
             return "YIELD";
@@ -365,12 +372,12 @@ final class SettlementResourceSurvey {
 
     /** 连续检查一个有限试坑，再转移观察点；不能把整片表土逐格铲完当成找石料。 */
     private static String probe(NpcBase npc, CompoundTag row, CompoundTag task, long now) {
-        var tested = row.getCompound("TestedProbes");
+        var tested = row.getCompoundOrEmpty("TestedProbes");
         if (!row.contains("ProbeAnchor")) {
-            var candidates = row.getCompound("ObservedResources").getAllKeys().stream()
+            var candidates = row.getCompoundOrEmpty("ObservedResources").keySet().stream()
                     .map(key -> BlockPos.of(Long.parseLong(key)))
                     .filter(p -> inParcel(row, p) && natural(npc.level().getBlockState(p))
-                            && p.getY() > BlockPos.of(row.getCompound("Parcel").getLong("Min")).getY()
+                            && p.getY() > BlockPos.of(row.getCompoundOrEmpty("Parcel").getLongOr("Min", 0L)).getY()
                             && !tested.contains(p.getX() + ":" + p.getZ()) && safe(npc, row, p))
                     .sorted(Comparator.<BlockPos>comparingInt(p -> -p.getY())
                             .thenComparingDouble(npc.blockPosition()::distSqr)).toList();
@@ -382,16 +389,16 @@ final class SettlementResourceSurvey {
             task.putLong("LastProgress", now);
             return "已选择有合法探测余深的有限试坑，沿同一处寻找石层";
         }
-        var anchor = BlockPos.of(row.getLong("ProbeAnchor"));
-        row.putInt("ProbeWorkTicks", row.getInt("ProbeWorkTicks") + 1);
+        var anchor = BlockPos.of(row.getLongOr("ProbeAnchor", 0L));
+        row.putInt("ProbeWorkTicks", row.getIntOr("ProbeWorkTicks", 0) + 1);
         var stand = groundStand(npc, row, anchor);
         if (stand != null && npc.distanceToSqr(stand.getX() + .5, stand.getY(), stand.getZ() + .5) > .64
-                && row.getInt("ProbeWorkTicks") <= 2400
-                && clearedCount(npc, row) - row.getInt("ProbeOpeningCleared") < 48) {
+                && row.getIntOr("ProbeWorkTicks", 0) <= 2400
+                && clearedCount(npc, row) - row.getIntOr("ProbeOpeningCleared", 0) < 48) {
             SettlementSurveyNavigation.move(npc, stand);
             return "实际走近试坑，观察已露出的侧壁：" + SettlementSurveyNavigation.status(npc);
         }
-        if (stand != null && row.getInt("ProbeWorkTicks") < 24) return "分批观察试坑侧壁，尚不认定资源耗尽";
+        if (stand != null && row.getIntOr("ProbeWorkTicks", 0) < 24) return "分批观察试坑侧壁，尚不认定资源耗尽";
         for (int x = -1; x <= 1; x++) for (int z = -1; z <= 1; z++)
             tested.putLong((anchor.getX() + x) + ":" + (anchor.getZ() + z), now);
         row.put("TestedProbes", tested);
@@ -401,9 +408,9 @@ final class SettlementResourceSurvey {
     }
 
     private static BlockPos groundStand(NpcBase npc, CompoundTag row, BlockPos column) {
-        var parcel = row.getCompound("Parcel");
-        int low = BlockPos.of(parcel.getLong("Min")).getY();
-        int high = BlockPos.of(parcel.getLong("Max")).getY();
+        var parcel = row.getCompoundOrEmpty("Parcel");
+        int low = BlockPos.of(parcel.getLongOr("Min", 0L)).getY();
+        int high = BlockPos.of(parcel.getLongOr("Max", 0L)).getY();
         for (int y = high; y >= low; y--) {
             var ground = new BlockPos(column.getX(), y, column.getZ());
             if (natural(npc.level().getBlockState(ground)) && FieldworkRoutes.walkable(npc, ground.above())) return ground.above();
@@ -438,7 +445,7 @@ final class SettlementResourceSurvey {
             if (!state.getValue(DoorBlock.OPEN) && npc.distanceToSqr(door.getCenter()) <= 20.25)
                 ((DoorBlock) state.getBlock()).setOpen(npc, npc.level(), state, door, true);
             // 固定公共出口净空带：3×7、最多四格高，仅清可见自然树叶；不砍树干、不拆人工方块。
-            if (row.getInt("ExitClearanceVersion") < 2) {
+            if (row.getIntOr("ExitClearanceVersion", 0) < 2) {
                 row.putInt("ExitClearanceVersion", 2);
                 row.putString("ExitClearanceBounds", "local x11..13,z22..28,y1..4;natural-leaves-only");
                 row.putLong("ExitClearanceApprovedAt", now);
@@ -448,12 +455,12 @@ final class SettlementResourceSurvey {
                 if (!npc.level().getBlockState(leaf).is(BlockTags.LEAVES) || !safeExit(npc, row, leaf)
                         || !FieldworkRoutes.closeEnough(npc, leaf)) continue;
                 var observation = new CompoundTag();
-                observation.putUUID("Observer", npc.getCharacterId());
-                observation.putUUID("ApprovedBy", row.getUUID("ApprovedBy"));
+                observation.store("Observer", UUIDUtil.CODEC, npc.getCharacterId());
+                observation.store("ApprovedBy", UUIDUtil.CODEC, row.read("ApprovedBy", UUIDUtil.CODEC).orElseThrow());
                 observation.putLong("ObservedAt", now);
                 observation.putString("Purpose", "PUBLIC_EXIT_CLEARANCE");
                 observation.putString("State", NbtUtils.writeBlockState(npc.level().getBlockState(leaf)).toString());
-                row.getCompound("ObservedResources").put(Long.toString(leaf.asLong()), observation);
+                row.getCompoundOrEmpty("ObservedResources").put(Long.toString(leaf.asLong()), observation);
                 return "YIELD";
             }
             // 先到最近尚未走过的真实地面，逐步看见后面的树叶，不隔着树林批量清理。

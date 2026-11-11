@@ -4,12 +4,9 @@ import com.jgeted.sagadyssey.npc.entity.NpcBase;
 import com.jgeted.sagadyssey.npc.gui.NpcCommandScreen;
 import com.jgeted.sagadyssey.npc.gui.NpcRecruitScreen;
 import net.minecraft.client.Minecraft;
-import net.neoforged.api.distmarker.Dist;
-import net.neoforged.api.distmarker.OnlyIn;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
 
 /** Client-only behavior kept out of the common payload class for dedicated-server safety. */
-@OnlyIn(Dist.CLIENT)
 final class ClientNpcStatsPayloadHandler {
     private ClientNpcStatsPayloadHandler() {}
 

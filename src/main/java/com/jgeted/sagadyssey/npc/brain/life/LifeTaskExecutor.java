@@ -1,5 +1,7 @@
 package com.jgeted.sagadyssey.npc.brain.life;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+
 import com.jgeted.sagadyssey.npc.brain.execution.*;
 import com.jgeted.sagadyssey.npc.brain.fieldwork.FieldworkRoutes;
 import com.jgeted.sagadyssey.npc.brain.fieldwork.FieldworkCargo;
@@ -12,7 +14,7 @@ import com.jgeted.sagadyssey.social.logistics.WarehouseContainers;
 import com.jgeted.sagadyssey.worldsim.rights.*;
 import com.jgeted.sagadyssey.worldsim.transfer.*;
 import net.minecraft.core.BlockPos;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.tags.BlockTags;
 import net.minecraft.world.Container;
@@ -23,17 +25,17 @@ import net.minecraft.world.level.block.LecternBlock;
 import java.util.*;
 
 public final class LifeTaskExecutor implements NpcTaskExecutor {
-    private final ResourceLocation id;
+    private final Identifier id;
     private final Map<UUID, Motion> motions = new HashMap<>();
     @Override public void forget(UUID body,UUID plan){motions.remove(plan);}
     private record Motion(BlockPos stand, long started, long lastProgress, double distance) { }
-    public LifeTaskExecutor(ResourceLocation id) { this.id = id; }
+    public LifeTaskExecutor(Identifier id) { this.id = id; }
     private static String label(String op) {
         return switch(op) { case "EAT" -> "进食";case "SLEEP" -> "私人床位休息";case "CARE" -> "当面家庭照料";
             case "HOME" -> "回家";case "TALK","VISIT" -> "当面交谈";case "READ" -> "阅读";case "TAVERN" -> "酒馆休闲";
             case "OBSERVE" -> "观察周围";default -> "短时等待"; };
     }
-    @Override public ResourceLocation id() { return id; }
+    @Override public Identifier id() { return id; }
     @Override public TaskTickResult start(NpcExecutionContext c, NpcPlan p, NpcPlanStep s) { return tick(c,p,s); }
     @Override public TaskTickResult recover(NpcExecutionContext c, NpcPlan p, NpcPlanStep s) {
         motions.remove(p.id());
@@ -46,7 +48,7 @@ public final class LifeTaskExecutor implements NpcTaskExecutor {
         NpcBase npc = e.npc(); ServerLevel level = e.level(); long now = e.gameTime();
         var data = LifeActivityData.get(level.getServer()); var params = step.params(); String op = params.get("operation");
         BlockPos target = LifePlanFactory.target(params);
-        if (!level.dimension().location().toString().equals(params.get("dimension")) || !level.hasChunkAt(target))
+        if (!level.dimension().identifier().toString().equals(params.get("dimension")) || !level.hasChunkAt(target))
             return fail(npc, data, plan, now, "已知生活地点尚未加载或维度改变");
         if (!authorized(npc, op, target, params)) return fail(npc,data,plan,now,"生活目标、设施或权限失效");
         String place = params.get("dimension") + ':' + target.asLong();
@@ -119,7 +121,7 @@ public final class LifeTaskExecutor implements NpcTaskExecutor {
         SubjectRef consumingAs = actor; AccessPolicy policy = AccessPolicy.PRIVATE;
         var target = LifePlanFactory.target(step.params());
         if (!step.params().getOrDefault("source","BAG").equals("BAG")) {
-            if(com.jgeted.sagadyssey.worldsim.lod.NaturalVillageEconomyData.protects(level.getServer(),level.dimension().location().toString(),target))return fail(npc,data,plan,now,"仓储尚未完成权威交接，保留物资");
+            if(com.jgeted.sagadyssey.worldsim.lod.NaturalVillageEconomyData.protects(level.getServer(),level.dimension().identifier().toString(),target))return fail(npc,data,plan,now,"仓储尚未完成权威交接，保留物资");
             source = WarehouseContainers.asContainer(level.getBlockEntity(target));
             String type = step.params().get("source").equals("HOUSEHOLD") ? "household_storage" : "private_storage";
             containerId = ContainerIds.block(type,step.params().get("dimension"),target);
@@ -273,20 +275,20 @@ public final class LifeTaskExecutor implements NpcTaskExecutor {
         resumeWorkScan(npc);
         return TaskTickResult.stepSucceeded("双人会话已结束，关系和记忆仅结算一次");
     }
-    private static ResourceLocation ACT_ID() { return LifePlanFactory.ACT; }
+    private static Identifier ACT_ID() { return LifePlanFactory.ACT; }
     private static void resumeWorkScan(NpcBase npc) {
-        var work=com.jgeted.sagadyssey.npc.brain.fieldwork.FieldworkData.get(npc.getServer());
+        var work=com.jgeted.sagadyssey.npc.brain.fieldwork.FieldworkData.get(MinecraftApi.server(npc));
         work.scan(npc.getUUID()).ifPresent(cursor->work.saveScan(npc.getUUID(),com.jgeted.sagadyssey.npc.brain.fieldwork.FieldworkScan.Cursor.begin(cursor.area())));
     }
     private static boolean participating(NpcBase npc,UUID session) {
         return npc!=null && npc.isAlive() && npc.getTarget()==null && npc.getCommand()==NpcCommand.WORK
-                && NpcBrainRuntime.isPlanned(npc) && NpcBrainRuntime.data(npc.getServer()).active(npc.getUUID())
+                && NpcBrainRuntime.isPlanned(npc) && NpcBrainRuntime.data(MinecraftApi.server(npc)).active(npc.getUUID())
                 .map(p->session.toString().equals(p.currentStep().params().get("session"))).orElse(false);
     }
     public static NpcBase peer(ServerLevel level,UUID id) { return level.getEntity(id) instanceof NpcBase npc?npc:null; }
 
     private boolean authorized(NpcBase npc,String op,BlockPos target,Map<String,String> params) {
-        var life=NpcLifeData.get(npc.getServer()).record(npc.getCharacterId());
+        var life=NpcLifeData.get(MinecraftApi.server(npc)).record(npc.getCharacterId());
         if(life==null || !life.dimension().equals(params.get("dimension"))) return false;
         if(op.equals("SLEEP")) return life.bedPosition()!=null && target.equals(NpcResidenceFixtures.normalizeBedHead((ServerLevel)npc.level(),life.bedPosition()))
                 && npc.level().getBlockState(target).is(BlockTags.BEDS)
@@ -295,12 +297,12 @@ public final class LifeTaskExecutor implements NpcTaskExecutor {
             String source=params.getOrDefault("source","BAG");
             if(source.equals("BAG")) return true;
             if(source.equals("PRIVATE")) return target.equals(life.privateStoragePosition());
-            var household=HouseholdData.get(npc.getServer()).forMember(npc.getCharacterId());
+            var household=HouseholdData.get(MinecraftApi.server(npc)).forMember(npc.getCharacterId());
             return household!=null && target.equals(household.sharedStorage()) && household.dimension().equals(params.get("dimension"));
         }
         if(op.equals("CARE")) {
             var recipient=peer((ServerLevel)npc.level(),UUID.fromString(params.get("peer")));
-            var household=HouseholdData.get(npc.getServer()).forMember(npc.getCharacterId());
+            var household=HouseholdData.get(MinecraftApi.server(npc)).forMember(npc.getCharacterId());
             return recipient!=null && household!=null && household.contains(recipient.getCharacterId());
         }
         if(op.equals("HOME")) return target.equals(life.bedPosition()) || target.equals(life.privateStoragePosition());
@@ -311,14 +313,14 @@ public final class LifeTaskExecutor implements NpcTaskExecutor {
         return op.equals("WAIT") || op.equals("OBSERVE") || op.equals("TAVERN");
     }
     private static boolean knownFacility(NpcBase npc,BlockPos target,String op) {
-        return LifeActivityData.get(npc.getServer()).knownPlaces(npc.getUUID()).stream().anyMatch(p->p.position().equals(target)
-                && p.dimension().equals(npc.level().dimension().location().toString()) &&
-                Optional.ofNullable(VisitActivityRegistry.definitions().get(ResourceLocation.parse(p.activity())))
+        return LifeActivityData.get(MinecraftApi.server(npc)).knownPlaces(npc.getUUID()).stream().anyMatch(p->p.position().equals(target)
+                && p.dimension().equals(npc.level().dimension().identifier().toString()) &&
+                Optional.ofNullable(VisitActivityRegistry.definitions().get(Identifier.parse(p.activity())))
                         .map(a->a.kind().name().equals(op)).orElse(false));
     }
     private TaskTickResult fail(NpcBase npc,LifeActivityData data,NpcPlan plan,long now,String reason) {
         npc.getNavigation().stop(); if(npc.isSleeping())npc.stopSleeping(); data.defer(npc.getUUID(),now);
-        data.deferPlace(npc.getUUID(),npc.level().dimension().location().toString(),LifePlanFactory.target(plan.currentStep().params()),now);
+        data.deferPlace(npc.getUUID(),npc.level().dimension().identifier().toString(),LifePlanFactory.target(plan.currentStep().params()),now);
         resumeWorkScan(npc);
         motions.remove(plan.id()); return TaskTickResult.failed(reason);
     }

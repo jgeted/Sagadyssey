@@ -1,5 +1,7 @@
 package com.jgeted.sagadyssey.core.structure;
 
+import com.jgeted.sagadyssey.gametest.PortedGameTests.*;
+
 import com.google.gson.Gson;
 import com.jgeted.sagadyssey.Sagadyssey;
 import com.jgeted.sagadyssey.npc.brain.fieldwork.*;
@@ -12,7 +14,7 @@ import net.minecraft.core.*;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.gametest.framework.*;
 import net.minecraft.nbt.*;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.Container;
 import net.minecraft.world.item.*;
@@ -26,12 +28,12 @@ import java.util.*;
 @GameTestHolder("sagadyssey_natural_life") @PrefixGameTestTemplate(false)
 @net.neoforged.fml.common.EventBusSubscriber(modid="sagadyssey")
 public final class NaturalLifeGameTests {
-    private static final ResourceLocation EMPTY=ResourceLocation.parse("sagadyssey_natural_life:empty");
+    private static final Identifier EMPTY=Identifier.parse("sagadyssey_natural_life:empty");
     @net.neoforged.bus.api.SubscribeEvent public static void install(net.neoforged.neoforge.event.server.ServerStartedEvent e){
         if(!(e.getServer() instanceof GameTestServer))return;
         var l=e.getServer().overworld();
         try {l.getStructureManager().getOrCreate(EMPTY).load(l.holderLookup(Registries.BLOCK),
-                TagParser.parseTag("{size:[16,6,16],entities:[],blocks:[],palette:[{Name:\"minecraft:air\"}]}"));}
+                TagParser.parseCompoundFully("{size:[16,6,16],entities:[],blocks:[],palette:[{Name:\"minecraft:air\"}]}"));}
         catch(Exception x){throw new IllegalStateException(x);}
     }
     @GameTestGenerator public static Collection<TestFunction> tests(){
@@ -56,7 +58,7 @@ public final class NaturalLifeGameTests {
         h.onEachTick(()->{
             var v=NaturalVillageLifeData.get(l.getServer()).village(b.buildingKey());
             if(state.began<0){
-                if(v==null||!v.getBoolean("Ready"))return;
+                if(v==null||!v.getBooleanOr("Ready", false))return;
                 var farmer=NaturalVillageR1GameTests.actor(l,b,0);var pantry=state.store(NaturalVillageLayout.PANTRY);
                 h.assertTrue(count(farmer.getPersonalInventory())==(revised?12:16)&&count(pantry)==(revised?4:0),"unchanged finite initialization before calibration split");
                 h.assertTrue(FieldworkData.get(l.getServer()).receiptsFor(farmer.getUUID()).isEmpty(),"no harvest before declared initial split");
@@ -118,7 +120,7 @@ public final class NaturalLifeGameTests {
             }
             if(elapsed%20!=0)return;
             var economy=NaturalVillageEconomyData.existing(l.getServer());var row=economy==null?null:economy.row(b.buildingKey());
-            require(row==null||row.getString("Phase").equals("NEAR"),"calibration remains physical NEAR");
+            require(row==null||row.getStringOr("Phase", "").equals("NEAR"),"calibration remains physical NEAR");
             for(var p:NaturalVillageLayout.crops()){
                 var at=NaturalVillageLayout.at(b,p);var s=l.getBlockState(at);
                 if(s.is(Blocks.CARROTS)&&s.getValue(CropBlock.AGE)==7&&mature.add(at.toShortString()))event("MATURE",Map.of("plot",at.toShortString()));
@@ -148,8 +150,8 @@ public final class NaturalLifeGameTests {
             }
             var stores=new LinkedHashMap<String,Integer>();for(var p:NaturalVillageLayout.stores(b)){var c=l.getBlockEntity(NaturalVillageLayout.at(b,p));if(c instanceof Container box)stores.put(p.toShortString(),count(box));}
             var economy=NaturalVillageEconomyData.existing(l.getServer());var row=economy==null?null:economy.row(b.buildingKey());
-            event("SNAPSHOT",Map.of("actors",actors,"stores",stores,"netCrop",netCrop,"meals",meals,"phase",row==null?"not-enrolled":row.getString("Phase"),"dayTime",l.getDayTime()));
+            event("SNAPSHOT",Map.of("actors",actors,"stores",stores,"netCrop",netCrop,"meals",meals,"phase",row==null?"not-enrolled":row.getStringOr("Phase", ""),"dayTime",l.getDayTime()));
         }
-        void save(){try{l.getServer().saveEverything(true,true,true);net.neoforged.neoforge.common.IOUtilities.waitUntilIOWorkerComplete();}catch(Exception e){throw new IllegalStateException(e);}}
+        void save(){try{l.getServer().saveEverything(true,true,true);}catch(Exception e){throw new IllegalStateException(e);}}
     }
 }

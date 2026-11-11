@@ -1,5 +1,7 @@
 package com.jgeted.sagadyssey.npc.command;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+
 import com.jgeted.sagadyssey.npc.entity.NpcBase;
 import com.jgeted.sagadyssey.npc.work.NpcWorkstationContainers;
 import com.jgeted.sagadyssey.social.logistics.LogisticsData;
@@ -42,7 +44,7 @@ public final class NpcWorkCommand {
 
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
         dispatcher.register(Commands.literal("saga").then(Commands.literal("npc")
-                .then(Commands.literal("inspect").requires(source -> source.hasPermission(2))
+                .then(Commands.literal("inspect").requires(source -> MinecraftApi.hasPermission(source, 2))
                         .executes(ctx -> inspect(ctx.getSource())))));
     }
 
@@ -90,7 +92,7 @@ public final class NpcWorkCommand {
                     + "，私人储物=" + position(life.privateStoragePosition())), false);
             source.sendSuccess(() -> Component.literal("§7排班=" + life.shift().name()
                     + "，疲劳=" + life.fatigue() + "/1000，当前权威=" + life.authority().name()), false);
-            NpcNeedsRecord needs = lifeData.ensureNeeds(npc.getCharacterId(), player.serverLevel().getGameTime());
+            NpcNeedsRecord needs = lifeData.ensureNeeds(npc.getCharacterId(), player.level().getGameTime());
             source.sendSuccess(() -> Component.literal("§6饥饿=" + needs.hunger()
                     + "/1000（越高越饿），上次食物来源=" + needs.lastFoodSource()), false);
             var schedule = com.jgeted.sagadyssey.social.life.NpcSchedulePlanner.current(npc);
@@ -129,8 +131,8 @@ public final class NpcWorkCommand {
         if (warehouse == null) {
             source.sendSuccess(() -> Component.literal("§c可用仓库=无；生产物资只能留在背包或掉落。"), false);
         } else {
-            boolean loaded = player.serverLevel().hasChunkAt(warehouse.position())
-                    && WarehouseContainers.asContainer(player.serverLevel()
+            boolean loaded = player.level().hasChunkAt(warehouse.position())
+                    && WarehouseContainers.asContainer(player.level()
                     .getBlockEntity(warehouse.position())) != null;
             source.sendSuccess(() -> Component.literal("§a最近可用仓库=" + warehouse.name()
                     + "，位置=" + warehouse.position().toShortString()
@@ -221,7 +223,7 @@ public final class NpcWorkCommand {
         BlockPos furnace = null;
         double nearest = Double.MAX_VALUE;
         for (BlockPos pos : BlockPos.betweenClosed(origin.offset(-16, -3, -16), origin.offset(16, 3, 16))) {
-            var state = player.serverLevel().getBlockState(pos);
+            var state = player.level().getBlockState(pos);
             if (!state.is(Blocks.FURNACE) && !state.is(Blocks.BLAST_FURNACE)) continue;
             double distance = pos.distSqr(origin);
             if (distance < nearest) {
@@ -234,7 +236,7 @@ public final class NpcWorkCommand {
             return;
         }
         BlockPos finalFurnace = furnace;
-        Container inventory = NpcWorkstationContainers.asFurnace(player.serverLevel().getBlockEntity(furnace));
+        Container inventory = NpcWorkstationContainers.asFurnace(player.level().getBlockEntity(furnace));
         if (inventory == null || inventory.getContainerSize() < 3) {
             source.sendSuccess(() -> Component.literal("§c熔炉容器失效，位置=" + finalFurnace.toShortString()), false);
             return;
@@ -251,7 +253,7 @@ public final class NpcWorkCommand {
 
     @Nullable
     private static WarehouseRecord nearestUsableWarehouse(CommandSourceStack source, NpcBase npc) {
-        String dimension = npc.level().dimension().location().toString();
+        String dimension = npc.level().dimension().identifier().toString();
         return LogisticsData.get(source.getServer()).warehouses().stream()
                 .filter(warehouse -> warehouse.dimension().equals(dimension))
                 .filter(warehouse -> canUseWarehouse(source, npc, warehouse))
@@ -275,12 +277,12 @@ public final class NpcWorkCommand {
     }
 
     private static void showLine(ServerPlayer player, Vec3 start, Vec3 end) {
-        DustParticleOptions particle = new DustParticleOptions(new Vector3f(0.2F, 1.0F, 0.35F), 0.8F);
+        DustParticleOptions particle = new DustParticleOptions(MinecraftApi.particleColor(new Vector3f(0.2F, 1.0F, 0.35F)), 0.8F);
         Vec3 delta = end.subtract(start);
         int steps = Math.max(1, Math.min(96, (int) Math.ceil(delta.length() * 2.0D)));
         for (int index = 0; index <= steps; index++) {
             Vec3 point = start.add(delta.scale((double) index / steps));
-            player.serverLevel().sendParticles(player, particle, true,
+            player.level().sendParticles(player, particle, true, false,
                     point.x, point.y + 0.5D, point.z, 1, 0, 0, 0, 0);
         }
     }

@@ -1,5 +1,7 @@
 package com.jgeted.sagadyssey.social.justice;
 
+import net.minecraft.core.UUIDUtil;
+
 import com.jgeted.sagadyssey.worldsim.rights.SubjectRef;
 import net.minecraft.nbt.CompoundTag;
 
@@ -20,10 +22,10 @@ public record ProtectionOrder(UUID id, UUID disputeId, UUID institutionId,
 
     CompoundTag save() {
         CompoundTag tag = new CompoundTag();
-        tag.putUUID("Id", id);
-        tag.putUUID("Dispute", disputeId);
-        tag.putUUID("Institution", institutionId);
-        tag.putUUID("Settlement", settlementId);
+        tag.store("Id", UUIDUtil.CODEC, id);
+        tag.store("Dispute", UUIDUtil.CODEC, disputeId);
+        tag.store("Institution", UUIDUtil.CODEC, institutionId);
+        tag.store("Settlement", UUIDUtil.CODEC, settlementId);
         tag.put("Protected", protectedSubject.save());
         tag.put("Restrained", restrainedSubject.save());
         tag.put("IssuedBy", issuedBy.save());
@@ -34,11 +36,11 @@ public record ProtectionOrder(UUID id, UUID disputeId, UUID institutionId,
     }
 
     static ProtectionOrder load(CompoundTag tag) {
-        return new ProtectionOrder(tag.getUUID("Id"), tag.getUUID("Dispute"),
-                tag.getUUID("Institution"), tag.getUUID("Settlement"),
-                SubjectRef.load(tag.getCompound("Protected")),
-                SubjectRef.load(tag.getCompound("Restrained")),
-                SubjectRef.load(tag.getCompound("IssuedBy")), tag.getLong("IssuedAt"),
-                tag.getLong("ExpiresAt"), tag.getString("Terms"));
+        return new ProtectionOrder(tag.read("Id", UUIDUtil.CODEC).orElseThrow(), tag.read("Dispute", UUIDUtil.CODEC).orElseThrow(),
+                tag.read("Institution", UUIDUtil.CODEC).orElseThrow(), tag.read("Settlement", UUIDUtil.CODEC).orElseThrow(),
+                SubjectRef.load(tag.getCompoundOrEmpty("Protected")),
+                SubjectRef.load(tag.getCompoundOrEmpty("Restrained")),
+                SubjectRef.load(tag.getCompoundOrEmpty("IssuedBy")), tag.getLongOr("IssuedAt", 0L),
+                tag.getLongOr("ExpiresAt", 0L), tag.getStringOr("Terms", ""));
     }
 }

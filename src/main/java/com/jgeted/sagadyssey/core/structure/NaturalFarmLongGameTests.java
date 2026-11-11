@@ -1,5 +1,8 @@
 package com.jgeted.sagadyssey.core.structure;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+import net.minecraft.core.UUIDUtil;
+
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonObject;
@@ -33,13 +36,13 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.Container;
 import net.minecraft.world.entity.MobCategory;
-import net.minecraft.world.entity.MobSpawnType;
+import net.minecraft.world.entity.EntitySpawnReason;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.ChunkPos;
-import net.minecraft.world.level.GameRules;
+import net.minecraft.world.level.gamerules.GameRules;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.CropBlock;
 import net.minecraft.world.level.block.Rotation;
@@ -102,7 +105,7 @@ public final class NaturalFarmLongGameTests {
     }
     @SubscribeEvent(priority = EventPriority.LOWEST) public static void spawn(FinalizeSpawnEvent e) {
         if (run == null || e.getEntity().level() != run.server.overworld()
-                || e.getSpawnType() != MobSpawnType.NATURAL
+                || e.getSpawnType() != EntitySpawnReason.NATURAL
                 || e.getEntity().getType().getCategory() != MobCategory.MONSTER) return;
         if (e.getEntity().blockPosition().distSqr(run.origin) <= 160 * 160)
             run.naturalSpawnIntents.add(e.getEntity().getUUID());
@@ -114,7 +117,7 @@ public final class NaturalFarmLongGameTests {
     }
     @SubscribeEvent(priority = EventPriority.LOWEST) public static void playerAte(net.neoforged.neoforge.event.entity.living.LivingEntityUseItemEvent.Finish e) {
         if (run == null || run.stopping || run.state.readyAt < 0 || !(e.getEntity() instanceof ServerPlayer player)
-                || player.server != run.server || player.getAbilities().instabuild || !e.getItem().is(Items.CARROT)) return;
+                || player.level().getServer() != run.server || player.getAbilities().instabuild || !e.getItem().is(Items.CARROT)) return;
         // An actual finish event is separate from NPC output consumption and from a wage transfer.
         run.state.playerCarrotsConsumed++;
         try { run.emit("ACTUAL_PLAYER_CARROT_CONSUMPTION", Map.of("account", player.getUUID().toString(), "quantity", 1)); }
@@ -258,7 +261,7 @@ public final class NaturalFarmLongGameTests {
                         openingEvidence();
                     }
                     require(state.t0 == registered.registeredGameTime(), "Original registration identity/time changed");
-                    if (row.getBoolean("Ready") && state.readyAt < 0) {
+                    if (row.getBooleanOr("Ready", false) && state.readyAt < 0) {
                         state.readyAt = now; configurationEvidence(); emit("FIRST_READY", snapshot());
                     }
                 }
@@ -272,8 +275,8 @@ public final class NaturalFarmLongGameTests {
             long elapsed = now - state.t0;
             var rules = level.getGameRules();
             require(level.getDifficulty() == net.minecraft.world.Difficulty.NORMAL
-                    && rules.getInt(GameRules.RULE_RANDOMTICKING) == 3 && rules.getBoolean(GameRules.RULE_DAYLIGHT)
-                    && rules.getBoolean(GameRules.RULE_WEATHER_CYCLE) && rules.getBoolean(GameRules.RULE_DOMOBSPAWNING),
+                    && rules.get(GameRules.RANDOM_TICK_SPEED) == 3 && rules.get(GameRules.ADVANCE_TIME)
+                    && rules.get(GameRules.ADVANCE_WEATHER) && rules.get(GameRules.SPAWN_MOBS),
                     "Frozen ordinary difficulty/daylight/weather/mob/random-tick conditions changed");
             if (state.readyAt >= 0) {
                 observeExistingRemoteReceipts();
@@ -329,7 +332,7 @@ public final class NaturalFarmLongGameTests {
         void observeActorsAndWork() throws Exception {
             var level = server.overworld(); long now = level.getGameTime();
             var life = NpcLifeData.get(server);
-            var characters = level.getDataStorage().get(CharacterRegistryData.FACTORY, CharacterRegistryData.DATA_NAME);
+            var characters = level.getDataStorage().get(CharacterRegistryData.FACTORY.type(CharacterRegistryData.DATA_NAME));
             for (int i = 0; i < 3; i++) {
                 UUID body = NaturalVillageLifeData.body(building, i), person = NaturalVillageLifeData.person(building, i);
                 var character = characters == null ? null : characters.byId(person);
@@ -366,7 +369,7 @@ public final class NaturalFarmLongGameTests {
                     }
                 }
             }
-            var work = server.overworld().getDataStorage().get(FieldworkData.FACTORY,FieldworkData.DATA_NAME);
+            var work = server.overworld().getDataStorage().get(FieldworkData.FACTORY.type(FieldworkData.DATA_NAME));
             if(work==null)return; // Observation must not create an empty production ledger before ordinary work does.
             for(int i=0;i<3;i++) for(var receipt:work.receiptsFor(NaturalVillageLifeData.body(building,i))) {
                 if(!state.itemActions.add(receipt.action().key())) continue;
@@ -432,7 +435,7 @@ public final class NaturalFarmLongGameTests {
         }
         void configurationEvidence() throws Exception {
             require(state.openingCaptured&&!state.configurationCaptured,"One configuration boundary");
-            var work=server.overworld().getDataStorage().get(FieldworkData.FACTORY,FieldworkData.DATA_NAME);
+            var work=server.overworld().getDataStorage().get(FieldworkData.FACTORY.type(FieldworkData.DATA_NAME));
             for(int i=0;i<3;i++) {
                 var n=(NpcBase)server.overworld().getEntity(NaturalVillageLifeData.body(building,i));
                 require(n!=null&&n.getCharacterId().equals(NaturalVillageLifeData.person(building,i)),"Formal originals at Ready");
@@ -478,8 +481,8 @@ public final class NaturalFarmLongGameTests {
                 if(!(entity instanceof NpcBase n)){locations.put("npc:"+i,"NOT_YET_PRESENT");continue;}
                 collectContainer(counts,locations,"bag:"+n.getUUID(),n.getPersonalInventory());
                 collectContainer(counts,locations,"cargo:"+n.getUUID(),n.getTransportInventory());
-                for(var slot:EquipmentSlot.values()) {var item=n.getItemBySlot(slot);addItem(counts,item);locations.put("equipment:"+i+":"+slot,item.isEmpty()?"EMPTY":nbt(item.save(server.registryAccess())));}
-                int index=0;for(var item:n.getInventoryMigrationOverflowSnapshot()){addItem(counts,item);locations.put("overflow:"+i+":"+(index++),nbt(item.save(server.registryAccess())));}
+                for(var slot:EquipmentSlot.values()) {var item=n.getItemBySlot(slot);addItem(counts,item);locations.put("equipment:"+i+":"+slot,item.isEmpty()?"EMPTY":nbt(MinecraftApi.saveItem(item, server.registryAccess())));}
+                int index=0;for(var item:n.getInventoryMigrationOverflowSnapshot()){addItem(counts,item);locations.put("overflow:"+i+":"+(index++),nbt(MinecraftApi.saveItem(item, server.registryAccess())));}
             }
             for(var p:server.getPlayerList().getPlayers()) collectContainer(counts,locations,"player:"+p.getUUID(),p.getInventory());
             for(var drop:l.getEntitiesOfClass(ItemEntity.class,new AABB(origin).inflate(128))) {
@@ -487,7 +490,7 @@ public final class NaturalFarmLongGameTests {
                 // Only goods in this bounded economy. Other ambient mob loot is recorded separately.
                 boolean relevant=item.equals("minecraft:carrot")||item.equals("minecraft:oak_log")||item.equals("minecraft:iron_axe")
                         ||state.openingItems.containsKey(item)||state.itemNet.containsKey(item);
-                locations.put("drop:"+drop.getUUID(),Map.of("position",drop.position().toString(),"item",nbt(drop.getItem().save(server.registryAccess())),"included",relevant));
+                locations.put("drop:"+drop.getUUID(),Map.of("position",drop.position().toString(),"item",nbt(MinecraftApi.saveItem(drop.getItem(), server.registryAccess())),"included",relevant));
                 if(relevant)addItem(counts,drop.getItem());
             }
             return Map.of("items",counts,"locations",locations,"scope","original stores, original3 all physical slots, actual player, relevant nearby dropped goods; no reservation or transit double count");
@@ -505,28 +508,28 @@ public final class NaturalFarmLongGameTests {
             require(items.getOrDefault("minecraft:carrot",0L)==expected,"CARROT_BALANCE_UNEXPLAINED: actual="+items.getOrDefault("minecraft:carrot",0L)+", expected="+expected);
         }
         void auditTransfers() throws Exception {
-            var ledger=server.overworld().getDataStorage().get(TransferLedgerData.FACTORY,TransferLedgerData.DATA_NAME);
+            var ledger=server.overworld().getDataStorage().get(TransferLedgerData.FACTORY.type(TransferLedgerData.DATA_NAME));
             if(ledger==null)return;
             var encoded=ledger.save(new CompoundTag(),server.registryAccess());
-            for(var raw:encoded.getList("Receipts",Tag.TAG_COMPOUND)){
-                var row=(CompoundTag)raw;String id=row.getUUID("Id").toString();
+            for(var raw:MinecraftApi.listOfType(encoded, "Receipts",Tag.TAG_COMPOUND)){
+                var row=(CompoundTag)raw;String id=row.read("Id", UUIDUtil.CODEC).orElseThrow().toString();
                 if(!state.transferIds.add(id))continue;
                 state.transferProofs.put(id,row.toString()); emit("TRANSFER_WITH_ORIGINAL_PAYLOAD",nbt(row));
-                if(!row.getString("Status").equals("SUCCESS"))continue;
-                require(row.getBoolean("Lawful"),"Successful transfer must retain lawful source rights");
-                var identity=row.getCompound("RequestIdentity");
+                if(!row.getStringOr("Status", "").equals("SUCCESS"))continue;
+                require(row.getBooleanOr("Lawful", false),"Successful transfer must retain lawful source rights");
+                var identity=row.getCompoundOrEmpty("RequestIdentity");
                 require(identity.contains("Legs"),"Successful new transfer requires original immutable legs");
-                for(var v:identity.getList("Legs",Tag.TAG_COMPOUND)){
-                    var leg=(CompoundTag)v;String from=leg.getUUID("Source").toString(),to=leg.getUUID("Destination").toString();
+                for(var v:MinecraftApi.listOfType(identity, "Legs",Tag.TAG_COMPOUND)){
+                    var leg=(CompoundTag)v;String from=leg.read("Source", UUIDUtil.CODEC).orElseThrow().toString(),to=leg.read("Destination", UUIDUtil.CODEC).orElseThrow().toString();
                     boolean insideFrom=state.knownVillageContainers.contains(from),insideTo=state.knownVillageContainers.contains(to);
-                    String item=com.jgeted.sagadyssey.worldsim.rights.ItemFingerprint.load(leg.getCompound("Item")).itemId();
+                    String item=com.jgeted.sagadyssey.worldsim.rights.ItemFingerprint.load(leg.getCompoundOrEmpty("Item")).itemId();
                     if(insideFrom!=insideTo&&item.equals("minecraft:carrot")){
-                        state.villageCarrotNetOut+=(insideFrom?1:-1)*leg.getInt("Quantity");
+                        state.villageCarrotNetOut+=(insideFrom?1:-1)*leg.getIntOr("Quantity", 0);
                         require(insideFrom,"Outside food cannot sustain either natural sample");
                     }
                 }
             }
-            var existingNeeds=server.overworld().getDataStorage().get(NeedRequestData.FACTORY,NeedRequestData.NAME);
+            var existingNeeds=server.overworld().getDataStorage().get(NeedRequestData.FACTORY.type(NeedRequestData.NAME));
             if(existingNeeds==null)return;
             var needData=existingNeeds.save(new CompoundTag(),server.registryAccess());
             for(var route:SupplyFlowData.get(server).routes()){
@@ -534,18 +537,18 @@ public final class NaturalFarmLongGameTests {
                 var need=NeedRequestData.get(server).request(route.need());
                 require(need!=null&&need.key().item().itemId().equals("minecraft:carrot"),"Delivered route retains original carrot need");
                 int total=0;
-                for(var raw:needData.getList("Receipts",Tag.TAG_COMPOUND)){
-                    var row=(CompoundTag)raw;if(!row.getUUID("Request").equals(route.need())||!row.getString("Action").equals("DELIVER"))continue;
-                    var receipt=ledger.receipt(row.getUUID("Id"));if(receipt==null)continue;
-                    String proof=state.transferProofs.get(row.getUUID("Id").toString());
+                for(var raw:MinecraftApi.listOfType(needData, "Receipts",Tag.TAG_COMPOUND)){
+                    var row=(CompoundTag)raw;if(!row.read("Request", UUIDUtil.CODEC).orElseThrow().equals(route.need())||!row.getStringOr("Action", "").equals("DELIVER"))continue;
+                    var receipt=ledger.receipt(row.read("Id", UUIDUtil.CODEC).orElseThrow());if(receipt==null)continue;
+                    String proof=state.transferProofs.get(row.read("Id", UUIDUtil.CODEC).orElseThrow().toString());
                     if(proof==null)continue;
-                    var saved=net.minecraft.nbt.TagParser.parseTag(proof);var identity=saved.getCompound("RequestIdentity");
-                    if(!identity.getString("Authority").equals(route.token()))continue;
+                    var saved=net.minecraft.nbt.TagParser.parseCompoundFully(proof);var identity=saved.getCompoundOrEmpty("RequestIdentity");
+                    if(!identity.getStringOr("Authority", "").equals(route.token()))continue;
                     require(receipt.successful()&&receipt.lawful(),"Actual delivered need has successful lawful atomic transfer");
-                    var legs=identity.getList("Legs",Tag.TAG_COMPOUND);require(legs.size()==1,"One original supply delivery leg");
-                    var leg=legs.getCompound(0);
-                    require(leg.getUUID("Destination").equals(route.destination())&&leg.getInt("Quantity")==row.getInt("Quantity"),"Original destination and quantity match need receipt");
-                    total+=row.getInt("Quantity");
+                    var legs=MinecraftApi.listOfType(identity, "Legs",Tag.TAG_COMPOUND);require(legs.size()==1,"One original supply delivery leg");
+                    var leg=legs.getCompoundOrEmpty(0);
+                    require(leg.read("Destination", UUIDUtil.CODEC).orElseThrow().equals(route.destination())&&leg.getIntOr("Quantity", 0)==row.getIntOr("Quantity", 0),"Original destination and quantity match need receipt");
+                    total+=row.getIntOr("Quantity", 0);
                 }
                 var order=LogisticsData.get(server).order(route.id());
                 require(total==route.quantity()&&order!=null&&order.pickedUpCount()==total&&order.deliveredCount()==total,"Supply route, actual transfer and logistics quantities match");
@@ -555,7 +558,7 @@ public final class NaturalFarmLongGameTests {
             }
         }
         void observeObligations() throws Exception {
-            long now=server.overworld().getGameTime();var data=server.overworld().getDataStorage().get(NeedRequestData.FACTORY,NeedRequestData.NAME);
+            long now=server.overworld().getGameTime();var data=server.overworld().getDataStorage().get(NeedRequestData.FACTORY.type(NeedRequestData.NAME));
             if(data==null)return;
             List<Object> rows=new ArrayList<>();
             for(var need:data.requests()){
@@ -573,10 +576,10 @@ public final class NaturalFarmLongGameTests {
             for(var player:server.getPlayerList().getPlayers()){
                 var person=CharacterRegistry.currentId(player);if(person==null)continue;
                 var payment=NaturalVillageLifeData.get(server).payment(person,building.settlementId());
-                if(payment==null||!payment.getString("State").equals("PAID"))continue;
-                String transaction=payment.getUUID("Transaction").toString();
+                if(payment==null||!payment.getStringOr("State", "").equals("PAID"))continue;
+                String transaction=payment.read("Transaction", UUIDUtil.CODEC).orElseThrow().toString();
                 if(state.memberTransaction.isEmpty()){
-                    var receipt=TransferLedgerData.get(server).receipt(payment.getUUID("Transaction"));
+                    var receipt=TransferLedgerData.get(server).receipt(payment.read("Transaction", UUIDUtil.CODEC).orElseThrow());
                     require(receipt!=null&&receipt.successful()&&receipt.lawful(),"Normal member payment is backed by a real lawful transfer");
                     require(count(player.getInventory())==2,"Original member actually received two carrots");
                     state.memberAccount=player.getUUID().toString();state.memberPerson=person.toString();state.memberTransaction=transaction;
@@ -588,15 +591,15 @@ public final class NaturalFarmLongGameTests {
         void observeExistingRemoteReceipts() throws Exception {
             var data=NaturalVillageEconomyData.existing(server);if(data==null)return;
             var region=data.row(building.buildingKey());if(region==null)return;
-            require(region.getString("Phase").equals("NEAR")||resume,"Only the declared full-restart gap may use existing remote authority");
+            require(region.getStringOr("Phase", "").equals("NEAR")||resume,"Only the declared full-restart gap may use existing remote authority");
             int index=0;
-            for(var raw:region.getList("Receipts",Tag.TAG_COMPOUND)){
-                var receipt=(CompoundTag)raw;String key=region.getLong("Epoch")+":"+(index++);
+            for(var raw:MinecraftApi.listOfType(region, "Receipts",Tag.TAG_COMPOUND)){
+                var receipt=(CompoundTag)raw;String key=region.getLongOr("Epoch", 0L)+":"+(index++);
                 if(!state.remoteReceiptKeys.add(key))continue;
-                String kind=receipt.getString("Kind");
-                if(kind.equals("HARVEST_REPLANT")||kind.equals("PLANT"))state.remoteNet+=receipt.getInt("Output")-receipt.getInt("Input");
-                if(kind.equals("MEAL")){require(receipt.getInt("Input")==1,"One actual remote carrot meal");state.remoteMeals++;}
-                emit("EXISTING_REMOTE_RESTART_GAP_RECEIPT",Map.of("epoch",region.getLong("Epoch"),"phase",region.getString("Phase"),"receipt",nbt(receipt)));
+                String kind=receipt.getStringOr("Kind", "");
+                if(kind.equals("HARVEST_REPLANT")||kind.equals("PLANT"))state.remoteNet+=receipt.getIntOr("Output", 0)-receipt.getIntOr("Input", 0);
+                if(kind.equals("MEAL")){require(receipt.getIntOr("Input", 0)==1,"One actual remote carrot meal");state.remoteMeals++;}
+                emit("EXISTING_REMOTE_RESTART_GAP_RECEIPT",Map.of("epoch",region.getLongOr("Epoch", 0L),"phase",region.getStringOr("Phase", ""),"receipt",nbt(receipt)));
             }
         }
         Map<String,Object> finalAudit() {
@@ -642,7 +645,7 @@ public final class NaturalFarmLongGameTests {
                 var players = source.chunkMap.getPlayersCloseForSpawning(cp);
                 boolean loaded = source.getChunkNow(cp.x, cp.z) != null;
                 boolean ticking = source.isPositionTicking(cp.toLong());
-                boolean natural = level.isNaturalSpawningAllowed(cp);
+                boolean natural = level.getChunkSource().isPositionTicking(cp.toLong());
                 boolean playerGate = players.stream().anyMatch(p -> !p.isSpectator() && p.connection != null);
                 all &= loaded && ticking && natural && playerGate && server.tickRateManager().runsNormally();
                 chunks.add(Map.of("chunk", cp.toString(), "loaded", loaded, "blockTicking", ticking,
@@ -667,8 +670,8 @@ public final class NaturalFarmLongGameTests {
             var l = server.overworld(); var r = l.getGameRules();
             Map<String, Object> result = new LinkedHashMap<>();
             result.put("gameTime", l.getGameTime()); result.put("dayTime", l.getDayTime()); result.put("difficulty", l.getDifficulty().name());
-            result.put("randomTickSpeed", r.getInt(GameRules.RULE_RANDOMTICKING)); result.put("daylight", r.getBoolean(GameRules.RULE_DAYLIGHT));
-            result.put("weatherCycle", r.getBoolean(GameRules.RULE_WEATHER_CYCLE)); result.put("mobSpawning", r.getBoolean(GameRules.RULE_DOMOBSPAWNING));
+            result.put("randomTickSpeed", r.get(GameRules.RANDOM_TICK_SPEED)); result.put("daylight", r.get(GameRules.ADVANCE_TIME));
+            result.put("weatherCycle", r.get(GameRules.ADVANCE_WEATHER)); result.put("mobSpawning", r.get(GameRules.SPAWN_MOBS));
             result.put("raining", l.isRaining()); result.put("thundering", l.isThundering()); result.put("tickRate", server.tickRateManager().tickrate());
             result.put("players", players()); return result;
         }
@@ -683,18 +686,18 @@ public final class NaturalFarmLongGameTests {
             out.put("households", nbt(HouseholdData.get(server).save(new CompoundTag(), server.registryAccess())));
             out.put("life", nbt(NpcLifeData.get(server).save(new CompoundTag(), server.registryAccess())));
             var data = server.overworld().getDataStorage();
-            var rights = data.get(RightsStateData.FACTORY, RightsStateData.DATA_NAME);
-            var chars = data.get(CharacterRegistryData.FACTORY, CharacterRegistryData.DATA_NAME);
-            var brain = data.get(NpcBrainData.FACTORY, NpcBrainData.DATA_NAME);
-            var needs = data.get(NeedRequestData.FACTORY, NeedRequestData.NAME);
-            var transfers = data.get(TransferLedgerData.FACTORY, TransferLedgerData.DATA_NAME);
+            var rights = data.get(RightsStateData.FACTORY.type(RightsStateData.DATA_NAME));
+            var chars = data.get(CharacterRegistryData.FACTORY.type(CharacterRegistryData.DATA_NAME));
+            var brain = data.get(NpcBrainData.FACTORY.type(NpcBrainData.DATA_NAME));
+            var needs = data.get(NeedRequestData.FACTORY.type(NeedRequestData.NAME));
+            var transfers = data.get(TransferLedgerData.FACTORY.type(TransferLedgerData.DATA_NAME));
             out.put("rightsReservations", rights == null ? null : nbt(rights.save(new CompoundTag(), server.registryAccess())));
             out.put("characters", chars == null ? null : nbt(chars.save(new CompoundTag(), server.registryAccess())));
             out.put("plans", brain == null ? null : nbt(brain.save(new CompoundTag(), server.registryAccess())));
             out.put("needsAndReceipts", needs == null ? null : nbt(needs.save(new CompoundTag(), server.registryAccess())));
             out.put("atomicTransfers", transfers == null ? null : nbt(transfers.save(new CompoundTag(), server.registryAccess())));
-            var work=data.get(FieldworkData.FACTORY,FieldworkData.DATA_NAME);
-            var activities=data.get(LifeActivityData.FACTORY,LifeActivityData.NAME);
+            var work=data.get(FieldworkData.FACTORY.type(FieldworkData.DATA_NAME));
+            var activities=data.get(LifeActivityData.FACTORY.type(LifeActivityData.NAME));
             out.put("fieldworkAndSchema2", work==null?null:nbt(work.save(new CompoundTag(), server.registryAccess())));
             out.put("lifeSettlements", activities==null?null:nbt(activities.save(new CompoundTag(), server.registryAccess())));
             out.put("supply", nbt(SupplyFlowData.get(server).save(new CompoundTag(), server.registryAccess())));
@@ -715,7 +718,7 @@ public final class NaturalFarmLongGameTests {
                 if (e instanceof NpcBase npc) {
                     stock += count(npc.getPersonalInventory()) + count(npc.getTransportInventory());
                     actors.add(Map.of("index", i, "body", npc.getUUID().toString(), "person", npc.getCharacterId().toString(),
-                            "entityNbt", nbt(npc.saveWithoutId(new CompoundTag()))));
+                            "entityNbt", nbt(MinecraftApi.saveEntity(npc))));
                 } else actors.add(Map.of("index", i, "loaded", false));
             }
             out.put("stores", stores); out.put("actors", actors); out.put("residentCarrotsPhysicalLoadedOnly", stock);

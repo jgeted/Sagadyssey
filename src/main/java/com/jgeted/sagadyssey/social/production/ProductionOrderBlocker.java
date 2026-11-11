@@ -1,5 +1,7 @@
 package com.jgeted.sagadyssey.social.production;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.Tag;
 
@@ -25,13 +27,13 @@ public record ProductionOrderBlocker(String code, String detail, long retryAt) {
     }
 
     static ProductionOrderBlocker load(CompoundTag tag) {
-        if (!tag.contains("Code", Tag.TAG_STRING)
-                || !tag.contains("Detail", Tag.TAG_STRING)
-                || !tag.contains("RetryAt", Tag.TAG_LONG)) {
+        if (!MinecraftApi.containsTag(tag, "Code", Tag.TAG_STRING)
+                || !MinecraftApi.containsTag(tag, "Detail", Tag.TAG_STRING)
+                || !MinecraftApi.containsTag(tag, "RetryAt", Tag.TAG_LONG)) {
             throw new IllegalArgumentException("invalid production blocker tag");
         }
-        return new ProductionOrderBlocker(tag.getString("Code"), tag.getString("Detail"),
-                tag.getLong("RetryAt"));
+        return new ProductionOrderBlocker(tag.getStringOr("Code", ""), tag.getStringOr("Detail", ""),
+                tag.getLongOr("RetryAt", 0L));
     }
 
     private static String truncate(String value, int limit) {

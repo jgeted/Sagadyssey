@@ -1,5 +1,10 @@
 package com.jgeted.sagadyssey.npc.brain.fieldwork;
 
+import com.jgeted.sagadyssey.gametest.PortedGameTests.*;
+
+import com.jgeted.sagadyssey.core.MinecraftApi;
+import net.minecraft.core.UUIDUtil;
+
 import com.jgeted.sagadyssey.knowledge.projection.NpcProjectionService;
 import com.jgeted.sagadyssey.npc.brain.execution.NpcBrainRuntime;
 import com.jgeted.sagadyssey.npc.brain.execution.PlanCancellationReason;
@@ -14,15 +19,13 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.gametest.framework.*;
 import net.minecraft.nbt.*;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.Container;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.item.*;
-import net.minecraft.world.level.GameRules;
+import net.minecraft.world.level.gamerules.GameRules;
 import net.minecraft.world.level.block.*;
-import net.neoforged.neoforge.gametest.GameTestHolder;
-import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 import java.util.*;
 
 /** 可由独立 GameTestServer 一次运行的真实实体/方块/库存流程，不会自动运行在玩家世界。 */
@@ -43,16 +46,16 @@ public final class FieldworkGameTests {
                 priorCheckpoint = NbtIo.readCompressed(path, NbtAccounter.unlimitedHeap());
                 // GameTestServer 每次用新的世界时钟启动；正常游戏则从存档恢复 Time。
                 // 在装载旧实体前恢复检查点时钟，不能让计划的时间倒退。
-                long resumeTime = priorCheckpoint.getLong("GameTime");
-                var savedBrains = NpcBrainData.get(event.getServer()).save(new CompoundTag(), event.getServer().registryAccess()).getList("Brains", Tag.TAG_COMPOUND);
+                long resumeTime = priorCheckpoint.getLongOr("GameTime", 0L);
+                var savedBrains = MinecraftApi.listOfType(NpcBrainData.get(event.getServer()).save(new CompoundTag(), event.getServer().registryAccess()), "Brains", Tag.TAG_COMPOUND);
                 for (Tag entry : savedBrains) {
                     CompoundTag brain = (CompoundTag) entry;
-                    resumeTime = Math.max(resumeTime, brain.getCompound("Active").getLong("UpdatedAt"));
-                    for (Tag history : brain.getList("History", Tag.TAG_COMPOUND)) resumeTime = Math.max(resumeTime, ((CompoundTag) history).getLong("UpdatedAt"));
+                    resumeTime = Math.max(resumeTime, brain.getCompoundOrEmpty("Active").getLongOr("UpdatedAt", 0L));
+                    for (Tag history : MinecraftApi.listOfType(brain, "History", Tag.TAG_COMPOUND)) resumeTime = Math.max(resumeTime, ((CompoundTag) history).getLongOr("UpdatedAt", 0L));
                 }
                 event.getServer().getWorldData().overworldData().setGameTime(Math.max(event.getServer().overworld().getGameTime(), resumeTime + 1));
                 for (String key : List.of("NpcPosition", "BarrelPosition")) {
-                    BlockPos p = BlockPos.of(priorCheckpoint.getLong(key));
+                    BlockPos p = BlockPos.of(priorCheckpoint.getLongOr(key, 0L));
                     event.getServer().overworld().setChunkForced(p.getX() >> 4, p.getZ() >> 4, true);
                     event.getServer().overworld().getChunkAt(p);
                 }
@@ -61,17 +64,17 @@ public final class FieldworkGameTests {
     }
     private static void installTemplate(ServerLevel level) {
         try {
-            level.getStructureManager().getOrCreate(ResourceLocation.fromNamespaceAndPath("sagadyssey", "fieldwork_empty"))
-                    .load(level.holderLookup(Registries.BLOCK), TagParser.parseTag("{size:[96,10,16],entities:[],blocks:[],palette:[{Name:\"minecraft:air\"}]}"));
+            level.getStructureManager().getOrCreate(Identifier.fromNamespaceAndPath("sagadyssey", "fieldwork_empty"))
+                    .load(level.holderLookup(Registries.BLOCK), TagParser.parseCompoundFully("{size:[96,10,16],entities:[],blocks:[],palette:[{Name:\"minecraft:air\"}]}"));
         } catch (Exception exception) { throw new IllegalStateException(exception); }
     }
     @BeforeBatch(batch = "phase4")
     public static void templates(ServerLevel level) {
         installTemplate(level);
         level.setDayTime(1_000L);
-        level.getGameRules().getRule(GameRules.RULE_DAYLIGHT).set(false, level.getServer());
-        level.getGameRules().getRule(GameRules.RULE_DOMOBSPAWNING).set(false, level.getServer());
-        level.getGameRules().getRule(GameRules.RULE_RANDOMTICKING).set(0, level.getServer());
+        level.getGameRules().set(GameRules.ADVANCE_TIME, false, level.getServer());
+        level.getGameRules().set(GameRules.SPAWN_MOBS, false, level.getServer());
+        level.getGameRules().set(GameRules.RANDOM_TICK_SPEED, 0, level.getServer());
     }
 
     @GameTest(template = "fieldwork_empty", batch = "phase4", timeoutTicks = 800)
@@ -157,7 +160,7 @@ public final class FieldworkGameTests {
         a.setCommand(NpcCommand.IDLE); b.setCommand(NpcCommand.IDLE);
         h.runAtTickTime(10, () -> {
             var target = FieldworkDiscovery.inspect(a, h.absolutePos(new BlockPos(5, 1, 5)));
-            long now = h.getLevel().getGameTime(); String dimension = h.getLevel().dimension().location().toString();
+            long now = h.getLevel().getGameTime(); String dimension = h.getLevel().dimension().identifier().toString();
             NpcBrainRuntime.data(h.getLevel().getServer()).save(FieldworkPlanFactory.work(a.getUUID(), target, FieldworkRoutes.plan(a, target.position(), false), dimension, now));
             NpcBrainRuntime.data(h.getLevel().getServer()).save(FieldworkPlanFactory.work(b.getUUID(), target, FieldworkRoutes.plan(b, target.position(), false), dimension, now));
             a.setCommand(NpcCommand.WORK); b.setCommand(NpcCommand.WORK);
@@ -246,9 +249,9 @@ public final class FieldworkGameTests {
             var workData = FieldworkData.get(level.getServer());
             var oldStorage = workData.testStorage(current[0].getUUID()).orElseThrow();
             var actor = SubjectRef.character(current[0].getCharacterId());
-            UUID parkedId = ContainerIds.block("fieldwork_test", level.dimension().location().toString(), parkedBarrel);
+            UUID parkedId = ContainerIds.block("fieldwork_test", level.dimension().identifier().toString(), parkedBarrel);
             var rights = RightsStateData.get(level.getServer());
-            rights.ensureContext(parkedId, level.dimension().location() + ":" + parkedBarrel.asLong(), actor, actor, AccessPolicy.PRIVATE);
+            rights.ensureContext(parkedId, level.dimension().identifier() + ":" + parkedBarrel.asLong(), actor, actor, AccessPolicy.PRIVATE);
             Container destination = (Container) level.getBlockEntity(parkedBarrel);
             var move = new TransferRequest(UUID.randomUUID(), actor, TransferIntent.DELIVERY,
                     List.of(new TransferLeg(oldStorage.containerId(), parkedId, ItemFingerprint.of(new ItemStack(Items.COBBLESTONE)), 1)),
@@ -259,11 +262,11 @@ public final class FieldworkGameTests {
                             parkedId, new TransferEndpoint(parkedId, destination)), level.getGameTime());
             h.assertTrue(moved.successful() && count(barrel, Items.COBBLESTONE) == 0 && count(destination, Items.COBBLESTONE) == 1,
                     "checkpoint staging moves, never copies, the one real product");
-            workData.bindTestStorage(current[0].getUUID(), new FieldworkStorage(level.dimension().location().toString(), parkedBarrel,
+            workData.bindTestStorage(current[0].getUUID(), new FieldworkStorage(level.dimension().identifier().toString(), parkedBarrel,
                     parkedId, actor, AccessPolicy.PRIVATE, TransferIntent.DELIVERY, "fieldwork_test"));
             current[0].getNavigation().stop(); current[0].teleportTo(parked.getX() + .5D, parked.getY(), parked.getZ() + .5D);
             CompoundTag marker = new CompoundTag();
-            marker.putUUID("NpcId", current[0].getUUID()); marker.putLong("NpcPosition", current[0].blockPosition().asLong());
+            marker.store("NpcId", UUIDUtil.CODEC, current[0].getUUID()); marker.putLong("NpcPosition", current[0].blockPosition().asLong());
             marker.putLong("GameTime", level.getGameTime());
             marker.putLong("BarrelPosition", parkedBarrel.asLong());
             try {
@@ -432,14 +435,14 @@ public final class FieldworkGameTests {
         // Each completed GameTest batch unforces chunks, including checkpoint chunks.
         // Reacquire both physical locations in this batch before waiting for entity I/O.
         for (String key : List.of("NpcPosition", "BarrelPosition")) {
-            BlockPos p = BlockPos.of(priorCheckpoint.getLong(key));
+            BlockPos p = BlockPos.of(priorCheckpoint.getLongOr(key, 0L));
             h.getLevel().setChunkForced(p.getX() >> 4, p.getZ() >> 4, true);
             h.getLevel().getChunkAt(p);
         }
         h.succeedWhen(() -> {
-            var npc = h.getLevel().getEntity(priorCheckpoint.getUUID("NpcId"));
+            var npc = h.getLevel().getEntity(priorCheckpoint.read("NpcId", UUIDUtil.CODEC).orElseThrow());
             h.assertTrue(npc instanceof NpcBase, "saved entity loaded from previous process"); NpcBase worker = (NpcBase) npc;
-            var barrel = (Container) h.getLevel().getBlockEntity(BlockPos.of(priorCheckpoint.getLong("BarrelPosition")));
+            var barrel = (Container) h.getLevel().getBlockEntity(BlockPos.of(priorCheckpoint.getLongOr("BarrelPosition", 0L)));
             h.assertTrue(barrel != null && count(barrel, Items.COBBLESTONE) == 1, "physical container retains exactly one product after process restart");
             h.assertTrue(worker.getPersonalInventory().count(s -> s.is(Items.COBBLESTONE)) == 0
                     && worker.getMainHandItem().getDamageValue() == 1, "saved entity retains delivered inventory and tool wear");
@@ -480,7 +483,7 @@ public final class FieldworkGameTests {
         npc.setItemSlot(EquipmentSlot.MAINHAND, new ItemStack(Items.IRON_PICKAXE)); Container barrel = storage(h, npc, new BlockPos(11, 1, 5));
         h.succeedWhen(() -> {
             h.assertTrue(count(barrel, Items.COBBLESTONE) == 1, "reachable alternative completed");
-            h.assertTrue(FieldworkData.get(h.getLevel().getServer()).unreachable(npc.getUUID(), h.getLevel().dimension().location().toString(),
+            h.assertTrue(FieldworkData.get(h.getLevel().getServer()).unreachable(npc.getUUID(), h.getLevel().dimension().identifier().toString(),
                     h.absolutePos(new BlockPos(1, 1, 1)), h.getLevel().getGameTime()).isPresent(), "enclosed target has bounded memory");
             h.assertBlockPresent(Blocks.OAK_LOG, new BlockPos(1, 1, 1));
         });
@@ -528,30 +531,30 @@ public final class FieldworkGameTests {
 
     private static NpcBase diskReload(GameTestHelper h, NpcBase npc) {
         var server = h.getLevel().getServer(); var storage = server.overworld().getDataStorage();
-        CompoundTag body = npc.saveWithoutId(new CompoundTag());
+        CompoundTag body = MinecraftApi.saveEntity(npc);
         try {
             var path = server.getWorldPath(net.minecraft.world.level.storage.LevelResource.ROOT).resolve("phase4-entity-" + npc.getUUID() + ".nbt");
             NbtIo.writeCompressed(body, path);
             body = NbtIo.readCompressed(path, NbtAccounter.unlimitedHeap());
         } catch (Exception exception) { throw new IllegalStateException("actual entity disk checkpoint failed", exception); }
         boolean workDirty = FieldworkData.get(server).isDirty();
-        storage.save();
+        storage.saveAndJoin();
         // NeoForge 的 SavedData 写盘是异步队列；正常关闭世界会先等待队列完成。
-        net.neoforged.neoforge.common.IOUtilities.waitUntilIOWorkerComplete();
+        
         try {
-            int version = SharedConstants.getCurrentVersion().getDataVersion().getVersion();
-            var brain = storage.readTagFromDisk(NpcBrainData.DATA_NAME, null, version).getCompound("data");
-            var work = storage.readTagFromDisk(FieldworkData.DATA_NAME, null, version).getCompound("data");
+            int version = SharedConstants.getCurrentVersion().dataVersion().version();
+            var brain = storage.readTagFromDisk(NpcBrainData.DATA_NAME, null, version).getCompoundOrEmpty("data");
+            var work = storage.readTagFromDisk(FieldworkData.DATA_NAME, null, version).getCompoundOrEmpty("data");
             h.assertTrue(NpcBrainData.FACTORY.deserializer().apply(brain, server.registryAccess()).isPlanned(npc.getUUID()),
                     "actual disk brain retains PLANNED mode");
             int diskActions = FieldworkData.load(work, server.registryAccess()).receiptsFor(npc.getUUID()).size();
             int liveActions = FieldworkData.get(server).receiptsFor(npc.getUUID()).size();
             h.assertTrue(diskActions == liveActions, "disk checkpoint actions " + diskActions + "/" + liveActions + " dirty=" + workDirty);
-            storage.set(NpcBrainData.DATA_NAME, NpcBrainData.FACTORY.deserializer().apply(brain, server.registryAccess()));
-            storage.set(FieldworkData.DATA_NAME, FieldworkData.load(work, server.registryAccess()));
+            storage.set(NpcBrainData.FACTORY.type(NpcBrainData.DATA_NAME), NpcBrainData.FACTORY.deserializer().apply(brain, server.registryAccess()));
+            storage.set(FieldworkData.FACTORY.type(FieldworkData.DATA_NAME), FieldworkData.load(work, server.registryAccess()));
         } catch (Exception exception) { throw new IllegalStateException("actual disk checkpoint reload failed", exception); }
         npc.remove(net.minecraft.world.entity.Entity.RemovalReason.UNLOADED_TO_CHUNK);
-        NpcBase replacement = new NpcBase(NpcEntityTypes.NPC_BASE.get(), h.getLevel()); replacement.load(body);
+        NpcBase replacement = new NpcBase(NpcEntityTypes.NPC_BASE.get(), h.getLevel()); MinecraftApi.loadEntity(replacement, body);
         h.getLevel().addFreshEntity(replacement); NpcBrainRuntime.rebuildAfterDataReload(server);
         return replacement;
     }
@@ -566,7 +569,7 @@ public final class FieldworkGameTests {
         NpcBrainRuntime.setMode(npc, NpcBehaviorMode.PLANNED); return npc;
     }
     private static Container storage(GameTestHelper h, NpcBase npc, BlockPos relative) {
-        h.setBlock(relative, Blocks.BARREL); BlockPos position = h.absolutePos(relative); String dimension = h.getLevel().dimension().location().toString();
+        h.setBlock(relative, Blocks.BARREL); BlockPos position = h.absolutePos(relative); String dimension = h.getLevel().dimension().identifier().toString();
         UUID id = ContainerIds.block("fieldwork_test", dimension, position); SubjectRef owner = SubjectRef.character(npc.getCharacterId());
         RightsStateData.get(h.getLevel().getServer()).ensureContext(id, dimension + ':' + position.asLong(), owner, owner, AccessPolicy.PRIVATE);
         FieldworkData.get(h.getLevel().getServer()).bindTestStorage(npc.getUUID(), new FieldworkStorage(dimension, position, id,

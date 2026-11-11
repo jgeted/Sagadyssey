@@ -1,5 +1,7 @@
 package com.jgeted.sagadyssey.core.command;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+
 import com.jgeted.sagadyssey.npc.entity.NpcBase;
 import com.jgeted.sagadyssey.npc.appearance.NpcFaceVariant;
 import com.jgeted.sagadyssey.npc.appearance.NpcGender;
@@ -33,7 +35,7 @@ public class NpcSpawnCommand {
                 Commands.literal("saga")
                         .then(Commands.literal("npc")
                                 .then(Commands.literal("spawn")
-                                        .requires(src -> src.hasPermission(2))
+                                        .requires(src -> MinecraftApi.hasPermission(src, 2))
                                         .executes(ctx -> spawnNpc(ctx.getSource(), null, null, null))
                                         .then(Commands.argument("profession", StringArgumentType.word())
                                                 .suggests((ctx, builder) -> {
@@ -80,7 +82,7 @@ public class NpcSpawnCommand {
                                         )
                                 )
                                 .then(Commands.literal("status")
-                                        .requires(src -> src.hasPermission(2))
+                                        .requires(src -> MinecraftApi.hasPermission(src, 2))
                                         .then(Commands.argument("npc", EntityArgument.entity())
                                                 .then(Commands.argument("social_status", StringArgumentType.word())
                                                         .suggests((ctx, builder) -> {
@@ -94,7 +96,7 @@ public class NpcSpawnCommand {
                                                                  EntityArgument.getEntity(ctx, "npc"),
                                                                  StringArgumentType.getString(ctx, "social_status"))))))
                                 .then(Commands.literal("identity")
-                                        .requires(src -> src.hasPermission(2))
+                                        .requires(src -> MinecraftApi.hasPermission(src, 2))
                                         .then(Commands.argument("npc", EntityArgument.entity())
                                                 .then(Commands.argument("social_class", StringArgumentType.word())
                                                         .suggests((ctx, builder) -> {
@@ -116,7 +118,7 @@ public class NpcSpawnCommand {
                                                                         StringArgumentType.getString(ctx, "social_class"),
                                                                         StringArgumentType.getString(ctx, "office")))))))
                                 .then(Commands.literal("showcase")
-                                        .requires(src -> src.hasPermission(2))
+                                        .requires(src -> MinecraftApi.hasPermission(src, 2))
                                         .executes(ctx -> spawnIdentityShowcase(ctx.getSource(), null, null))
                                         .then(Commands.argument("profession", StringArgumentType.word())
                                                 .suggests((ctx, builder) -> {
@@ -143,7 +145,7 @@ public class NpcSpawnCommand {
                                                                 StringArgumentType.getString(ctx, "profession"),
                                                                 StringArgumentType.getString(ctx, "faction"))))))
                                 .then(Commands.literal("appearance")
-                                        .requires(src -> src.hasPermission(2))
+                                        .requires(src -> MinecraftApi.hasPermission(src, 2))
                                         .then(Commands.argument("npc", EntityArgument.entity())
                                                 .then(Commands.argument("gender", StringArgumentType.word())
                                                         .suggests((ctx, builder) -> {

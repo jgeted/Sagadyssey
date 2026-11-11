@@ -57,7 +57,7 @@ public final class NpcHandoverIntentScreen extends Screen {
     }
 
     private void submit(HandoverIntent intent) {
-        PacketDistributor.sendToServer(new NpcHandoverIntentPacket(UUID.randomUUID(), npcId,
+        net.neoforged.neoforge.client.network.ClientPacketDistributor.sendToServer(new NpcHandoverIntentPacket(UUID.randomUUID(), npcId,
                 hand, intent, wholeStack));
         onClose();
     }

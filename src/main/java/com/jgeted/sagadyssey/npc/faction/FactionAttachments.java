@@ -24,7 +24,7 @@ public class FactionAttachments {
     public static final Supplier<AttachmentType<FactionStandings>> FACTION_STANDINGS =
             ATTACHMENT_TYPES.register("faction_standings", () ->
                     AttachmentType.builder(FactionStandings::new)
-                            .serialize(FactionStandings.CODEC)
+                            .serialize(com.mojang.serialization.MapCodec.assumeMapUnsafe(FactionStandings.CODEC))
                             .copyOnDeath()
                             .build()
             );

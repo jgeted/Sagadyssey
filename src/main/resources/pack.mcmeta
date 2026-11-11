@@ -1,6 +1,5 @@
 {
     "pack": {
-        "description": "Sagadyssey built-in datapack",
-        "pack_format": 48
+        "description": "Sagadyssey built-in resources and data"
     }
 }

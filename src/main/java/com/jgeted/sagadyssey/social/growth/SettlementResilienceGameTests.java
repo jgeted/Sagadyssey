@@ -1,5 +1,7 @@
 package com.jgeted.sagadyssey.social.growth;
 
+import com.jgeted.sagadyssey.gametest.PortedGameTests.*;
+
 import com.jgeted.sagadyssey.Sagadyssey;
 import com.jgeted.sagadyssey.core.structure.*;
 import com.jgeted.sagadyssey.npc.brain.execution.*;
@@ -15,7 +17,7 @@ import net.minecraft.gametest.framework.*;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.Container;
 import net.minecraft.world.item.*;
-import net.minecraft.world.level.GameRules;
+import net.minecraft.world.level.gamerules.GameRules;
 import net.minecraft.world.level.block.Blocks;
 import net.neoforged.neoforge.gametest.*;
 import java.util.*;
@@ -26,8 +28,8 @@ import java.util.*;
 public final class SettlementResilienceGameTests {
     @net.neoforged.bus.api.SubscribeEvent public static void install(net.neoforged.neoforge.event.server.ServerStartedEvent e){
         if(!(e.getServer() instanceof GameTestServer))return;var l=e.getServer().overworld();try{
-            l.getStructureManager().getOrCreate(net.minecraft.resources.ResourceLocation.parse("sagadyssey_resilience:empty")).load(
-                l.holderLookup(net.minecraft.core.registries.Registries.BLOCK),net.minecraft.nbt.TagParser.parseTag("{size:[16,8,16],entities:[],blocks:[],palette:[{Name:\"minecraft:air\"}]}"));
+            l.getStructureManager().getOrCreate(net.minecraft.resources.Identifier.parse("sagadyssey_resilience:empty")).load(
+                l.holderLookup(net.minecraft.core.registries.Registries.BLOCK),net.minecraft.nbt.TagParser.parseCompoundFully("{size:[16,8,16],entities:[],blocks:[],palette:[{Name:\"minecraft:air\"}]}"));
         }catch(Exception ex){throw new IllegalStateException(ex);}
     }
     @BeforeBatch(batch="resilience") public static void setup(ServerLevel l){SettlementSafetyGameTests.setup(l);}
@@ -39,8 +41,8 @@ public final class SettlementResilienceGameTests {
     private static int count(Container c){int n=0;for(int i=0;i<c.getContainerSize();i++)if(c.getItem(i).is(Items.CARROT))n+=c.getItem(i).getCount();return n;}
     private static NaturalVillageBuilding fixture(GameTestHelper h,int offset){
         var b=NaturalVillageR1GameTests.fixture(h,offset,GrowthLayout.COORDINATED);var l=h.getLevel();
-        l.getGameRules().getRule(GameRules.RULE_DAYLIGHT).set(false,l.getServer());l.setDayTime(6000);
-        l.getGameRules().getRule(GameRules.RULE_RANDOMTICKING).set(0,l.getServer());return b;
+        l.getGameRules().set(GameRules.ADVANCE_TIME, false,l.getServer());l.setDayTime(6000);
+        l.getGameRules().set(GameRules.RANDOM_TICK_SPEED, 0,l.getServer());return b;
     }
     private static boolean ready(GameTestHelper h,NaturalVillageBuilding b){var d=SettlementCoordinatorData.existing(h.getLevel().getServer());return d!=null&&d.site(b.buildingKey())!=null;}
     private static void food(GameTestHelper h,boolean bag){
@@ -95,12 +97,12 @@ public final class SettlementResilienceGameTests {
         var b=fixture(h,512);var l=h.getLevel();long[] killed={-1};UUID[] original={null};
         h.onEachTick(()->{
             if(!ready(h,b))return;var d=SettlementCoordinatorData.get(l.getServer());var row=d.site(b.buildingKey());
-            if(killed[0]<0){if(row.getDouble("DailyMeals")!=4.5)return;
-                var n=NaturalVillageR1GameTests.actor(l,b,2);original[0]=n.getCharacterId();n.kill();killed[0]=l.getGameTime();return;}
+            if(killed[0]<0){if(row.getDoubleOr("DailyMeals", 0.0)!=4.5)return;
+                var n=NaturalVillageR1GameTests.actor(l,b,2);original[0]=n.getCharacterId();com.jgeted.sagadyssey.core.MinecraftApi.kill(n);killed[0]=l.getGameTime();return;}
             if(l.getGameTime()-killed[0]<250)return;
             h.assertTrue(!CharacterRegistryData.get(l.getServer()).byId(original[0]).alive(),"real death history retained");
-            h.assertTrue(row.getDouble("DailyMeals")==3.0,"two living members, not fixed three and not a new identity");
-            Sagadyssey.LOGGER.info("RESILIENCE_DEMAND_ACCEPT dead={} dailyMealsBefore=4.5 after={} foodDays={}",original[0],row.getDouble("DailyMeals"),row.getDouble("FoodDays"));h.succeed();
+            h.assertTrue(row.getDoubleOr("DailyMeals", 0.0)==3.0,"two living members, not fixed three and not a new identity");
+            Sagadyssey.LOGGER.info("RESILIENCE_DEMAND_ACCEPT dead={} dailyMealsBefore=4.5 after={} foodDays={}",original[0],row.getDoubleOr("DailyMeals", 0.0),row.getDoubleOr("FoodDays", 0.0));h.succeed();
         });
     }
 }

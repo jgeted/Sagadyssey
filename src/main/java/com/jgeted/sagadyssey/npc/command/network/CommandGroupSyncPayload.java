@@ -10,9 +10,8 @@ import io.netty.buffer.ByteBuf;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerPlayer;
-import net.neoforged.neoforge.network.handling.IPayloadContext;
 
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -34,7 +33,7 @@ public record CommandGroupSyncPayload(
                              String rank, int color, boolean selected) {}
 
     public static final Type<CommandGroupSyncPayload> TYPE = new Type<>(
-            ResourceLocation.fromNamespaceAndPath(Sagadyssey.MOD_ID, "command_group_sync"));
+            Identifier.fromNamespaceAndPath(Sagadyssey.MOD_ID, "command_group_sync"));
 
     public static final StreamCodec<ByteBuf, CommandGroupSyncPayload> STREAM_CODEC = StreamCodec.of(
             (buf, payload) -> {
@@ -111,9 +110,6 @@ public record CommandGroupSyncPayload(
                 data.corner1(), data.corner2());
     }
 
-    public static void handle(CommandGroupSyncPayload payload, IPayloadContext context) {
-        ClientCommandGroupSyncHandler.handle(payload, context);
-    }
 
     private static void writeString(ByteBuf buf, String value) {
         byte[] bytes = value.getBytes(StandardCharsets.UTF_8);

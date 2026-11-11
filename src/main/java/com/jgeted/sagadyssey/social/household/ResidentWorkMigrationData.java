@@ -1,5 +1,8 @@
 package com.jgeted.sagadyssey.social.household;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+import net.minecraft.core.UUIDUtil;
+
 import com.jgeted.sagadyssey.core.structure.*;
 import com.jgeted.sagadyssey.npc.brain.execution.NpcBrainRuntime;
 import com.jgeted.sagadyssey.npc.brain.fieldwork.*;
@@ -22,34 +25,54 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.tags.BlockTags;
 import net.minecraft.world.Container;
 import net.minecraft.world.item.Items;
-import net.minecraft.world.level.saveddata.SavedData;
+import com.jgeted.sagadyssey.worldsim.NbtSavedData;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.neoforge.event.tick.ServerTickEvent;
 import java.util.*;
 
 /** Explicit consenting individual application; no population creation, asset inheritance or hidden teleport. */
-public final class ResidentWorkMigrationData extends SavedData {
+public final class ResidentWorkMigrationData extends NbtSavedData {
     public static final String NAME="sagadyssey_resident_work_moves_v1";
     public static final Factory<ResidentWorkMigrationData> FACTORY=new Factory<>(ResidentWorkMigrationData::new,ResidentWorkMigrationData::load);
     public static final long DEADLINE=24000;
     private final Map<UUID,CompoundTag> applications=new LinkedHashMap<>();
     private final Map<UUID,CompoundTag> deathGoods=new LinkedHashMap<>();
     public CompoundTag deathGoods(UUID person){var t=deathGoods.get(person);return t==null?null:t.copy();}
+    // Cache only absence verified during this server tick, never a NbtSavedData object or a read failure.
+    // Weak storage keys keep separate server/world lifetimes independent without a persistent field.
+    private static final Map<net.minecraft.world.level.storage.DimensionDataStorage,Integer> ABSENT_CHECKED=
+            Collections.synchronizedMap(new WeakHashMap<>());
     public static ResidentWorkMigrationData get(MinecraftServer s){return PersistentDataAccess.getOrCreate(s,FACTORY,NAME);}
-    public static ResidentWorkMigrationData existing(MinecraftServer s){var d=s.overworld().getDataStorage().get(FACTORY,NAME);
-        var path=s.getWorldPath(net.minecraft.world.level.storage.LevelResource.ROOT).resolve("data");
-        if(d==null&&(java.nio.file.Files.exists(path.resolve(NAME+".dat"))||java.nio.file.Files.exists(path.resolve(NAME+".dat_old"))))throw new IllegalStateException("Resident move ledger unreadable; preserve original identity and obligations");return d;}
+    public static ResidentWorkMigrationData existing(MinecraftServer s){
+        return existing(s.overworld().getDataStorage(),
+                s.getWorldPath(net.minecraft.world.level.storage.LevelResource.ROOT).resolve("data"),s.getTickCount());
+    }
+    static ResidentWorkMigrationData existing(net.minecraft.world.level.storage.DimensionDataStorage storage,
+                                               java.nio.file.Path directory,int tick){
+        // A formal get/set must become visible immediately, even after an absent read in this tick.
+        var data=storage.get(FACTORY.type(NAME));
+        if(data!=null){ABSENT_CHECKED.remove(storage);return data;}
+        var checked=ABSENT_CHECKED.get(storage);
+        if(checked!=null&&checked==tick)return null;
+        if(java.nio.file.Files.exists(directory.resolve(NAME+".dat"))
+                ||java.nio.file.Files.exists(directory.resolve(NAME+".dat_old")))
+            throw new IllegalStateException("Resident move ledger unreadable; preserve original identity and obligations");
+        // Live external file edits are unsupported. An anomalous file appearing after this
+        // check is detected next server tick, not hidden for the world's whole lifetime.
+        ABSENT_CHECKED.put(storage,tick);
+        return null;
+    }
     public CompoundTag application(UUID person){var t=applications.get(person);return t==null?null:t.copy();}
     public List<CompoundTag> applications(){return applications.values().stream().map(CompoundTag::copy).toList();}
-    public static boolean moving(MinecraftServer s,UUID person){var d=existing(s);var t=d==null?null:d.applications.get(person);return t!=null&&Set.of("WALKING","WAIT_DESTINATION","REVIEW").contains(t.getString("State"));}
+    public static boolean moving(MinecraftServer s,UUID person){var d=existing(s);var t=d==null?null:d.applications.get(person);return t!=null&&Set.of("WALKING","WAIT_DESTINATION","REVIEW").contains(t.getStringOr("State", ""));}
     /** A departed original no longer owns the source village's unload boundary; footprint chunks still do. */
     public static boolean departed(MinecraftServer s,UUID person){if(com.jgeted.sagadyssey.social.growth.SettlementDevelopmentData.departed(s,person))return true;var d=existing(s);var t=d==null?null:d.applications.get(person);return t!=null&&t.contains("Departed");}
-    private static NaturalVillageBuilding from(CompoundTag t){return NaturalVillageLifeData.decode(t.getCompound("Source"));}
-    private static NaturalVillageBuilding to(CompoundTag t){return NaturalVillageLifeData.decode(t.getCompound("Destination"));}
+    private static NaturalVillageBuilding from(CompoundTag t){return NaturalVillageLifeData.decode(t.getCompoundOrEmpty("Source"));}
+    private static NaturalVillageBuilding to(CompoundTag t){return NaturalVillageLifeData.decode(t.getCompoundOrEmpty("Destination"));}
     private static boolean alive(MinecraftServer s,UUID person){var p=CharacterRegistryData.get(s).byId(person);return p!=null&&p.alive();}
     private static NpcBase actor(MinecraftServer s,NaturalVillageBuilding b,int i){var l=SupplyFlowService.level(s,b.dimension());return l!=null&&l.getEntity(NaturalVillageLifeData.body(b,i)) instanceof NpcBase n?n:null;}
-    private static boolean ready(MinecraftServer s,NaturalVillageBuilding b){var d=NaturalVillageLifeData.existing(s);var t=d==null?null:d.village(b.buildingKey());return t!=null&&t.getBoolean("Ready")&&NaturalVillageLifeData.decode(t).equals(b);}
-    private static boolean physical(MinecraftServer s,NaturalVillageBuilding b){var d=NaturalVillageEconomyData.existing(s);var r=d==null?null:d.row(b.buildingKey());return r==null||r.getString("Phase").equals("NEAR");}
+    private static boolean ready(MinecraftServer s,NaturalVillageBuilding b){var d=NaturalVillageLifeData.existing(s);var t=d==null?null:d.village(b.buildingKey());return t!=null&&t.getBooleanOr("Ready", false)&&NaturalVillageLifeData.decode(t).equals(b);}
+    private static boolean physical(MinecraftServer s,NaturalVillageBuilding b){var d=NaturalVillageEconomyData.existing(s);var r=d==null?null:d.row(b.buildingKey());return r==null||r.getStringOr("Phase", "").equals("NEAR");}
     public static BlockPos bed(NaturalVillageBuilding b){return NaturalVillageLayout.at(b,NaturalVillageLayout.spareBeds().getFirst());}
     public static BlockPos workMin(NaturalVillageBuilding b){return NaturalVillageLayout.at(b,new BlockPos(18,1,14));}
     public static BlockPos workMax(NaturalVillageBuilding b){return NaturalVillageLayout.at(b,new BlockPos(20,3,18));}
@@ -58,14 +81,14 @@ public final class ResidentWorkMigrationData extends SavedData {
     public String request(MinecraftServer s,UUID person,NaturalVillageBuilding source,NaturalVillageBuilding target){
         if(!s.isSameThread())throw new IllegalStateException("Resident application requires server thread");
         var prior=applications.get(person);
-        if(prior!=null)return from(prior).equals(source)&&to(prior).equals(target)?prior.getString("State"):"CONFLICTING_APPLICATION";
+        if(prior!=null)return from(prior).equals(source)&&to(prior).equals(target)?prior.getStringOr("State", ""):"CONFLICTING_APPLICATION";
         if(!source.templateId().equals(NaturalVillageLayout.WOOD_V2.toString())||!target.templateId().equals(NaturalVillageLayout.WOOD_V2.toString())
                 ||!source.dimension().equals(target.dimension())||source.settlementId().equals(target.settlementId())
                 ||source.buildingOrigin().distSqr(target.buildingOrigin())>256*256||!person.equals(NaturalVillageLifeData.person(source,2))||!ready(s,source)||!ready(s,target))return "UNSUPPORTED";
-        if(applications.size()>=64||applications.values().stream().anyMatch(t->!Set.of("DONE","REJECTED").contains(t.getString("State"))))return "OTHER_APPLICATION_ACTIVE";
-        var whole=NaturalHouseholdMigrationData.existing(s);if(whole!=null&&whole.moves().stream().anyMatch(t->!t.getString("State").equals("DONE")))return "OTHER_APPLICATION_ACTIVE";
-        var t=new CompoundTag();t.putUUID("Person",person);t.putUUID("Body",NaturalVillageLifeData.body(source,2));
-        t.putUUID("Id",ContainerIds.named("resident-work-move:v1:"+person+":"+target.buildingKey()));
+        if(applications.size()>=64||applications.values().stream().anyMatch(t->!Set.of("DONE","REJECTED").contains(t.getStringOr("State", ""))))return "OTHER_APPLICATION_ACTIVE";
+        var whole=NaturalHouseholdMigrationData.existing(s);if(whole!=null&&whole.moves().stream().anyMatch(t->!t.getStringOr("State", "").equals("DONE")))return "OTHER_APPLICATION_ACTIVE";
+        var t=new CompoundTag();t.store("Person", UUIDUtil.CODEC,person);t.store("Body", UUIDUtil.CODEC,NaturalVillageLifeData.body(source,2));
+        t.store("Id", UUIDUtil.CODEC,ContainerIds.named("resident-work-move:v1:"+person+":"+target.buildingKey()));
         t.put("Source",NaturalVillageLifeData.get(s).village(source.buildingKey()));t.put("Destination",NaturalVillageLifeData.get(s).village(target.buildingKey()));
         t.putLong("Applied",s.overworld().getGameTime());t.putLong("Deadline",s.overworld().getGameTime()+DEADLINE);
         t.putString("State","WAITING");t.putString("Reason","本人明确申请，按版本化留任与接纳规则核对，不预留报酬或财产");
@@ -83,7 +106,7 @@ public final class ResidentWorkMigrationData extends SavedData {
         return null;
     }
     private String conditions(MinecraftServer s,CompoundTag t,boolean departed){
-        var a=from(t);var b=to(t);UUID person=t.getUUID("Person");var n=actor(s,a,2);var houses=HouseholdData.get(s);var life=NpcLifeData.get(s);
+        var a=from(t);var b=to(t);UUID person=t.read("Person", UUIDUtil.CODEC).orElseThrow();var n=actor(s,a,2);var houses=HouseholdData.get(s);var life=NpcLifeData.get(s);
         if(!alive(s,person))return "申请人已确认死亡";
         if(n==null)return "原居民暂未加载，保留身份和位置";
         if(!physical(s,a)||!physical(s,b))return "来源或目标正处远方交接，等待正式实体账返回";
@@ -92,13 +115,13 @@ public final class ResidentWorkMigrationData extends SavedData {
         if(r==null||r.authority()!=(departed?NpcWorkAuthority.NONE:NpcWorkAuthority.INSTITUTION)||!a.settlementId().equals(r.institutionWorkplaceSettlementId())||!departed&&!a.settlementId().equals(r.activeWorkplaceSettlementId()))return "原工作权威发生变化";
         var contract=life.contract(person);if(contract!=null&&(contract.status().ongoing()||contract.unpaidEmeralds()>0))return "现有雇佣或工资义务未结清";
         if(com.jgeted.sagadyssey.social.combat.NaturalConflictData.engaged(s,person)||com.jgeted.sagadyssey.social.politics.NaturalPolityData.paused(s,person))return "现有机构职责尚未结束";
-        var whole=NaturalHouseholdMigrationData.existing(s);if(whole!=null&&whole.moves().stream().anyMatch(m->m.getUUID("Household").equals(NaturalVillageLifeData.home(a))&&!m.getString("State").equals("DONE")))return "已有整户迁移义务";
+        var whole=NaturalHouseholdMigrationData.existing(s);if(whole!=null&&whole.moves().stream().anyMatch(m->m.read("Household", UUIDUtil.CODEC).orElseThrow().equals(NaturalVillageLifeData.home(a))&&!m.getStringOr("State", "").equals("DONE")))return "已有整户迁移义务";
         var source=houses.forMember(person);var dest=houses.byId(NaturalVillageLifeData.home(b));
         if(source==null||!source.id().equals(NaturalVillageLifeData.home(a))||source.headCharacterId().equals(person)||!Objects.equals(source.settlementId(),a.settlementId())||dest==null||dest.members().size()>=HouseholdRecord.MAX_MEMBERS||!Objects.equals(dest.settlementId(),b.settlementId())||!Objects.equals(dest.sharedStorage(),NaturalVillageLayout.at(b,NaturalVillageLayout.PANTRY)))return "来源户籍或目标接纳容量发生变化";
         if(!alive(s,source.headCharacterId())||!alive(s,dest.headCharacterId()))return "来源或接纳户主不能确认既有约定";
         var retained=actor(s,a,0);if(retained==null||!alive(s,retained.getCharacterId())||retained.isNoAi()||retained.getProfession()!=NpcProfession.WORKER||retained.getCommand()!=NpcCommand.WORK||!a.settlementId().equals(com.jgeted.sagadyssey.social.work.NpcWorkContext.from(retained).workplaceSettlementId()))return "来源没有可保留的在岗林工";
         UUID old=NaturalVillageLifeData.person(b,2);if(CharacterRegistryData.get(s).byId(old)==null||alive(s,old))return "目标原林工未确认死亡，不能把卸载当空缺";
-        if(!deathGoods.containsKey(old)||!deathGoods.get(old).getString("State").equals("DROPPED"))return "离任者随身物品去向尚待核对，不接管或继承";
+        if(!deathGoods.containsKey(old)||!deathGoods.get(old).getStringOr("State", "").equals("DROPPED"))return "离任者随身物品去向尚待核对，不接管或继承";
         String obligation=obligations(s,person,n.getUUID());if(obligation!=null)return obligation;
         obligation=obligations(s,old,NaturalVillageLifeData.body(b,2));if(obligation!=null)return "离任者"+obligation;
         if(!n.getTransportInventory().isEmpty())return "携货尚未结清";
@@ -123,12 +146,12 @@ public final class ResidentWorkMigrationData extends SavedData {
         catch(NoSuchElementException e){return "接纳粮仓未正式登记";}
         return null;
     }
-    private void state(CompoundTag t,String state,String reason){if(!state.equals(t.getString("State"))||!reason.equals(t.getString("Reason"))){t.putString("State",state);t.putString("Reason",reason);setDirty();}}
-    private static void history(MinecraftServer s,CompoundTag t,String kind){WorldHistoryData.get(s).append(s.overworld().getGameTime(),kind,t.getUUID("Person"),"林工迁移",t.getString("Reason")+"；来源="+from(t).settlementId()+"；目标="+to(t).settlementId(),30);}
+    private void state(CompoundTag t,String state,String reason){if(!state.equals(t.getStringOr("State", ""))||!reason.equals(t.getStringOr("Reason", ""))){t.putString("State",state);t.putString("Reason",reason);setDirty();}}
+    private static void history(MinecraftServer s,CompoundTag t,String kind){WorldHistoryData.get(s).append(s.overworld().getGameTime(),kind,t.read("Person", UUIDUtil.CODEC).orElseThrow(),"林工迁移",t.getStringOr("Reason", "")+"；来源="+from(t).settlementId()+"；目标="+to(t).settlementId(),30);}
     private void tick(MinecraftServer s){long now=s.overworld().getGameTime();for(var t:applications.values()){
-        String st=t.getString("State");if(Set.of("DONE","REJECTED","REVIEW").contains(st))continue;
+        String st=t.getStringOr("State", "");if(Set.of("DONE","REJECTED","REVIEW").contains(st))continue;
         boolean departed=!st.equals("WAITING");
-        if(now>=t.getLong("Deadline")){state(t,departed?"REVIEW":"REJECTED","达到固定申请与步行等待上限，保留原身份、财产与义务供核对");history(s,t,"resident_move_timeout");continue;}
+        if(now>=t.getLongOr("Deadline", 0L)){state(t,departed?"REVIEW":"REJECTED","达到固定申请与步行等待上限，保留原身份、财产与义务供核对");history(s,t,"resident_move_timeout");continue;}
         String why=conditions(s,t,departed);
         if(why!=null){if(departed&&why.equals("申请人已确认死亡"))state(t,"REVIEW",why);else state(t,departed?"WAIT_DESTINATION":"WAITING",why);continue;}
         var a=from(t);var b=to(t);var n=actor(s,a,2);
@@ -148,8 +171,8 @@ public final class ResidentWorkMigrationData extends SavedData {
         n.getNavigation().stop();NpcBrainRuntime.cancel(n,PlanCancellationReason.AUTHORIZED_COMMAND,"已抵达并提交，交由原生产计划器接续");
         t.putLong("Completed",now);t.putLong("ArrivalPosition",n.blockPosition().asLong());state(t,"DONE","原人物已迁入并接替实际林地，新产出按原规则贡献家庭；劳动回执另行验证");history(s,t,"resident_move_completed");
     }}
-    public static boolean tickActor(NpcBase n){var d=existing(n.getServer());var t=d==null?null:d.applications.get(n.getCharacterId());if(t==null||!moving(n.getServer(),n.getCharacterId()))return false;
-        if(t.getString("State").equals("REVIEW")){n.getNavigation().stop();return true;}
+    public static boolean tickActor(NpcBase n){var d=existing(MinecraftApi.server(n));var t=d==null?null:d.applications.get(n.getCharacterId());if(t==null||!moving(MinecraftApi.server(n),n.getCharacterId()))return false;
+        if(t.getStringOr("State", "").equals("REVIEW")){n.getNavigation().stop();return true;}
         var b=to(t);var target=NaturalVillageLayout.at(b,NaturalVillageLayout.PANTRY);
         if(!n.isAlive()||n.getTarget()!=null||n.getCommand()!=NpcCommand.WORK||n.blockPosition().distSqr(target)<49){n.getNavigation().stop();return true;}
         if(n.tickCount%20==0&&!FieldworkRoutes.move(n,target))d.state(t,"WAIT_DESTINATION","道路或下一路段不可用，在原位置等待，不传送或强制加载");return true;
@@ -158,23 +181,23 @@ public final class ResidentWorkMigrationData extends SavedData {
     /** Bounded death disposition, not inheritance: actual bag goods remain real owner-marked drops. */
     @SubscribeEvent(priority=net.neoforged.bus.api.EventPriority.HIGH) public static void death(net.neoforged.neoforge.event.entity.living.LivingDeathEvent e){
         if(!(e.getEntity() instanceof NpcBase n)||!(n.level() instanceof net.minecraft.server.level.ServerLevel l))return;
-        var life=NaturalVillageLifeData.existing(l.getServer());if(life==null||life.villages().stream().filter(v->v.getBoolean("Ready")).map(NaturalVillageLifeData::decode).noneMatch(b->b.templateId().equals(NaturalVillageLayout.WOOD_V2.toString())&&NaturalVillageLifeData.person(b,2).equals(n.getCharacterId())))return;
+        var life=NaturalVillageLifeData.existing(l.getServer());if(life==null||life.villages().stream().filter(v->v.getBooleanOr("Ready", false)).map(NaturalVillageLifeData::decode).noneMatch(b->b.templateId().equals(NaturalVillageLayout.WOOD_V2.toString())&&NaturalVillageLifeData.person(b,2).equals(n.getCharacterId())))return;
         var d=get(l.getServer());if(d.deathGoods.containsKey(n.getCharacterId()))return;
-        var t=new CompoundTag();t.putUUID("Person",n.getCharacterId());t.putLong("At",l.getGameTime());t.putLong("Position",n.blockPosition().asLong());t.put("Before",NaturalVillageEconomyData.items(n.getPersonalInventory(),l.registryAccess()));
+        var t=new CompoundTag();t.store("Person", UUIDUtil.CODEC,n.getCharacterId());t.putLong("At",l.getGameTime());t.putLong("Position",n.blockPosition().asLong());t.put("Before",NaturalVillageEconomyData.items(n.getPersonalInventory(),l.registryAccess()));
         // Native equipped goods require separate reconciliation; never guess whether an equipment view is a mirror.
         boolean equipment=false;for(var slot:net.minecraft.world.entity.EquipmentSlot.values())if(!n.getItemBySlot(slot).isEmpty())equipment=true;
         if(equipment){t.putString("State","REVIEW");t.putString("Reason","存在原版装备，保留现场，不猜测是否与私人库存重复");}
         else{
             var nearby=n.getBoundingBox().inflate(3);var before=l.getEntitiesOfClass(net.minecraft.world.entity.item.ItemEntity.class,nearby).stream().map(Entity->Entity.getUUID()).collect(java.util.stream.Collectors.toSet());
             net.minecraft.world.Containers.dropContents(l,n.blockPosition(),n.getPersonalInventory());n.getPersonalInventory().clearContent();
-            var drops=new ListTag();for(var item:l.getEntitiesOfClass(net.minecraft.world.entity.item.ItemEntity.class,nearby))if(!before.contains(item.getUUID())){item.setTarget(n.getCharacterId());var a=new CompoundTag();a.putUUID("Entity",item.getUUID());a.put("Stack",item.getItem().save(l.registryAccess()));drops.add(a);}
+            var drops=new ListTag();for(var item:l.getEntitiesOfClass(net.minecraft.world.entity.item.ItemEntity.class,nearby))if(!before.contains(item.getUUID())){item.setTarget(n.getCharacterId());var a=new CompoundTag();a.store("Entity", UUIDUtil.CODEC,item.getUUID());a.put("Stack",MinecraftApi.saveItem(item.getItem(), l.registryAccess()));drops.add(a);}
             t.put("Drops",drops);t.putString("State","DROPPED");t.putString("Reason","原随身物品真实掉落并标记死者；未转交迁入者，后续遵循原版掉落实体生命周期");
         }
         d.deathGoods.put(n.getCharacterId(),t);d.setDirty();
     }
     @Override public CompoundTag save(CompoundTag t,HolderLookup.Provider lookup){t.putInt("Schema",1);var list=new ListTag();applications.values().forEach(x->list.add(x.copy()));t.put("Applications",list);var goods=new ListTag();deathGoods.values().forEach(x->goods.add(x.copy()));t.put("DeathGoods",goods);return t;}
-    public static ResidentWorkMigrationData load(CompoundTag t,HolderLookup.Provider lookup){if(t.getInt("Schema")!=1)throw new IllegalArgumentException("Unknown resident move schema");var d=new ResidentWorkMigrationData();for(var e:t.getList("Applications",Tag.TAG_COMPOUND)){
-        var a=((CompoundTag)e).copy();if(!Set.of("WAITING","WALKING","WAIT_DESTINATION","DONE","REJECTED","REVIEW").contains(a.getString("State"))||d.applications.size()>=64||d.applications.putIfAbsent(a.getUUID("Person"),a)!=null)throw new IllegalArgumentException("Conflicting resident application");
-        var source=from(a);var target=to(a);if(!source.templateId().equals(NaturalVillageLayout.WOOD_V2.toString())||!target.templateId().equals(NaturalVillageLayout.WOOD_V2.toString())||!a.getUUID("Person").equals(NaturalVillageLifeData.person(source,2))||!a.getUUID("Body").equals(NaturalVillageLifeData.body(source,2))||a.getLong("Deadline")-a.getLong("Applied")!=DEADLINE)throw new IllegalArgumentException("Resident application identity or deadline changed");
-    }for(var e:t.getList("DeathGoods",Tag.TAG_COMPOUND)){var a=((CompoundTag)e).copy();if(!Set.of("DROPPED","REVIEW").contains(a.getString("State"))||d.deathGoods.putIfAbsent(a.getUUID("Person"),a)!=null)throw new IllegalArgumentException("Conflicting death goods");}return d;}
+    public static ResidentWorkMigrationData load(CompoundTag t,HolderLookup.Provider lookup){if(t.getIntOr("Schema", 0)!=1)throw new IllegalArgumentException("Unknown resident move schema");var d=new ResidentWorkMigrationData();for(var e:MinecraftApi.listOfType(t, "Applications",Tag.TAG_COMPOUND)){
+        var a=((CompoundTag)e).copy();if(!Set.of("WAITING","WALKING","WAIT_DESTINATION","DONE","REJECTED","REVIEW").contains(a.getStringOr("State", ""))||d.applications.size()>=64||d.applications.putIfAbsent(a.read("Person", UUIDUtil.CODEC).orElseThrow(),a)!=null)throw new IllegalArgumentException("Conflicting resident application");
+        var source=from(a);var target=to(a);if(!source.templateId().equals(NaturalVillageLayout.WOOD_V2.toString())||!target.templateId().equals(NaturalVillageLayout.WOOD_V2.toString())||!a.read("Person", UUIDUtil.CODEC).orElseThrow().equals(NaturalVillageLifeData.person(source,2))||!a.read("Body", UUIDUtil.CODEC).orElseThrow().equals(NaturalVillageLifeData.body(source,2))||a.getLongOr("Deadline", 0L)-a.getLongOr("Applied", 0L)!=DEADLINE)throw new IllegalArgumentException("Resident application identity or deadline changed");
+    }for(var e:MinecraftApi.listOfType(t, "DeathGoods",Tag.TAG_COMPOUND)){var a=((CompoundTag)e).copy();if(!Set.of("DROPPED","REVIEW").contains(a.getStringOr("State", ""))||d.deathGoods.putIfAbsent(a.read("Person", UUIDUtil.CODEC).orElseThrow(),a)!=null)throw new IllegalArgumentException("Conflicting death goods");}return d;}
 }

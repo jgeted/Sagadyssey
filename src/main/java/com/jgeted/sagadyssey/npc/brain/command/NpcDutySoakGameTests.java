@@ -1,4 +1,8 @@
 package com.jgeted.sagadyssey.npc.brain.command;
+
+import com.jgeted.sagadyssey.gametest.PortedGameTests.*;
+
+import com.jgeted.sagadyssey.core.MinecraftApi;
 import com.jgeted.sagadyssey.npc.brain.execution.*;
 import com.jgeted.sagadyssey.npc.entity.*;
 import com.jgeted.sagadyssey.npc.profession.NpcProfession;
@@ -19,9 +23,9 @@ public final class NpcDutySoakGameTests {
         long start=h.getLevel().getGameTime();int initialDuties=NpcDutyData.get(h.getLevel().getServer()).all().size();
         h.runAtTickTime(72000,()->{h.assertTrue(h.getLevel().getGameTime()-start>=72000,"three actual server days, not only changing displayed time");
             for(var n:actors){h.assertTrue(n.isAlive()&&n.getPersonalInventory().count(s->s.is(Items.BREAD))<=4,"no spawned food or survival loss");
-                h.assertTrue(NpcLifeData.get(n.getServer()).needs(n.getCharacterId()).hunger()<800,"actual bag eating prevents permanently starving work");
-                var active=NpcBrainRuntime.data(n.getServer()).active(n.getUUID());h.assertTrue(active.isEmpty()||active.get().expiresAt()>h.getLevel().getGameTime(),"no expired active plan loop");
-                h.assertTrue(NpcBrainRuntime.data(n.getServer()).history(n.getUUID()).size()<=32,"bounded terminal plan history");}
+                h.assertTrue(NpcLifeData.get(MinecraftApi.server(n)).needs(n.getCharacterId()).hunger()<800,"actual bag eating prevents permanently starving work");
+                var active=NpcBrainRuntime.data(MinecraftApi.server(n)).active(n.getUUID());h.assertTrue(active.isEmpty()||active.get().expiresAt()>h.getLevel().getGameTime(),"no expired active plan loop");
+                h.assertTrue(NpcBrainRuntime.data(MinecraftApi.server(n)).history(n.getUUID()).size()<=32,"bounded terminal plan history");}
             h.assertTrue(NpcDutyData.get(h.getLevel().getServer()).all().size()==initialDuties,"idle guard did not create phantom patient or convoy jobs");
             var metrics=NpcPlanningMetrics.snapshot(h.getLevel().getServer());h.assertTrue(metrics.retained()<=4096&&metrics.calls()>10000,"bounded actual planning measurements");
             com.jgeted.sagadyssey.Sagadyssey.LOGGER.info("PHASE9_SOAK actualTicks=72000 actors={} planningCalls={} p95Nanos={} maxNanos={} retainedSamples={}",actors.size(),metrics.calls(),metrics.p95Nanos(),metrics.maxNanos(),metrics.retained());

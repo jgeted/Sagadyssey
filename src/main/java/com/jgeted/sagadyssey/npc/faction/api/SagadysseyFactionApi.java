@@ -1,7 +1,7 @@
 package com.jgeted.sagadyssey.npc.faction.api;
 
 import com.jgeted.sagadyssey.npc.faction.*;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.world.entity.player.Player;
 
 import java.util.Collection;
@@ -16,8 +16,8 @@ import java.util.Set;
  */
 public interface SagadysseyFactionApi {
 
-    /** 根据 ResourceLocation 获取阵营 */
-    Faction getFaction(ResourceLocation id);
+    /** 根据 Identifier 获取阵营 */
+    Faction getFaction(Identifier id);
 
     /** 获取所有已注册阵营 */
     Collection<Faction> getAllFactions();

@@ -1,4 +1,6 @@
 package com.jgeted.sagadyssey.worldsim.lod;
+
+import com.jgeted.sagadyssey.core.MinecraftApi;
 import com.jgeted.sagadyssey.npc.ai.*;
 import com.jgeted.sagadyssey.npc.brain.execution.NpcBrainRuntime;
 import com.jgeted.sagadyssey.npc.entity.NpcBase;
@@ -15,7 +17,7 @@ public final class NpcPerceptionQueue {
     private static final Map<MinecraftServer,State> STATES=new WeakHashMap<>();
     private static State state(MinecraftServer s){return STATES.computeIfAbsent(s,k->new State());}
     public static TargetResult query(NpcBase n,String variant,Function<NpcBase,TargetResult> scan) {
-        var s=n.getServer();var state=state(s);long now=s.overworld().getGameTime();var cached=state.results.get(n.getUUID());
+        var s=MinecraftApi.server(n);var state=state(s);long now=s.overworld().getGameTime();var cached=state.results.get(n.getUUID());
         if(cached==null||!cached.variant().equals(variant)||now-cached.time()>=20) {
             if(state.pending.containsKey(n.getUUID())||state.pending.size()<8192)state.pending.putIfAbsent(n.getUUID(),new Request(new WeakReference<>(n),variant,now,scan));
             state.peak=Math.max(state.peak,state.pending.size());

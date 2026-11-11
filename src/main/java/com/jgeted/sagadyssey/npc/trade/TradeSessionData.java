@@ -1,5 +1,7 @@
 package com.jgeted.sagadyssey.npc.trade;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+
 import com.jgeted.sagadyssey.worldsim.rights.ItemFingerprint;
 import com.jgeted.sagadyssey.worldsim.rights.RightsStateData;
 import net.minecraft.core.HolderLookup;
@@ -7,7 +9,7 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.world.level.saveddata.SavedData;
+import com.jgeted.sagadyssey.worldsim.NbtSavedData;
 
 import javax.annotation.Nullable;
 import java.util.Comparator;
@@ -17,7 +19,7 @@ import java.util.Map;
 import java.util.UUID;
 
 /** Durable sessions double as reservations; terminal sessions never reserve stock. */
-public final class TradeSessionData extends SavedData {
+public final class TradeSessionData extends NbtSavedData {
     private static final String DATA_NAME = "sagadyssey_trade_sessions_v2";
     private static final int MAX_RETAINED = 512;
     private static final Factory<TradeSessionData> FACTORY =
@@ -25,7 +27,7 @@ public final class TradeSessionData extends SavedData {
     private final Map<UUID, TradeSession> sessions = new HashMap<>();
 
     public static TradeSessionData get(MinecraftServer server) {
-        return server.overworld().getDataStorage().computeIfAbsent(FACTORY, DATA_NAME);
+        return server.overworld().getDataStorage().computeIfAbsent(FACTORY.type(DATA_NAME));
     }
 
     public TradeSession open(UUID playerId, UUID npcId, UUID playerContainerId,
@@ -128,10 +130,10 @@ public final class TradeSessionData extends SavedData {
 
     private static TradeSessionData load(CompoundTag tag, HolderLookup.Provider registries) {
         TradeSessionData data = new TradeSessionData();
-        ListTag list = tag.getList("Sessions", Tag.TAG_COMPOUND);
+        ListTag list = MinecraftApi.listOfType(tag, "Sessions", Tag.TAG_COMPOUND);
         for (int index = 0; index < list.size(); index++) {
             try {
-                TradeSession session = TradeSession.load(list.getCompound(index));
+                TradeSession session = TradeSession.load(list.getCompoundOrEmpty(index));
                 data.sessions.put(session.id(), session);
             } catch (RuntimeException ignored) { }
         }

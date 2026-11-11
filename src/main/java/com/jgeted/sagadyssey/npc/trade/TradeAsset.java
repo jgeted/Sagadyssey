@@ -18,7 +18,7 @@ public record TradeAsset(ItemFingerprint fingerprint, int quantity, String known
     }
 
     static TradeAsset load(CompoundTag tag) {
-        return new TradeAsset(ItemFingerprint.load(tag.getCompound("Fingerprint")),
-                tag.getInt("Quantity"), tag.getString("KnownName"));
+        return new TradeAsset(ItemFingerprint.load(tag.getCompoundOrEmpty("Fingerprint")),
+                tag.getIntOr("Quantity", 0), tag.getStringOr("KnownName", ""));
     }
 }

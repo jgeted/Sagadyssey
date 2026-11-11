@@ -19,7 +19,7 @@ public final class CommandGroupAttachments {
     public static final Supplier<AttachmentType<PlayerCommandData>> COMMAND_GROUP =
             ATTACHMENT_TYPES.register("command_group", () ->
                     AttachmentType.builder(PlayerCommandData::new)
-                            .serialize(PlayerCommandData.CODEC)
+                            .serialize(com.mojang.serialization.MapCodec.assumeMapUnsafe(PlayerCommandData.CODEC))
                             .copyOnDeath()
                             .build());
 
@@ -41,7 +41,7 @@ public final class CommandGroupAttachments {
         // 旧存档迁移：第一次打开指挥杖时自动收录附近已招募 NPC。
         PlayerCommandData data = get(player);
         if (openScreen && data.memberSquadsView().isEmpty()) {
-            player.serverLevel().getEntitiesOfClass(NpcBase.class,
+            player.level().getEntitiesOfClass(NpcBase.class,
                             player.getBoundingBox().inflate(128.0D),
                             npc -> npc.isAlive() && npc.isOwnedBy(player.getUUID()))
                     .forEach(npc -> registerNpc(player, npc));

@@ -1,5 +1,7 @@
 package com.jgeted.sagadyssey.npc.brain.life;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.*;
 import org.junit.jupiter.api.Test;
@@ -35,7 +37,7 @@ class LifeActivityDataTest {
     }
     @Test void corruptFieldsAndDuplicateReceiptsRejected() {
         var d=new LifeActivityData();d.pending("x");var tag=d.save(new CompoundTag(),null);
-        tag.getList("Settlements",Tag.TAG_COMPOUND).add(tag.getList("Settlements",Tag.TAG_COMPOUND).get(0).copy());
+        MinecraftApi.listOfType(tag, "Settlements",Tag.TAG_COMPOUND).add(MinecraftApi.listOfType(tag, "Settlements",Tag.TAG_COMPOUND).get(0).copy());
         assertThrows(IllegalArgumentException.class,()->LifeActivityData.load(tag,null));
         var missing=d.save(new CompoundTag(),null);missing.remove("Sessions");
         assertThrows(IllegalArgumentException.class,()->LifeActivityData.load(missing,null));

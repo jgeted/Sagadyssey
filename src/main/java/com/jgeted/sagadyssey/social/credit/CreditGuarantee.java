@@ -19,7 +19,7 @@ public record CreditGuarantee(SubjectRef guarantor, int maximumEmeralds, String 
     }
 
     static CreditGuarantee load(CompoundTag tag) {
-        return new CreditGuarantee(SubjectRef.load(tag.getCompound("Guarantor")),
-                tag.getInt("Maximum"), tag.getString("Basis"));
+        return new CreditGuarantee(SubjectRef.load(tag.getCompoundOrEmpty("Guarantor")),
+                tag.getIntOr("Maximum", 0), tag.getStringOr("Basis", ""));
     }
 }

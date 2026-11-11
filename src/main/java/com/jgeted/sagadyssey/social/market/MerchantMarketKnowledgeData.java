@@ -1,5 +1,7 @@
 package com.jgeted.sagadyssey.social.market;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+
 import com.jgeted.sagadyssey.worldsim.rights.ItemFingerprint;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
@@ -8,7 +10,7 @@ import net.minecraft.nbt.Tag;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.Container;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.level.saveddata.SavedData;
+import com.jgeted.sagadyssey.worldsim.NbtSavedData;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -20,7 +22,7 @@ import java.util.Set;
 import java.util.UUID;
 
 /** Private, travel-borne market knowledge. It never reads a remote market at decision time. */
-public final class MerchantMarketKnowledgeData extends SavedData {
+public final class MerchantMarketKnowledgeData extends NbtSavedData {
     private static final String DATA_NAME = "sagadyssey_merchant_market_knowledge";
     private static final int MAX_MEMORIES_PER_MERCHANT = 128;
     private static final Factory<MerchantMarketKnowledgeData> FACTORY =
@@ -28,7 +30,7 @@ public final class MerchantMarketKnowledgeData extends SavedData {
     private final Map<UUID, List<MerchantPriceMemory>> memories = new HashMap<>();
 
     public static MerchantMarketKnowledgeData get(MinecraftServer server) {
-        return server.overworld().getDataStorage().computeIfAbsent(FACTORY, DATA_NAME);
+        return server.overworld().getDataStorage().computeIfAbsent(FACTORY.type(DATA_NAME));
     }
 
     public int observe(UUID merchantId, UUID settlementId, Container inventory,
@@ -90,9 +92,9 @@ public final class MerchantMarketKnowledgeData extends SavedData {
 
     static MerchantMarketKnowledgeData load(CompoundTag tag, HolderLookup.Provider registries) {
         MerchantMarketKnowledgeData data = new MerchantMarketKnowledgeData();
-        ListTag list = tag.getList("Memories", Tag.TAG_COMPOUND);
+        ListTag list = MinecraftApi.listOfType(tag, "Memories", Tag.TAG_COMPOUND);
         for (int index = 0; index < list.size(); index++) {
-            try { data.remember(MerchantPriceMemory.load(list.getCompound(index))); }
+            try { data.remember(MerchantPriceMemory.load(list.getCompoundOrEmpty(index))); }
             catch (RuntimeException ignored) { }
         }
         return data;

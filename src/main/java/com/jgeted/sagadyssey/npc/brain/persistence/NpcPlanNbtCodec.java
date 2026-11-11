@@ -1,5 +1,8 @@
 package com.jgeted.sagadyssey.npc.brain.persistence;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+import net.minecraft.core.UUIDUtil;
+
 import com.jgeted.sagadyssey.npc.brain.plan.NpcPlan;
 import com.jgeted.sagadyssey.npc.brain.plan.NpcPlanBlocker;
 import com.jgeted.sagadyssey.npc.brain.plan.NpcPlanKind;
@@ -11,7 +14,7 @@ import com.jgeted.sagadyssey.npc.brain.plan.NpcPlanStepStatus;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 
 import javax.annotation.Nullable;
 import java.util.ArrayList;
@@ -41,8 +44,8 @@ public final class NpcPlanNbtCodec {
         requireStepCount(plan.steps().size());
 
         CompoundTag tag = new CompoundTag();
-        tag.putUUID("Id", plan.id());
-        tag.putUUID("NpcId", plan.npcId());
+        tag.store("Id", UUIDUtil.CODEC, plan.id());
+        tag.store("NpcId", UUIDUtil.CODEC, plan.npcId());
         tag.putString("CandidateKey", requireIdentity(
                 plan.candidateKey(), MAX_CANDIDATE_KEY_LENGTH, "candidateKey"));
         tag.putString("ProviderId", saveResourceLocation(plan.providerId(), "providerId"));
@@ -75,7 +78,7 @@ public final class NpcPlanNbtCodec {
         UUID npcId = requireUuid(tag, "NpcId");
         String candidateKey = requireIdentity(
                 requireString(tag, "CandidateKey"), MAX_CANDIDATE_KEY_LENGTH, "candidateKey");
-        ResourceLocation providerId = parseResourceLocation(
+        Identifier providerId = parseResourceLocation(
                 requireString(tag, "ProviderId"), "providerId");
         NpcPlanKind kind = parseEnum(NpcPlanKind.class, requireString(tag, "Kind"), "kind");
         NpcPlanPriority priority = parseEnum(
@@ -87,15 +90,15 @@ public final class NpcPlanNbtCodec {
         requireStepCount(stepTags.size());
         List<NpcPlanStep> steps = new ArrayList<>(stepTags.size());
         for (int index = 0; index < stepTags.size(); index++) {
-            steps.add(loadStep(stepTags.getCompound(index)));
+            steps.add(loadStep(stepTags.getCompoundOrEmpty(index)));
         }
 
         NpcPlanBlocker blocker = null;
         if (tag.contains("Blocker")) {
-            if (!tag.contains("Blocker", Tag.TAG_COMPOUND)) {
+            if (!MinecraftApi.containsTag(tag, "Blocker", Tag.TAG_COMPOUND)) {
                 throw new IllegalArgumentException("blocker must be a compound tag");
             }
-            blocker = loadBlocker(tag.getCompound("Blocker"));
+            blocker = loadBlocker(tag.getCompoundOrEmpty("Blocker"));
         }
 
         return new NpcPlan(id, npcId, candidateKey, providerId, kind, priority, status,
@@ -136,7 +139,7 @@ public final class NpcPlanNbtCodec {
         int index = requireInt(tag, "Index");
         NpcPlanPhase phase = parseEnum(
                 NpcPlanPhase.class, requireString(tag, "Phase"), "step phase");
-        ResourceLocation executorId = parseResourceLocation(
+        Identifier executorId = parseResourceLocation(
                 requireString(tag, "ExecutorId"), "executorId");
         NpcPlanStepStatus status = parseEnum(
                 NpcPlanStepStatus.class, requireString(tag, "Status"), "step status");
@@ -145,7 +148,7 @@ public final class NpcPlanNbtCodec {
         requireParamCount(paramTags.size());
         Map<String, String> params = new LinkedHashMap<>();
         for (int paramIndex = 0; paramIndex < paramTags.size(); paramIndex++) {
-            CompoundTag paramTag = paramTags.getCompound(paramIndex);
+            CompoundTag paramTag = paramTags.getCompoundOrEmpty(paramIndex);
             String key = requireIdentity(requireString(paramTag, "Key"),
                     MAX_PARAM_KEY_LENGTH, "parameter key");
             String value = requireIdentity(requireString(paramTag, "Value"),
@@ -186,18 +189,18 @@ public final class NpcPlanNbtCodec {
                 requireLong(tag, "RetryAt"), dependencyKey);
     }
 
-    private static String saveResourceLocation(ResourceLocation id, String field) {
+    private static String saveResourceLocation(Identifier id, String field) {
         if (id == null) throw new IllegalArgumentException(field + " is required");
         String value = requireIdentity(id.toString(), MAX_RESOURCE_LOCATION_LENGTH, field);
-        if (ResourceLocation.tryParse(value) == null) {
+        if (Identifier.tryParse(value) == null) {
             throw new IllegalArgumentException("invalid " + field + ": " + value);
         }
         return value;
     }
 
-    private static ResourceLocation parseResourceLocation(String value, String field) {
+    private static Identifier parseResourceLocation(String value, String field) {
         String checked = requireIdentity(value, MAX_RESOURCE_LOCATION_LENGTH, field);
-        ResourceLocation parsed = ResourceLocation.tryParse(checked);
+        Identifier parsed = Identifier.tryParse(checked);
         if (parsed == null) throw new IllegalArgumentException("invalid " + field + ": " + value);
         return parsed;
     }
@@ -211,33 +214,33 @@ public final class NpcPlanNbtCodec {
     }
 
     private static UUID requireUuid(CompoundTag tag, String key) {
-        if (!tag.hasUUID(key)) throw new IllegalArgumentException("missing or invalid UUID: " + key);
+        if (!tag.read(key, UUIDUtil.CODEC).isPresent()) throw new IllegalArgumentException("missing or invalid UUID: " + key);
         try {
-            return tag.getUUID(key);
+            return tag.read(key, UUIDUtil.CODEC).orElseThrow();
         } catch (RuntimeException exception) {
             throw new IllegalArgumentException("invalid UUID: " + key, exception);
         }
     }
 
     private static String requireString(CompoundTag tag, String key) {
-        if (!tag.contains(key, Tag.TAG_STRING)) {
+        if (!MinecraftApi.containsTag(tag, key, Tag.TAG_STRING)) {
             throw new IllegalArgumentException("missing or invalid string: " + key);
         }
-        return tag.getString(key);
+        return tag.getStringOr(key, "");
     }
 
     private static int requireInt(CompoundTag tag, String key) {
-        if (!tag.contains(key, Tag.TAG_INT)) {
+        if (!MinecraftApi.containsTag(tag, key, Tag.TAG_INT)) {
             throw new IllegalArgumentException("missing or invalid int: " + key);
         }
-        return tag.getInt(key);
+        return tag.getIntOr(key, 0);
     }
 
     private static long requireLong(CompoundTag tag, String key) {
-        if (!tag.contains(key, Tag.TAG_LONG)) {
+        if (!MinecraftApi.containsTag(tag, key, Tag.TAG_LONG)) {
             throw new IllegalArgumentException("missing or invalid long: " + key);
         }
-        return tag.getLong(key);
+        return tag.getLongOr(key, 0L);
     }
 
     private static ListTag requireList(CompoundTag tag, String key, int elementType) {
@@ -245,7 +248,7 @@ public final class NpcPlanNbtCodec {
         if (!(raw instanceof ListTag list)) {
             throw new IllegalArgumentException("missing or invalid list: " + key);
         }
-        if (list.getElementType() != Tag.TAG_END && list.getElementType() != elementType) {
+        if (MinecraftApi.elementType(list) != Tag.TAG_END && MinecraftApi.elementType(list) != elementType) {
             throw new IllegalArgumentException("invalid list element type: " + key);
         }
         return list;

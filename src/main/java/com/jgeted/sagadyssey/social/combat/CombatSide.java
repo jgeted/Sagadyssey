@@ -1,5 +1,8 @@
 package com.jgeted.sagadyssey.social.combat;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+import net.minecraft.core.UUIDUtil;
+
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
@@ -23,13 +26,13 @@ public record CombatSide(UUID id, String name, @Nullable UUID institutionId,
 
     CompoundTag save() {
         CompoundTag tag = new CompoundTag();
-        tag.putUUID("Id", id);
+        tag.store("Id", UUIDUtil.CODEC, id);
         tag.putString("Name", name);
-        if (institutionId != null) tag.putUUID("Institution", institutionId);
+        if (institutionId != null) tag.store("Institution", UUIDUtil.CODEC, institutionId);
         ListTag memberTags = new ListTag();
         members.forEach(member -> {
             CompoundTag value = new CompoundTag();
-            value.putUUID("Character", member);
+            value.store("Character", UUIDUtil.CODEC, member);
             memberTags.add(value);
         });
         tag.put("Members", memberTags);
@@ -39,12 +42,12 @@ public record CombatSide(UUID id, String name, @Nullable UUID institutionId,
 
     static CombatSide load(CompoundTag tag) {
         Set<UUID> members = new HashSet<>();
-        ListTag memberTags = tag.getList("Members", Tag.TAG_COMPOUND);
+        ListTag memberTags = MinecraftApi.listOfType(tag, "Members", Tag.TAG_COMPOUND);
         for (int index = 0; index < memberTags.size(); index++) {
-            members.add(memberTags.getCompound(index).getUUID("Character"));
+            members.add(memberTags.getCompoundOrEmpty(index).read("Character", UUIDUtil.CODEC).orElseThrow());
         }
-        return new CombatSide(tag.getUUID("Id"), tag.getString("Name"),
-                tag.hasUUID("Institution") ? tag.getUUID("Institution") : null,
-                members, EngagementRule.valueOf(tag.getString("Rule")));
+        return new CombatSide(tag.read("Id", UUIDUtil.CODEC).orElseThrow(), tag.getStringOr("Name", ""),
+                tag.read("Institution", UUIDUtil.CODEC).isPresent() ? tag.read("Institution", UUIDUtil.CODEC).orElseThrow() : null,
+                members, EngagementRule.valueOf(tag.getStringOr("Rule", "")));
     }
 }

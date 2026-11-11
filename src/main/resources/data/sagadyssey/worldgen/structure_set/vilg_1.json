@@ -9,6 +9,10 @@
         "type": "minecraft:random_spread",
         "salt": 3004,
         "spacing": 24,
-        "separation": 12
+        "separation": 12,
+        "exclusion_zone": {
+            "other_set": "sagadyssey:vilg_2",
+            "chunk_count": 4
+        }
     }
 }

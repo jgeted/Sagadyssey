@@ -1,12 +1,14 @@
 package com.jgeted.sagadyssey.social.governance;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+
 import com.jgeted.sagadyssey.worldsim.rights.SubjectRef;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.world.level.saveddata.SavedData;
+import com.jgeted.sagadyssey.worldsim.NbtSavedData;
 
 import javax.annotation.Nullable;
 import java.util.HashMap;
@@ -15,7 +17,7 @@ import java.util.Map;
 import java.util.UUID;
 
 /** Auditable assessments and physical payment evidence for taxes, rent, dues, tithes, and fines. */
-public final class GovernanceLedgerData extends SavedData {
+public final class GovernanceLedgerData extends NbtSavedData {
     private static final String DATA_NAME = "sagadyssey_governance_ledger";
     private static final Factory<GovernanceLedgerData> FACTORY =
             new Factory<>(GovernanceLedgerData::new, GovernanceLedgerData::load);
@@ -23,7 +25,7 @@ public final class GovernanceLedgerData extends SavedData {
     private final Map<UUID, LevyPaymentRecord> payments = new HashMap<>();
 
     public static GovernanceLedgerData get(MinecraftServer server) {
-        return server.overworld().getDataStorage().computeIfAbsent(FACTORY, DATA_NAME);
+        return server.overworld().getDataStorage().computeIfAbsent(FACTORY.type(DATA_NAME));
     }
 
     boolean add(LevyAssessment assessment) {
@@ -76,14 +78,14 @@ public final class GovernanceLedgerData extends SavedData {
 
     private static GovernanceLedgerData load(CompoundTag tag, HolderLookup.Provider registries) {
         GovernanceLedgerData data = new GovernanceLedgerData();
-        ListTag assessments = tag.getList("Assessments", Tag.TAG_COMPOUND);
+        ListTag assessments = MinecraftApi.listOfType(tag, "Assessments", Tag.TAG_COMPOUND);
         for (int index = 0; index < assessments.size(); index++) {
-            LevyAssessment value = LevyAssessment.load(assessments.getCompound(index));
+            LevyAssessment value = LevyAssessment.load(assessments.getCompoundOrEmpty(index));
             data.assessments.put(value.id(), value);
         }
-        ListTag payments = tag.getList("Payments", Tag.TAG_COMPOUND);
+        ListTag payments = MinecraftApi.listOfType(tag, "Payments", Tag.TAG_COMPOUND);
         for (int index = 0; index < payments.size(); index++) {
-            LevyPaymentRecord value = LevyPaymentRecord.load(payments.getCompound(index));
+            LevyPaymentRecord value = LevyPaymentRecord.load(payments.getCompoundOrEmpty(index));
             data.payments.put(value.paymentId(), value);
         }
         return data;

@@ -62,7 +62,7 @@ public final class CommandWandScreen extends Screen {
 
     private Button addButton(String label, int x, int y, int width, String action) {
         Button button = Button.builder(Component.literal(label), ignored ->
-                        PacketDistributor.sendToServer(new CommandGroupActionPacket(action)))
+                        net.neoforged.neoforge.client.network.ClientPacketDistributor.sendToServer(new CommandGroupActionPacket(action)))
                 .bounds(x, y, width, 20).build();
         addRenderableWidget(button);
         return button;

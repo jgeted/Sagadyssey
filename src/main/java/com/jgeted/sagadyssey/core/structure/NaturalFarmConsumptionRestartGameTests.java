@@ -1,5 +1,10 @@
 package com.jgeted.sagadyssey.core.structure;
 
+import com.jgeted.sagadyssey.gametest.PortedGameTests.*;
+
+import com.jgeted.sagadyssey.core.MinecraftApi;
+import net.minecraft.core.UUIDUtil;
+
 import com.google.gson.Gson;
 import com.jgeted.sagadyssey.Sagadyssey;
 import com.jgeted.sagadyssey.npc.brain.execution.NpcBrainRuntime;
@@ -29,7 +34,7 @@ import net.minecraft.world.Container;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.Items;
-import net.minecraft.world.level.GameRules;
+import net.minecraft.world.level.gamerules.GameRules;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.CropBlock;
 import net.minecraft.world.level.block.state.BlockState;
@@ -37,8 +42,6 @@ import net.minecraft.world.level.storage.LevelResource;
 import net.minecraft.world.phys.AABB;
 import net.neoforged.bus.api.EventPriority;
 import net.neoforged.bus.api.SubscribeEvent;
-import net.neoforged.neoforge.gametest.GameTestHolder;
-import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
 import java.nio.file.*;
 import java.security.MessageDigest;
@@ -92,12 +95,12 @@ public final class NaturalFarmConsumptionRestartGameTests {
                 require(Files.notExists(world.resolve(MARKER)), "fresh isolated save-stage world; do not reuse an old attempt"); return;
             }
             restored = read(world.resolve(MARKER));
-            require(restored.getBoolean("StoppedVerified"), "prior normal stop and final disk verification required");
-            require(restored.getString("Phase").equals(phase().equals(RESUME) ? SAVE : RESUME), "explicit consecutive checkpoint phase");
-            require(restored.getLong("SavedProcess") != ProcessHandle.current().pid(), "independent JVM required");
-            for (long prior : restored.getLongArray("Processes")) require(prior != ProcessHandle.current().pid(), "third phase must also use a new JVM");
-            require(stateFiles(world).equals(restored.getList("StateFiles", Tag.TAG_COMPOUND)), "entire associated world state copied, not selected ledgers");
-            event(e.getServer(), "PRE_LOAD_COMPLETE_WORLD_VERIFIED", Map.of("priorProcess", restored.getLong("SavedProcess"), "files", restored.getList("StateFiles", Tag.TAG_COMPOUND).size()));
+            require(restored.getBooleanOr("StoppedVerified", false), "prior normal stop and final disk verification required");
+            require(restored.getStringOr("Phase", "").equals(phase().equals(RESUME) ? SAVE : RESUME), "explicit consecutive checkpoint phase");
+            require(restored.getLongOr("SavedProcess", 0L) != ProcessHandle.current().pid(), "independent JVM required");
+            for (long prior : restored.getLongArray("Processes").orElseGet(() -> new long[0])) require(prior != ProcessHandle.current().pid(), "third phase must also use a new JVM");
+            require(stateFiles(world).equals(MinecraftApi.listOfType(restored, "StateFiles", Tag.TAG_COMPOUND)), "entire associated world state copied, not selected ledgers");
+            event(e.getServer(), "PRE_LOAD_COMPLETE_WORLD_VERIFIED", Map.of("priorProcess", restored.getLongOr("SavedProcess", 0L), "files", MinecraftApi.listOfType(restored, "StateFiles", Tag.TAG_COMPOUND).size()));
         } catch (Exception error) { failed = true; failure(e.getServer(), error); throw new IllegalStateException("complete stopped consumption world required", error); }
     }
 
@@ -105,12 +108,12 @@ public final class NaturalFarmConsumptionRestartGameTests {
     public static void admit(net.neoforged.neoforge.event.entity.EntityJoinLevelEvent e) {
         if (!enabled() || restored == null || !(e.getLevel() instanceof ServerLevel l)
                 || !(l.getServer() instanceof GameTestServer) || !(e.getEntity() instanceof NpcBase n)) return;
-        var body = restored.getList("Bodies", Tag.TAG_COMPOUND).stream().map(t -> (CompoundTag) t)
-                .filter(t -> t.getUUID("UUID").equals(n.getUUID())).findFirst().orElse(null);
+        var body = MinecraftApi.listOfType(restored, "Bodies", Tag.TAG_COMPOUND).stream().map(t -> (CompoundTag) t)
+                .filter(t -> t.read("UUID", UUIDUtil.CODEC).orElseThrow().equals(n.getUUID())).findFirst().orElse(null);
         if (body == null) return;
         try {
             require(startupVerified, "original body must not load before first-tick associated-state verification");
-            require(n.getCharacterId().equals(body.getUUID("PersonProof")) && n.isNoAi() == body.getBoolean("AIProof"), "same original body/person and saved AI hold");
+            require(n.getCharacterId().equals(body.read("PersonProof", UUIDUtil.CODEC).orElseThrow()) && n.isNoAi() == body.getBooleanOr("AIProof", false), "same original body/person and saved AI hold");
             require(LodFingerprints.inventoryTag(n).equals(body.get("AllItemsProof")), "all original personal/cargo/equipment/overflow before resumed work");
             require(admitted.add(n.getUUID()), "one deserialized admission per original body");
             event(l.getServer(), "ORIGINAL_ADMISSION", Map.of("body", n.getUUID(), "person", n.getCharacterId(), "beforeWork", true));
@@ -122,21 +125,21 @@ public final class NaturalFarmConsumptionRestartGameTests {
         if (!enabled() || restored == null || !(e.getServer() instanceof GameTestServer)) return;
         var s = e.getServer(); var l = s.overworld();
         try {
-            var expected = restored.getCompound("FinalLinks").copy();
-            for (var raw : expected.getCompound("Economy").getList("Regions", Tag.TAG_COMPOUND)) {
+            var expected = restored.getCompoundOrEmpty("FinalLinks").copy();
+            for (var raw : MinecraftApi.listOfType(expected.getCompoundOrEmpty("Economy"), "Regions", Tag.TAG_COMPOUND)) {
                 var row = (CompoundTag) raw; row.putBoolean("ObservedAway", true); row.putBoolean("ReturnRequested", false);
             }
             var actual = links(l); write(s, "consumption-before-first-tick-" + phase() + ".nbt", actual);
             require(comparable(actual).equals(comparable(expected)), "all21 associated state families survive before first resumed tick");
-            var disk = read(s.getWorldPath(LevelResource.ROOT).resolve("level.dat")).getCompound("Data");
-            require(disk.getLong("Time") == restored.getLong("SavedTime") && disk.getCompound("GameRules").equals(restored.getCompound("SavedRules")), "actual associated disk time/rules");
+            var disk = read(s.getWorldPath(LevelResource.ROOT).resolve("level.dat")).getCompoundOrEmpty("Data");
+            require(disk.getLongOr("Time", 0L) == restored.getLongOr("SavedTime", 0L) && disk.getCompoundOrEmpty("game_rules").equals(restored.getCompoundOrEmpty("SavedRules")), "actual associated disk time/rules");
             // GameTestServer creates fresh in-memory level metadata. Restore only this verified disk metadata.
-            l.getGameRules().assignFrom(new GameRules(new com.mojang.serialization.Dynamic<>(NbtOps.INSTANCE, disk.getCompound("GameRules"))), s);
-            s.getWorldData().overworldData().setGameTime(disk.getLong("Time"));
-            s.getWorldData().overworldData().setDayTime(disk.getLong("DayTime"));
+            MinecraftApi.loadRules(l, disk.getCompoundOrEmpty("game_rules"));
+            s.getWorldData().overworldData().setGameTime(disk.getLongOr("Time", 0L));
+            s.getWorldData().overworldData().setDayTime(disk.getLongOr("DayTime", 0L));
             require(admitted.isEmpty(), "released village tickets keep originals out of startup/spawn loading");
             startupVerified = true;
-            event(s, "FIRST_TICK_LINKS_VERIFIED", Map.of("categories", actual.getAllKeys().size(), "gameTime", l.getGameTime(), "offlineCatchup", false));
+            event(s, "FIRST_TICK_LINKS_VERIFIED", Map.of("categories", actual.keySet().size(), "gameTime", l.getGameTime(), "offlineCatchup", false));
         } catch (RuntimeException error) { failed = true; failure(s, error); throw error; }
     }
 
@@ -146,7 +149,7 @@ public final class NaturalFarmConsumptionRestartGameTests {
         try { active.tick(); }
         catch (RuntimeException error) {
             failed = true; failure(e.getServer(), error); active = null;
-            running.runAtTickTime(running.getTick() + 1, () -> { throw new GameTestAssertException(error.getMessage()); });
+            running.runAtTickTime(running.getTick() + 1, () -> { running.fail(error.getMessage()); });
         }
     }
 
@@ -164,24 +167,24 @@ public final class NaturalFarmConsumptionRestartGameTests {
         if (!enabled() || terminal == null || failed) return;
         var s = e.getServer(); var world = s.getWorldPath(LevelResource.ROOT).toAbsolutePath().normalize();
         try {
-            require(terminal.getBoolean("ServerStoppingObserved"), "normal stop event occurred");
+            require(terminal.getBooleanOr("ServerStoppingObserved", false), "normal stop event occurred");
             var finalLinks = links(s.overworld());
-            require(finalLinks.getAllKeys().size() == 21, "all21 linked families captured after normal closing");
+            require(finalLinks.keySet().size() == 21, "all21 linked families captured after normal closing");
             // Compare persisted families with final memory, including normal closing changes.
             // Empty, never-dirtied families may have no file; the next JVM must recreate an identical empty value.
             var absent = new ListTag();
             for (var entry : dataNames().entrySet()) {
                 var file = world.resolve("data").resolve(entry.getValue() + ".dat");
                 if (Files.isRegularFile(file)) {
-                    var diskOne = new CompoundTag(); diskOne.put(entry.getKey(), read(file).getCompound("data"));
-                    var liveOne = new CompoundTag(); liveOne.put(entry.getKey(), finalLinks.getCompound(entry.getKey()));
+                    var diskOne = new CompoundTag(); diskOne.put(entry.getKey(), read(file).getCompoundOrEmpty("data"));
+                    var liveOne = new CompoundTag(); liveOne.put(entry.getKey(), finalLinks.getCompoundOrEmpty(entry.getKey()));
                     require(comparable(diskOne).equals(comparable(liveOne)), "final disk family differs from saved live state: " + entry.getKey());
                 } else absent.add(StringTag.valueOf(entry.getKey()));
             }
-            var data = read(world.resolve("level.dat")).getCompound("Data");
+            var data = read(world.resolve("level.dat")).getCompoundOrEmpty("Data");
             terminal.put("FinalLinks", finalLinks); terminal.put("AbsentUnwrittenFamilies", absent);
-            terminal.putLong("SavedTime", data.getLong("Time")); terminal.putLong("SavedDayTime", data.getLong("DayTime"));
-            terminal.put("SavedRules", data.getCompound("GameRules").copy()); terminal.putLong("SavedProcess", ProcessHandle.current().pid());
+            terminal.putLong("SavedTime", data.getLongOr("Time", 0L)); terminal.putLong("SavedDayTime", data.getLongOr("DayTime", 0L));
+            terminal.put("SavedRules", data.getCompoundOrEmpty("game_rules").copy()); terminal.putLong("SavedProcess", ProcessHandle.current().pid());
             terminal.putBoolean("StoppedVerified", true); terminal.put("StateFiles", stateFiles(world));
             write(s, MARKER, terminal);
             var snapshot = world.resolveSibling("world-natural-consumption-" + (phase().equals(SAVE) ? "after-bag" : phase().equals(RESUME) ? "after-deposit" : "verified-final"));
@@ -195,13 +198,13 @@ public final class NaturalFarmConsumptionRestartGameTests {
                     var to = snapshot.resolve(world.relativize(file)); Files.createDirectories(to.getParent()); Files.copy(file, to);
                 }
             }
-            require(stateFiles(snapshot).equals(terminal.getList("StateFiles", Tag.TAG_COMPOUND)), "whole copied world matches final stopped disk");
+            require(stateFiles(snapshot).equals(MinecraftApi.listOfType(terminal, "StateFiles", Tag.TAG_COMPOUND)), "whole copied world matches final stopped disk");
             var complete = completeFiles(world);
             require(complete.equals(completeFiles(snapshot)), "every copied file including non-ledger metadata and evidence matches source");
             var index = new CompoundTag(); index.putString("Phase", phase()); index.putString("World", snapshot.toString());
             index.put("AllCopiedFiles", complete); index.putBoolean("StoppedVerified", true);
             NbtIo.writeCompressed(index, indexPath);
-            event(s, "STOPPED_COMPLETE_WORLD_READY", Map.of("phase", phase(), "snapshot", snapshot.toString(), "savedTime", data.getLong("Time"), "sameLinkedWorld", true));
+            event(s, "STOPPED_COMPLETE_WORLD_READY", Map.of("phase", phase(), "snapshot", snapshot.toString(), "savedTime", data.getLongOr("Time", 0L), "sameLinkedWorld", true));
             Sagadyssey.LOGGER.info("NATURAL_CONSUMPTION_RESTART_READY phase={} completeWorld={} stoppedVerified=true", phase(), snapshot);
         } catch (Exception error) {
             failed = true; terminal.putBoolean("StoppedVerified", false); terminal.putString("Failure", error.toString()); write(s, MARKER, terminal);
@@ -222,14 +225,14 @@ public final class NaturalFarmConsumptionRestartGameTests {
             if (phase().equals(SAVE)) b = NaturalVillageR1GameTests.fixture(h, 256, NaturalVillageLayout.FARM_V3);
             else {
                 require(restored != null && startupVerified, "complete original world was checked before case");
-                b = NaturalVillageLifeData.decode(restored.getCompound("Village"));
-                originalRaw = NbtUtils.readBlockState(l.holderLookup(Registries.BLOCK), restored.getCompound("OriginalRaw"));
-                start = restored.getLong("OriginalStart"); consumptionKey = restored.getString("ConsumptionKey");
-                consumptionProof = restored.getCompound("ConsumptionProof").copy();
-                meals = restored.getInt("ActualMeals"); bagMeals = restored.getInt("ActualBagMeals");
-                for (int i = 0; i < 3; i++) { ateAt[i] = restored.getLongArray("LastAteAt")[i]; resumeNoAi[i] = restored.getIntArray("ResumeNoAi")[i] != 0; }
+                b = NaturalVillageLifeData.decode(restored.getCompoundOrEmpty("Village"));
+                originalRaw = NbtUtils.readBlockState(l.holderLookup(Registries.BLOCK), restored.getCompoundOrEmpty("OriginalRaw"));
+                start = restored.getLongOr("OriginalStart", 0L); consumptionKey = restored.getStringOr("ConsumptionKey", "");
+                consumptionProof = restored.getCompoundOrEmpty("ConsumptionProof").copy();
+                meals = restored.getIntOr("ActualMeals", 0); bagMeals = restored.getIntOr("ActualBagMeals", 0);
+                for (int i = 0; i < 3; i++) { ateAt[i] = restored.getLongArray("LastAteAt").orElseGet(() -> new long[0])[i]; resumeNoAi[i] = restored.getIntArray("ResumeNoAi").orElseGet(() -> new int[0])[i] != 0; }
                 for (var cell : NaturalVillageLayout.crops().subList(0, 3)) mature.add(NaturalVillageLayout.at(b, cell));
-                settledProof = restored.getCompound("BusinessPoint").copy(); stage = 2;
+                settledProof = restored.getCompoundOrEmpty("BusinessPoint").copy(); stage = 2;
                 NaturalVillageR1GameTests.visiting(l, b, true);
             }
         }
@@ -242,9 +245,9 @@ public final class NaturalFarmConsumptionRestartGameTests {
             if (stage == 0) {
                 require(h.getTick() < 1200, "formal original initialization before1200");
                 var life = NaturalVillageLifeData.get(l.getServer()).village(b.buildingKey());
-                if (life == null || !life.getBoolean("Ready")) return;
+                if (life == null || !life.getBooleanOr("Ready", false)) return;
                 if (readyAt < 0) {
-                    l.setDayTime(1000); l.getGameRules().getRule(GameRules.RULE_RANDOMTICKING).set(0, l.getServer()); readyAt = now;
+                    l.setDayTime(1000); l.getGameRules().set(GameRules.RANDOM_TICK_SPEED, 0, l.getServer()); readyAt = now;
                 }
                 if (now - readyAt < 20) return;
                 prepare(); return;
@@ -369,11 +372,11 @@ public final class NaturalFarmConsumptionRestartGameTests {
         }
         int recordedDeposits() {
             int quantity = 0;
-            for (var raw : fieldwork().save(new CompoundTag(), l.registryAccess()).getList("Deliveries", Tag.TAG_COMPOUND)) {
+            for (var raw : MinecraftApi.listOfType(fieldwork().save(new CompoundTag(), l.registryAccess()), "Deliveries", Tag.TAG_COMPOUND)) {
                 var row = (CompoundTag) raw;
-                if (!row.getUUID("NpcId").equals(NaturalVillageLifeData.body(b, 0)) || !row.getString("Fingerprint").equals(ITEM)) continue;
-                var transfer = TransferLedgerData.get(l.getServer()).receipt(row.getUUID("TransferId"));
-                require(transfer != null && transfer.successful() && transfer.lawful(), "each output delivery is an actual lawful transfer"); quantity += row.getInt("Quantity");
+                if (!row.read("NpcId", UUIDUtil.CODEC).orElseThrow().equals(NaturalVillageLifeData.body(b, 0)) || !row.getStringOr("Fingerprint", "").equals(ITEM)) continue;
+                var transfer = TransferLedgerData.get(l.getServer()).receipt(row.read("TransferId", UUIDUtil.CODEC).orElseThrow());
+                require(transfer != null && transfer.successful() && transfer.lawful(), "each output delivery is an actual lawful transfer"); quantity += row.getIntOr("Quantity", 0);
             }
             return quantity;
         }
@@ -382,8 +385,8 @@ public final class NaturalFarmConsumptionRestartGameTests {
             out.putInt("Deposited", recordedDeposits()); out.putInt("Pending", pending()); out.putBoolean("PendingDelivery", fieldwork().pendingDelivery(NaturalVillageLifeData.body(b, 0)).isPresent());
             if (consumptionKey != null) out.put("Consumption", encode(fieldwork().outputConsumption(consumptionKey).orElseThrow()));
             var deliveries = new ListTag();
-            for (var raw : fieldwork().save(new CompoundTag(), l.registryAccess()).getList("Deliveries", Tag.TAG_COMPOUND)) {
-                var row = (CompoundTag) raw; if (row.getUUID("NpcId").equals(NaturalVillageLifeData.body(b, 0))) deliveries.add(row.copy());
+            for (var raw : MinecraftApi.listOfType(fieldwork().save(new CompoundTag(), l.registryAccess()), "Deliveries", Tag.TAG_COMPOUND)) {
+                var row = (CompoundTag) raw; if (row.read("NpcId", UUIDUtil.CODEC).orElseThrow().equals(NaturalVillageLifeData.body(b, 0))) deliveries.add(row.copy());
             }
             out.put("AllOriginalFarmerDeliveries", deliveries); return out;
         }
@@ -415,12 +418,12 @@ public final class NaturalFarmConsumptionRestartGameTests {
             marker.putLong("OriginalStart", start); marker.putString("ConsumptionKey", consumptionKey); marker.put("ConsumptionProof", consumptionProof.copy());
             marker.put("BusinessPoint", businessPoint()); marker.putInt("ActualMeals", meals); marker.putInt("ActualBagMeals", bagMeals); marker.putLongArray("LastAteAt", ateAt);
             marker.putIntArray("ResumeNoAi", new int[]{resumeNoAi[0] ? 1 : 0, resumeNoAi[1] ? 1 : 0, resumeNoAi[2] ? 1 : 0});
-            var processes = new ArrayList<Long>(); if (restored != null) for (long prior : restored.getLongArray("Processes")) processes.add(prior); processes.add(ProcessHandle.current().pid());
+            var processes = new ArrayList<Long>(); if (restored != null) for (long prior : restored.getLongArray("Processes").orElseGet(() -> new long[0])) processes.add(prior); processes.add(ProcessHandle.current().pid());
             marker.putLongArray("Processes", processes.stream().mapToLong(Long::longValue).toArray());
             var bodies = new ListTag();
             for (int i = 0; i < 3; i++) {
-                var n = npc(i); n.setNoAi(true); var body = n.saveWithoutId(new CompoundTag());
-                body.putUUID("PersonProof", n.getCharacterId()); body.putBoolean("AIProof", n.isNoAi()); body.put("AllItemsProof", LodFingerprints.inventoryTag(n)); bodies.add(body);
+                var n = npc(i); n.setNoAi(true); var body = MinecraftApi.saveEntity(n);
+                body.store("PersonProof", UUIDUtil.CODEC, n.getCharacterId()); body.putBoolean("AIProof", n.isNoAi()); body.put("AllItemsProof", LodFingerprints.inventoryTag(n)); bodies.add(body);
             }
             marker.put("Bodies", bodies); marker.put("BoundaryLinks", links(l)); marker.putBoolean("StoppedVerified", false);
             marker.putString("EvidenceScope", "real production/consumption; normal complete process restart; no fabricated PENDING; not crash recovery or LOD acceptance");
@@ -432,8 +435,8 @@ public final class NaturalFarmConsumptionRestartGameTests {
     }
 
     private static CompoundTag encode(FieldworkCargo.OutputConsumption c) {
-        var t = new CompoundTag(); t.putString("Key", c.key()); t.putUUID("Body", c.npcId()); t.putUUID("Person", c.personId());
-        t.putUUID("Container", c.containerId()); t.put("Owner", c.owner().save()); t.putString("Fingerprint", c.fingerprint());
+        var t = new CompoundTag(); t.putString("Key", c.key()); t.store("Body", UUIDUtil.CODEC, c.npcId()); t.store("Person", UUIDUtil.CODEC, c.personId());
+        t.store("Container", UUIDUtil.CODEC, c.containerId()); t.put("Owner", c.owner().save()); t.putString("Fingerprint", c.fingerprint());
         t.putInt("Quantity", c.quantity()); t.putInt("OutputQuantity", c.outputQuantity()); t.putLong("StartedAt", c.startedAt());
         t.putLong("CommittedAt", c.committedAt()); t.putLong("BeforeRevision", c.beforeRevision()); t.putLong("FinalRevision", c.finalRevision()); t.putString("State", c.state().name()); return t;
     }
@@ -507,17 +510,17 @@ public final class NaturalFarmConsumptionRestartGameTests {
     }
     private static CompoundTag comparable(CompoundTag source) {
         var copy = source.copy();
-        for (var entry : copy.getCompound("Transfers").getList("Receipts", Tag.TAG_COMPOUND)) {
+        for (var entry : MinecraftApi.listOfType(copy.getCompoundOrEmpty("Transfers"), "Receipts", Tag.TAG_COMPOUND)) {
             var receipt = (CompoundTag) entry; var sorted = new TreeMap<UUID, CompoundTag>();
-            for (var item : receipt.getList("Revisions", Tag.TAG_COMPOUND)) { var r = (CompoundTag) item; require(sorted.putIfAbsent(r.getUUID("Container"), r) == null, "unique revision map entry"); }
+            for (var item : MinecraftApi.listOfType(receipt, "Revisions", Tag.TAG_COMPOUND)) { var r = (CompoundTag) item; require(sorted.putIfAbsent(r.read("Container", UUIDUtil.CODEC).orElseThrow(), r) == null, "unique revision map entry"); }
             var list = new ListTag(); sorted.values().forEach(list::add); receipt.put("Revisions", list);
         }
         var knowledge = new TreeMap<String, CompoundTag>();
-        for (var entry : copy.getCompound("Supply").getList("Known", Tag.TAG_COMPOUND)) {
-            var item = (CompoundTag) entry; var actor = SubjectRef.load(item.getCompound("Actor"));
-            require(knowledge.putIfAbsent(actor.type() + ":" + actor.id() + ":" + item.getUUID("Point"), item) == null, "unique source knowledge entry");
+        for (var entry : MinecraftApi.listOfType(copy.getCompoundOrEmpty("Supply"), "Known", Tag.TAG_COMPOUND)) {
+            var item = (CompoundTag) entry; var actor = SubjectRef.load(item.getCompoundOrEmpty("Actor"));
+            require(knowledge.putIfAbsent(actor.type() + ":" + actor.id() + ":" + item.read("Point", UUIDUtil.CODEC).orElseThrow(), item) == null, "unique source knowledge entry");
         }
-        var known = new ListTag(); knowledge.values().forEach(known::add); copy.getCompound("Supply").put("Known", known); return copy;
+        var known = new ListTag(); knowledge.values().forEach(known::add); copy.getCompoundOrEmpty("Supply").put("Known", known); return copy;
     }
 
 }

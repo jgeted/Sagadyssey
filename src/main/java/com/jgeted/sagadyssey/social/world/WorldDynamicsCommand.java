@@ -1,5 +1,7 @@
 package com.jgeted.sagadyssey.social.world;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+
 import com.jgeted.sagadyssey.social.settlement.SettlementRecord;
 import com.jgeted.sagadyssey.social.settlement.SettlementRegistryData;
 import com.mojang.brigadier.CommandDispatcher;
@@ -17,7 +19,7 @@ public final class WorldDynamicsCommand {
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
         dispatcher.register(Commands.literal("saga").then(Commands.literal("world")
                 .then(Commands.literal("events").executes(ctx -> list(ctx.getSource())))
-                .then(Commands.literal("force_event").requires(source -> source.hasPermission(2))
+                .then(Commands.literal("force_event").requires(source -> MinecraftApi.hasPermission(source, 2))
                         .then(Commands.argument("type", StringArgumentType.word())
                                 .suggests((ctx, builder) -> {
                                     for (DynamicWorldEventType type : DynamicWorldEventType.values())

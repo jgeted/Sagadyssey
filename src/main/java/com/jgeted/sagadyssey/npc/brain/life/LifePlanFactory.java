@@ -2,13 +2,13 @@ package com.jgeted.sagadyssey.npc.brain.life;
 
 import com.jgeted.sagadyssey.npc.brain.plan.*;
 import net.minecraft.core.BlockPos;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import java.util.*;
 
 public final class LifePlanFactory {
-    public static final ResourceLocation PROVIDER = ResourceLocation.parse("sagadyssey:life");
-    public static final ResourceLocation RESERVE = ResourceLocation.parse("sagadyssey:life_reserve"),
-            MOVE = ResourceLocation.parse("sagadyssey:life_move"), ACT = ResourceLocation.parse("sagadyssey:life_act");
+    public static final Identifier PROVIDER = Identifier.parse("sagadyssey:life");
+    public static final Identifier RESERVE = Identifier.parse("sagadyssey:life_reserve"),
+            MOVE = Identifier.parse("sagadyssey:life_move"), ACT = Identifier.parse("sagadyssey:life_act");
     private LifePlanFactory() { }
     public static NpcPlan create(UUID npc, String operation, String dimension, BlockPos target,
                                  int duration, long now, Map<String, String> extra) {

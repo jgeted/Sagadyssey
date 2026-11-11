@@ -1,4 +1,6 @@
 package com.jgeted.sagadyssey.social.combat;
+
+import com.jgeted.sagadyssey.core.MinecraftApi;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.*;
 import org.junit.jupiter.api.Test;
@@ -12,6 +14,6 @@ class CombatSettlementTest {
     @Test void frozenEncounterRejectsLateEvents(){var d=new CombatEncounterData();var who=UUID.randomUUID();var e=encounter(d,who);d.freeze(e.id(),()->List.of(new CombatImpact(e.id(),who,null,null,null,0,0,0,false,200)));
         assertThrows(IllegalStateException.class,()->CombatEncounterService.record(d,new CombatMoraleData(),e.id(),new EncounterEvent(UUID.randomUUID(),e.id(),EncounterEventType.SHOT,who,null,UUID.randomUUID(),201,"late")));}
     @Test void activeCharacterIndexSurvivesReloadAndReleasesEnded(){var d=new CombatEncounterData();var who=UUID.randomUUID();var e=encounter(d,who);assertEquals(e,CombatEncounterData.load(d.save(new CompoundTag(),null),null).activeFor(who,1));d.update(new CombatEncounter(e.id(),null,e.dimension(),e.center(),e.radius(),0,200,EncounterStatus.ENDED,e.sides(),e.events(),1));assertNull(d.activeFor(who,201));}
-    @Test void duplicateEncountersRejectedOnReload(){var d=new CombatEncounterData();encounter(d,UUID.randomUUID());var tag=d.save(new CompoundTag(),null);var l=tag.getList("Encounters",Tag.TAG_COMPOUND);l.add(l.getCompound(0).copy());assertThrows(IllegalArgumentException.class,()->CombatEncounterData.load(tag,null));}
+    @Test void duplicateEncountersRejectedOnReload(){var d=new CombatEncounterData();encounter(d,UUID.randomUUID());var tag=d.save(new CompoundTag(),null);var l=MinecraftApi.listOfType(tag, "Encounters",Tag.TAG_COMPOUND);l.add(l.getCompoundOrEmpty(0).copy());assertThrows(IllegalArgumentException.class,()->CombatEncounterData.load(tag,null));}
     @Test void orphanSettlementCannotInventEncounter(){var tag=new CompoundTag();tag.put("Encounters",new ListTag());var map=new HashMap<UUID,CombatImpact>();CombatImpact.put(map,new CombatImpact(UUID.randomUUID(),UUID.randomUUID(),null,null,null,1,0,0,false,5));tag.put("CombatImpacts",CombatImpact.save(map));assertThrows(IllegalArgumentException.class,()->CombatEncounterData.load(tag,null));}
 }

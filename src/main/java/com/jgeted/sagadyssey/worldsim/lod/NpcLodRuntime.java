@@ -1,5 +1,7 @@
 package com.jgeted.sagadyssey.worldsim.lod;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+
 import com.jgeted.sagadyssey.npc.brain.execution.NpcBrainRuntime;
 import com.jgeted.sagadyssey.npc.brain.persistence.NpcPlanNbtCodec;
 import com.jgeted.sagadyssey.npc.brain.plan.*;
@@ -20,7 +22,7 @@ public final class NpcLodRuntime {
         int index=-1;if(plan!=null)for(var step:plan.steps()){if(step.status()!=NpcPlanStepStatus.SUCCEEDED)break;index=step.index();}return index;
     }
     public static LodCheckpoint capture(NpcBase npc,boolean unloaded,String result) {
-        var server=npc.getServer();long now=server.overworld().getGameTime();var plan=NpcBrainRuntime.data(server).active(npc.getUUID()).orElse(null);
+        var server=MinecraftApi.server(npc);long now=server.overworld().getGameTime();var plan=NpcBrainRuntime.data(server).active(npc.getUUID()).orElse(null);
         var rights=RightsStateData.get(server);Map<UUID,Long> assets=new HashMap<>();Map<UUID,String> orders=new HashMap<>();Set<UUID> held=new HashSet<>();
         assets.put(ContainerIds.npcPersonal(npc.getCharacterId()),npc.getPersonalInventory().revision());
         addAsset(rights,assets,ContainerIds.npcCargo(npc.getCharacterId()));
@@ -31,13 +33,13 @@ public final class NpcLodRuntime {
         }
         for(var r:rights.reservations())if(r.reservedFor().equals(SubjectRef.character(npc.getCharacterId()))) {held.add(r.id());addAsset(rights,assets,r.containerId());}
         if(plan!=null)for(var r:NpcBrainRuntime.reservations(server).reservationsForPlan(plan.id()))held.add(ContainerIds.named("lod-control:"+r.key()));
-        return new LodCheckpoint(npc.getUUID(),npc.getCharacterId(),npc.level().dimension().location().toString(),npc.blockPosition().asLong(),
+        return new LodCheckpoint(npc.getUUID(),npc.getCharacterId(),npc.level().dimension().identifier().toString(),npc.blockPosition().asLong(),
                 plan==null?null:plan.id(),plan==null?"":LodFingerprints.of(NpcPlanNbtCodec.save(plan)),committed(plan),assets,orders,held,LodFingerprints.inventory(npc),now,now,unloaded,result);
     }
     private static void addAsset(RightsStateData rights,Map<UUID,Long> assets,UUID id) {var context=rights.context(id);if(context!=null)assets.put(id,context.revision());}
     public static boolean loaded(NpcBase npc) {
-        if(npc.isRemoved()||!npc.isAlive()||npc.getServer()==null)return false;
-        var server=npc.getServer();var live=actors(server);var reference=live.get(npc.getUUID());
+        if(npc.isRemoved()||!npc.isAlive()||MinecraftApi.server(npc)==null)return false;
+        var server=MinecraftApi.server(npc);var live=actors(server);var reference=live.get(npc.getUUID());
         if(reference!=null&&reference.get()==npc)return !review(NpcLodData.get(server).find(npc.getUUID()));
         var data=NpcLodData.get(server);var old=data.find(npc.getUUID());
         var originalBody=data.bodyForPerson(npc.getCharacterId());
@@ -68,9 +70,9 @@ public final class NpcLodRuntime {
         return true;
     }
     public static boolean review(LodCheckpoint row) {return row!=null&&row.reconciliation().startsWith("REVIEW:");}
-    public static void forgetLoaded(NpcBase npc){if(npc.getServer()!=null){actors(npc.getServer()).remove(npc.getUUID());NpcNavigationQueue.forget(npc.getServer(),npc.getUUID());NpcPerceptionQueue.forget(npc.getServer(),npc.getUUID());}}
+    public static void forgetLoaded(NpcBase npc){if(MinecraftApi.server(npc)!=null){actors(MinecraftApi.server(npc)).remove(npc.getUUID());NpcNavigationQueue.forget(MinecraftApi.server(npc),npc.getUUID());NpcPerceptionQueue.forget(MinecraftApi.server(npc),npc.getUUID());}}
     public static void unload(NpcBase npc,boolean destroyed) {
-        var server=npc.getServer();if(server==null)return;
+        var server=MinecraftApi.server(npc);if(server==null)return;
         // A delayed leave callback for an old object must not suspend its already-loaded original.
         var reference=actors(server).get(npc.getUUID());var current=reference==null?null:reference.get();
         if(current!=null&&current!=npc&&!current.isRemoved())return;

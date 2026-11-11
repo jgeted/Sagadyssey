@@ -244,7 +244,7 @@ public final class NpcContractEvents {
     @Nullable
     private static ServerLevel levelForLife(MinecraftServer server, NpcLifeRecord life) {
         for (ServerLevel level : server.getAllLevels()) {
-            if (level.dimension().location().toString().equals(life.dimension())) return level;
+            if (level.dimension().identifier().toString().equals(life.dimension())) return level;
         }
         return null;
     }

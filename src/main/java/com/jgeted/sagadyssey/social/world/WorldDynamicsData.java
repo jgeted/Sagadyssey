@@ -1,12 +1,14 @@
 package com.jgeted.sagadyssey.social.world;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+
 import com.jgeted.sagadyssey.social.history.WorldHistoryData;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.world.level.saveddata.SavedData;
+import com.jgeted.sagadyssey.worldsim.NbtSavedData;
 
 import javax.annotation.Nullable;
 import java.util.ArrayList;
@@ -14,7 +16,7 @@ import java.util.List;
 import java.util.UUID;
 
 /** 当前活跃事件及调度时钟。 */
-public final class WorldDynamicsData extends SavedData {
+public final class WorldDynamicsData extends NbtSavedData {
     private static final int MAX_ACTIVE_EVENTS = 32;
     private static final String DATA_NAME = "sagadyssey_world_dynamics";
     private static final Factory<WorldDynamicsData> FACTORY =
@@ -27,7 +29,7 @@ public final class WorldDynamicsData extends SavedData {
     private final List<DynamicWorldEventRecord> activeEvents = new ArrayList<>();
 
     public static WorldDynamicsData get(MinecraftServer server) {
-        return server.overworld().getDataStorage().computeIfAbsent(FACTORY, DATA_NAME);
+        return server.overworld().getDataStorage().computeIfAbsent(FACTORY.type(DATA_NAME));
     }
 
     public boolean beginDay(long day) {
@@ -100,11 +102,11 @@ public final class WorldDynamicsData extends SavedData {
 
     private static WorldDynamicsData load(CompoundTag tag, HolderLookup.Provider registries) {
         WorldDynamicsData data = new WorldDynamicsData();
-        data.lastProcessedDay = tag.contains("LastProcessedDay") ? tag.getLong("LastProcessedDay") : -1L;
-        data.lastRollDay = tag.contains("LastRollDay") ? tag.getLong("LastRollDay") : -3L;
-        data.monotonicClock=tag.getBoolean("MonotonicClock");data.dayOffset=tag.getLong("DayOffset");
-        ListTag list = tag.getList("ActiveEvents", Tag.TAG_COMPOUND);
-        for (int i = 0; i < list.size(); i++) data.activeEvents.add(DynamicWorldEventRecord.load(list.getCompound(i)));
+        data.lastProcessedDay = tag.contains("LastProcessedDay") ? tag.getLongOr("LastProcessedDay", 0L) : -1L;
+        data.lastRollDay = tag.contains("LastRollDay") ? tag.getLongOr("LastRollDay", 0L) : -3L;
+        data.monotonicClock=tag.getBooleanOr("MonotonicClock", false);data.dayOffset=tag.getLongOr("DayOffset", 0L);
+        ListTag list = MinecraftApi.listOfType(tag, "ActiveEvents", Tag.TAG_COMPOUND);
+        for (int i = 0; i < list.size(); i++) data.activeEvents.add(DynamicWorldEventRecord.load(list.getCompoundOrEmpty(i)));
         return data;
     }
 }

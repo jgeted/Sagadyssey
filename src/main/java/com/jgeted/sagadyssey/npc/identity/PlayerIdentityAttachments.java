@@ -15,7 +15,7 @@ public final class PlayerIdentityAttachments {
     public static final Supplier<AttachmentType<PlayerIdentityData>> PLAYER_IDENTITY =
             ATTACHMENT_TYPES.register("player_identity", () ->
                     AttachmentType.builder(PlayerIdentityData::new)
-                            .serialize(PlayerIdentityData.CODEC)
+                            .serialize(com.mojang.serialization.MapCodec.assumeMapUnsafe(PlayerIdentityData.CODEC))
                             .copyOnDeath()
                             .build());
 

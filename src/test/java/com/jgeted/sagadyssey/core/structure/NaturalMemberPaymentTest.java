@@ -1,4 +1,6 @@
 package com.jgeted.sagadyssey.core.structure;
+
+import net.minecraft.core.UUIDUtil;
 import net.minecraft.nbt.CompoundTag;
 import org.junit.jupiter.api.Test;
 import java.util.UUID;
@@ -13,7 +15,7 @@ class NaturalMemberPaymentTest {
     @Test void unknownInterruptedTransferIsNotReissuedAfterReload(){
         var d=new NaturalVillageLifeData();var person=UUID.randomUUID();var village=UUID.randomUUID();var tx=d.beginPayment(person,village,1);
         d=NaturalVillageLifeData.load(d.save(new CompoundTag(),null),null);
-        assertEquals(tx,d.payment(person,village).getUUID("Transaction"));assertNull(d.beginPayment(person,village,2));d.finishPayment(person,village,"REVIEW");assertNull(d.beginPayment(person,village,2));
+        assertEquals(tx,d.payment(person,village).read("Transaction", UUIDUtil.CODEC).orElseThrow());assertNull(d.beginPayment(person,village,2));d.finishPayment(person,village,"REVIEW");assertNull(d.beginPayment(person,village,2));
     }
     @Test void confirmedFailureCanRetryWithFreshTransactionButSuccessCannot(){
         var d=new NaturalVillageLifeData();var person=UUID.randomUUID();var village=UUID.randomUUID();var old=d.beginPayment(person,village,1);d.finishPayment(person,village,"FAILED");
@@ -34,7 +36,7 @@ class NaturalMemberPaymentTest {
         var d=new NaturalVillageLifeData();var person=UUID.randomUUID();var village=UUID.randomUUID();var home=UUID.randomUUID();
         var old=d.acceptWork(person,village,0,"b",home);assertTrue(d.cancelWork(person,village));
         d=NaturalVillageLifeData.load(d.save(new CompoundTag(),null),null);
-        assertEquals("CANCELLED",d.payment(person,village).getString("State"));
+        assertEquals("CANCELLED",d.payment(person,village).getStringOr("State", ""));
         var next=d.acceptWork(person,village,0,"b",home);assertNotEquals(old,next);assertEquals(next,d.beginPayment(person,village,0));
         assertFalse(d.cancelWork(person,village));d.finishPayment(person,village,"REVIEW");
         d=NaturalVillageLifeData.load(d.save(new CompoundTag(),null),null);

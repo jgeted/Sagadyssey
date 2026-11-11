@@ -6,7 +6,7 @@ import com.jgeted.sagadyssey.core.network.NetworkRateLimiter;
 import io.netty.buffer.ByteBuf;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
 
@@ -19,7 +19,7 @@ import net.neoforged.neoforge.network.handling.IPayloadContext;
 public record RequestStandingsRefreshPacket() implements CustomPacketPayload {
 
     public static final Type<RequestStandingsRefreshPacket> TYPE = new Type<>(
-            ResourceLocation.fromNamespaceAndPath(Sagadyssey.MOD_ID, "request_standings_refresh")
+            Identifier.fromNamespaceAndPath(Sagadyssey.MOD_ID, "request_standings_refresh")
     );
 
     /** 空包：不需要任何字段 */

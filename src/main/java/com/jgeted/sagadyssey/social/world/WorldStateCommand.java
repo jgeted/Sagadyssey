@@ -1,5 +1,7 @@
 package com.jgeted.sagadyssey.social.world;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+
 import com.jgeted.sagadyssey.social.character.CharacterRegistry;
 import com.jgeted.sagadyssey.social.history.HistoryEventRecord;
 import com.jgeted.sagadyssey.social.history.WorldHistoryData;
@@ -29,7 +31,7 @@ public final class WorldStateCommand {
                         .then(Commands.literal("list").executes(ctx -> listSettlements(ctx.getSource())))
                         .then(Commands.literal("nearest").executes(ctx -> nearest(ctx.getSource())))
                         .then(Commands.literal("create")
-                                .requires(source -> source.hasPermission(2))
+                                .requires(source -> MinecraftApi.hasPermission(source, 2))
                                 .then(Commands.argument("type", StringArgumentType.word())
                                         .suggests((ctx, builder) -> {
                                             for (SettlementType type : SettlementType.values()) {
@@ -46,7 +48,7 @@ public final class WorldStateCommand {
 
         // 旧地图迁移入口：站在建筑基准位置手动补登记，不重新放置方块。
         var addBuildingCommand = Commands.literal("add_building")
-                .requires(source -> source.hasPermission(2))
+                .requires(source -> MinecraftApi.hasPermission(source, 2))
                 .then(Commands.argument("structure_id", StringArgumentType.word())
                         .suggests((ctx, builder) -> {
                             SagadysseyStructures.getAllIds().forEach(builder::suggest);
@@ -97,7 +99,7 @@ public final class WorldStateCommand {
 
     private static int nearest(CommandSourceStack source) throws com.mojang.brigadier.exceptions.CommandSyntaxException {
         ServerPlayer player = source.getPlayerOrException();
-        String dimension = player.serverLevel().dimension().location().toString();
+        String dimension = player.level().dimension().identifier().toString();
         SettlementRegistryData data = SettlementRegistryData.get(source.getServer());
         SettlementRecord record = data.nearest(dimension, player.blockPosition(), 2048.0D);
         if (record == null) {
@@ -116,8 +118,8 @@ public final class WorldStateCommand {
         var founder = CharacterRegistry.ensureCurrent(player);
         SettlementRecord record = SettlementRegistryData.get(source.getServer()).create(
                 source.getServer(), name, type,
-                player.serverLevel().dimension().location().toString(), player.blockPosition(), 128,
-                factionId, founder.id(), player.serverLevel().getGameTime());
+                player.level().dimension().identifier().toString(), player.blockPosition(), 128,
+                factionId, founder.id(), player.level().getGameTime());
         source.sendSuccess(() -> Component.literal("§a已登记聚落 " + record.name()
                 + "，中心 " + record.center().toShortString() + "，角色创建者 " + founder.name()), true);
         return 1;
@@ -132,9 +134,9 @@ public final class WorldStateCommand {
             return 0;
         }
         SettlementRegistryData.get(source.getServer()).registerGeneratedBuilding(
-                source.getServer(), player.serverLevel().dimension().location().toString(),
+                source.getServer(), player.level().dimension().identifier().toString(),
                 player.blockPosition(), structureId, config.getCategory(), config.getSize(),
-                player.serverLevel().getGameTime());
+                player.level().getGameTime());
         source.sendSuccess(() -> Component.literal("§a已登记旧地图建筑 " + structureId
                 + "，没有放置或修改任何方块。"), true);
         return 1;

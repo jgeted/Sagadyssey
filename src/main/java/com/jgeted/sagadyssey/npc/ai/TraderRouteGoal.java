@@ -44,7 +44,7 @@ public class TraderRouteGoal extends Goal {
     @Override
     public boolean canUse() {
         if (com.jgeted.sagadyssey.npc.brain.execution.NpcBrainRuntime.isPlanned(npc)) return false;
-        if (!npc.isAlive() || npc.level().isClientSide
+        if (!npc.isAlive() || npc.level().isClientSide()
                 || npc.getProfession() != NpcProfession.TRADER
                 || npc.getCommand() != NpcCommand.WORK
                 || !com.jgeted.sagadyssey.social.life.NpcSchedulePlanner.allowsWork(npc)
@@ -141,12 +141,12 @@ public class TraderRouteGoal extends Goal {
         if (npc.level() instanceof ServerLevel level) {
             NpcLifeRecord life = NpcLifeData.get(level.getServer()).record(npc.getCharacterId());
             if (life != null && life.activeWorkplace() != null
-                    && life.dimension().equals(level.dimension().location().toString())) {
+                    && life.dimension().equals(level.dimension().identifier().toString())) {
                 origin = life.activeWorkplace();
             }
             BlockPos marketOrigin = origin;
             com.jgeted.sagadyssey.social.logistics.LogisticsData.get(level.getServer()).warehouses().stream()
-                    .filter(record -> record.dimension().equals(level.dimension().location().toString()))
+                    .filter(record -> record.dimension().equals(level.dimension().identifier().toString()))
                     .filter(record -> record.position().distSqr(marketOrigin) <= 96.0D * 96.0D)
                     .filter(record -> level.hasChunkAt(record.position()))
                     .map(com.jgeted.sagadyssey.social.logistics.WarehouseRecord::position)
@@ -166,7 +166,7 @@ public class TraderRouteGoal extends Goal {
         if (!(npc.level() instanceof ServerLevel level)) return false;
         LogisticsData logistics = LogisticsData.get(level.getServer());
         NpcWorkContext context = NpcWorkContext.from(npc);
-        String dimension = level.dimension().location().toString();
+        String dimension = level.dimension().identifier().toString();
         return logistics.orders().stream().anyMatch(order -> {
             if (order.status() == LogisticsOrderStatus.IN_PROGRESS) {
                 return npc.getCharacterId().equals(order.assignedNpcId());
@@ -184,7 +184,7 @@ public class TraderRouteGoal extends Goal {
     private void observeLocalMarket() {
         if (!(npc.level() instanceof ServerLevel level)) return;
         var settlement = SettlementRegistryData.get(level.getServer()).nearest(
-                level.dimension().location().toString(), npc.blockPosition(), 256.0D);
+                level.dimension().identifier().toString(), npc.blockPosition(), 256.0D);
         if (settlement == null) return;
         int learned = MerchantMarketKnowledgeData.get(level.getServer()).observe(
                 npc.getCharacterId(), settlement.id(), npc.getEquipmentInventory(),

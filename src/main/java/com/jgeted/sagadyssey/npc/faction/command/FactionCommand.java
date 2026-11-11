@@ -1,5 +1,7 @@
 package com.jgeted.sagadyssey.npc.faction.command;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+
 import com.jgeted.sagadyssey.npc.faction.*;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
@@ -7,9 +9,9 @@ import com.mojang.brigadier.arguments.StringArgumentType;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.commands.arguments.EntityArgument;
-import net.minecraft.commands.arguments.ResourceLocationArgument;
+import net.minecraft.commands.arguments.IdentifierArgument;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerPlayer;
 
 import java.util.Collection;
@@ -30,7 +32,7 @@ public class FactionCommand {
         dispatcher.register(
                 Commands.literal("sagadyssey")
                         .then(Commands.literal("faction")
-                                .requires(src -> src.hasPermission(2))
+                                .requires(src -> MinecraftApi.hasPermission(src, 2))
                                 // list
                                 .then(Commands.literal("list")
                                         .executes(ctx -> listFactions(ctx.getSource()))
@@ -38,7 +40,7 @@ public class FactionCommand {
                                 // get <player> <faction>
                                 .then(Commands.literal("get")
                                         .then(Commands.argument("player", EntityArgument.player())
-                                                .then(Commands.argument("faction", ResourceLocationArgument.id())
+                                                .then(Commands.argument("faction", IdentifierArgument.id())
                                                         .suggests((ctx, builder) -> {
                                                             for (var f : FactionRegistry.getAllFactions()) {
                                                                 builder.suggest(f.id());
@@ -48,7 +50,7 @@ public class FactionCommand {
                                                         .executes(ctx -> getStanding(
                                                                 ctx.getSource(),
                                                                 EntityArgument.getPlayer(ctx, "player"),
-                                                                normalizeFactionId(ResourceLocationArgument.getId(
+                                                                normalizeFactionId(IdentifierArgument.getId(
                                                                         ctx, "faction")))
                                                         )
                                                 )
@@ -57,7 +59,7 @@ public class FactionCommand {
                                 // set <player> <faction> <value>
                                 .then(Commands.literal("set")
                                         .then(Commands.argument("player", EntityArgument.player())
-                                                .then(Commands.argument("faction", ResourceLocationArgument.id())
+                                                .then(Commands.argument("faction", IdentifierArgument.id())
                                                         .suggests((ctx, builder) -> {
                                                             for (var f : FactionRegistry.getAllFactions()) {
                                                                 builder.suggest(f.id());
@@ -69,7 +71,7 @@ public class FactionCommand {
                                                                 .executes(ctx -> setStanding(
                                                                         ctx.getSource(),
                                                                         EntityArgument.getPlayer(ctx, "player"),
-                                                                        normalizeFactionId(ResourceLocationArgument.getId(
+                                                                        normalizeFactionId(IdentifierArgument.getId(
                                                                                 ctx, "faction")),
                                                                         IntegerArgumentType.getInteger(ctx, "value"))
                                                                 )
@@ -220,11 +222,11 @@ public class FactionCommand {
     }
 
     /**
-     * ResourceLocationArgument parses an unqualified ID as minecraft:&lt;path&gt;.
+     * IdentifierArgument parses an unqualified ID as minecraft:&lt;path&gt;.
      * Preserve the command's historical shorthand ("kingdom") while also
      * accepting the fully-qualified IDs advertised by command suggestions.
      */
-    static String normalizeFactionId(ResourceLocation id) {
+    static String normalizeFactionId(Identifier id) {
         return "minecraft".equals(id.getNamespace()) ? id.getPath() : id.toString();
     }
 }

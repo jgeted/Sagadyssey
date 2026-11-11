@@ -1,19 +1,21 @@
 package com.jgeted.sagadyssey.social.commons;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+
 import com.jgeted.sagadyssey.worldsim.rights.SubjectRef;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.world.level.saveddata.SavedData;
+import com.jgeted.sagadyssey.worldsim.NbtSavedData;
 
 import javax.annotation.Nullable;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 
-public final class CommonsData extends SavedData {
+public final class CommonsData extends NbtSavedData {
     private static final String DATA_NAME = "sagadyssey_commons";
     private static final Factory<CommonsData> FACTORY =
             new Factory<>(CommonsData::new, CommonsData::load);
@@ -21,7 +23,7 @@ public final class CommonsData extends SavedData {
     private final Map<UUID, CommonsWithdrawal> withdrawals = new HashMap<>();
 
     public static CommonsData get(MinecraftServer server) {
-        return server.overworld().getDataStorage().computeIfAbsent(FACTORY, DATA_NAME);
+        return server.overworld().getDataStorage().computeIfAbsent(FACTORY.type(DATA_NAME));
     }
 
     boolean addPolicy(CommonsPolicy policy) {
@@ -59,14 +61,14 @@ public final class CommonsData extends SavedData {
 
     private static CommonsData load(CompoundTag tag, HolderLookup.Provider registries) {
         CommonsData data = new CommonsData();
-        ListTag policies = tag.getList("Policies", Tag.TAG_COMPOUND);
+        ListTag policies = MinecraftApi.listOfType(tag, "Policies", Tag.TAG_COMPOUND);
         for (int index = 0; index < policies.size(); index++) {
-            CommonsPolicy value = CommonsPolicy.load(policies.getCompound(index));
+            CommonsPolicy value = CommonsPolicy.load(policies.getCompoundOrEmpty(index));
             data.policies.put(value.id(), value);
         }
-        ListTag withdrawals = tag.getList("Withdrawals", Tag.TAG_COMPOUND);
+        ListTag withdrawals = MinecraftApi.listOfType(tag, "Withdrawals", Tag.TAG_COMPOUND);
         for (int index = 0; index < withdrawals.size(); index++) {
-            CommonsWithdrawal value = CommonsWithdrawal.load(withdrawals.getCompound(index));
+            CommonsWithdrawal value = CommonsWithdrawal.load(withdrawals.getCompoundOrEmpty(index));
             data.withdrawals.put(value.id(), value);
         }
         return data;

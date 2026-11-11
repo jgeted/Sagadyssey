@@ -449,8 +449,8 @@ public class NpcTradeRegistry {
 
     private static NpcTradeOffer.SpecialItemResolver randomEnchantedBook() {
         return (rand, registry) -> {
-            var enchants = registry.registryOrThrow(Registries.ENCHANTMENT)
-                    .holders()
+            var enchants = registry.lookupOrThrow(Registries.ENCHANTMENT)
+                    .listElements()
                     .filter(e -> e.is(EnchantmentTags.IN_ENCHANTING_TABLE))
                     .toList();
             if (enchants.isEmpty()) return new ItemStack(Items.ENCHANTED_BOOK);
@@ -465,15 +465,15 @@ public class NpcTradeRegistry {
     private static NpcTradeOffer.SpecialItemResolver enchantedIron(Item armorItem) {
         return (rand, registry) -> {
             ItemStack armor = new ItemStack(armorItem);
-            var enchReg = registry.registryOrThrow(Registries.ENCHANTMENT);
+            var enchReg = registry.lookupOrThrow(Registries.ENCHANTMENT);
             int roll = rand.nextInt(3);
             if (roll == 0) {
-                armor.enchant(enchReg.getHolderOrThrow(Enchantments.UNBREAKING), 1);
+                armor.enchant(enchReg.getOrThrow(Enchantments.UNBREAKING), 1);
             } else if (roll == 1) {
-                armor.enchant(enchReg.getHolderOrThrow(Enchantments.PROTECTION), 1);
+                armor.enchant(enchReg.getOrThrow(Enchantments.PROTECTION), 1);
             } else {
-                armor.enchant(enchReg.getHolderOrThrow(Enchantments.UNBREAKING), 1);
-                armor.enchant(enchReg.getHolderOrThrow(Enchantments.PROTECTION), 1);
+                armor.enchant(enchReg.getOrThrow(Enchantments.UNBREAKING), 1);
+                armor.enchant(enchReg.getOrThrow(Enchantments.PROTECTION), 1);
             }
             return armor;
         };
@@ -482,7 +482,7 @@ public class NpcTradeRegistry {
     private static NpcTradeOffer.SpecialItemResolver enchantedBow(net.minecraft.resources.ResourceKey<net.minecraft.world.item.enchantment.Enchantment> ench, int level) {
         return (rand, registry) -> {
             ItemStack bow = new ItemStack(Items.BOW);
-            bow.enchant(registry.registryOrThrow(Registries.ENCHANTMENT).getHolderOrThrow(ench), level);
+            bow.enchant(registry.lookupOrThrow(Registries.ENCHANTMENT).getOrThrow(ench), level);
             return bow;
         };
     }
@@ -490,7 +490,7 @@ public class NpcTradeRegistry {
     private static NpcTradeOffer.SpecialItemResolver enchantedCrossbow(net.minecraft.resources.ResourceKey<net.minecraft.world.item.enchantment.Enchantment> ench, int level) {
         return (rand, registry) -> {
             ItemStack crossbow = new ItemStack(Items.CROSSBOW);
-            crossbow.enchant(registry.registryOrThrow(Registries.ENCHANTMENT).getHolderOrThrow(ench), level);
+            crossbow.enchant(registry.lookupOrThrow(Registries.ENCHANTMENT).getOrThrow(ench), level);
             return crossbow;
         };
     }
@@ -498,8 +498,8 @@ public class NpcTradeRegistry {
     private static NpcTradeOffer.SpecialItemResolver sharpnessIII() {
         return (rand, registry) -> {
             ItemStack sword = new ItemStack(Items.DIAMOND_SWORD);
-            sword.enchant(registry.registryOrThrow(Registries.ENCHANTMENT)
-                    .getHolderOrThrow(Enchantments.SHARPNESS), 3);
+            sword.enchant(registry.lookupOrThrow(Registries.ENCHANTMENT)
+                    .getOrThrow(Enchantments.SHARPNESS), 3);
             return sword;
         };
     }
@@ -509,8 +509,8 @@ public class NpcTradeRegistry {
     private static NpcTradeOffer.SpecialItemResolver mendingDiamondPick() {
         return (rand, registry) -> {
             ItemStack pick = new ItemStack(Items.DIAMOND_PICKAXE);
-            pick.enchant(registry.registryOrThrow(Registries.ENCHANTMENT)
-                    .getHolderOrThrow(Enchantments.MENDING), 1);
+            pick.enchant(registry.lookupOrThrow(Registries.ENCHANTMENT)
+                    .getOrThrow(Enchantments.MENDING), 1);
             return pick;
         };
     }
@@ -518,8 +518,8 @@ public class NpcTradeRegistry {
     private static NpcTradeOffer.SpecialItemResolver sharpnessVSword() {
         return (rand, registry) -> {
             ItemStack sword = new ItemStack(Items.DIAMOND_SWORD);
-            sword.enchant(registry.registryOrThrow(Registries.ENCHANTMENT)
-                    .getHolderOrThrow(Enchantments.SHARPNESS), 5);
+            sword.enchant(registry.lookupOrThrow(Registries.ENCHANTMENT)
+                    .getOrThrow(Enchantments.SHARPNESS), 5);
             return sword;
         };
     }
@@ -527,8 +527,8 @@ public class NpcTradeRegistry {
     private static NpcTradeOffer.SpecialItemResolver sharpnessVAxe() {
         return (rand, registry) -> {
             ItemStack axe = new ItemStack(Items.DIAMOND_AXE);
-            axe.enchant(registry.registryOrThrow(Registries.ENCHANTMENT)
-                    .getHolderOrThrow(Enchantments.SHARPNESS), 5);
+            axe.enchant(registry.lookupOrThrow(Registries.ENCHANTMENT)
+                    .getOrThrow(Enchantments.SHARPNESS), 5);
             return axe;
         };
     }
@@ -536,8 +536,8 @@ public class NpcTradeRegistry {
     private static NpcTradeOffer.SpecialItemResolver efficiencyVBook() {
         return (rand, registry) -> {
             ItemStack book = new ItemStack(Items.ENCHANTED_BOOK);
-            book.enchant(registry.registryOrThrow(Registries.ENCHANTMENT)
-                    .getHolderOrThrow(Enchantments.EFFICIENCY), 5);
+            book.enchant(registry.lookupOrThrow(Registries.ENCHANTMENT)
+                    .getOrThrow(Enchantments.EFFICIENCY), 5);
             return book;
         };
     }
@@ -545,8 +545,8 @@ public class NpcTradeRegistry {
     private static NpcTradeOffer.SpecialItemResolver unbreakingIIIBook() {
         return (rand, registry) -> {
             ItemStack book = new ItemStack(Items.ENCHANTED_BOOK);
-            book.enchant(registry.registryOrThrow(Registries.ENCHANTMENT)
-                    .getHolderOrThrow(Enchantments.UNBREAKING), 3);
+            book.enchant(registry.lookupOrThrow(Registries.ENCHANTMENT)
+                    .getOrThrow(Enchantments.UNBREAKING), 3);
             return book;
         };
     }
@@ -554,10 +554,10 @@ public class NpcTradeRegistry {
     private static NpcTradeOffer.SpecialItemResolver ultimateBow() {
         return (rand, registry) -> {
             ItemStack bow = new ItemStack(Items.BOW);
-            var enchReg = registry.registryOrThrow(Registries.ENCHANTMENT);
-            bow.enchant(enchReg.getHolderOrThrow(Enchantments.POWER), 5);
-            bow.enchant(enchReg.getHolderOrThrow(Enchantments.FLAME), 1);
-            bow.enchant(enchReg.getHolderOrThrow(Enchantments.INFINITY), 1);
+            var enchReg = registry.lookupOrThrow(Registries.ENCHANTMENT);
+            bow.enchant(enchReg.getOrThrow(Enchantments.POWER), 5);
+            bow.enchant(enchReg.getOrThrow(Enchantments.FLAME), 1);
+            bow.enchant(enchReg.getOrThrow(Enchantments.INFINITY), 1);
             return bow;
         };
     }
@@ -565,10 +565,10 @@ public class NpcTradeRegistry {
     private static NpcTradeOffer.SpecialItemResolver ultimateCrossbow() {
         return (rand, registry) -> {
             ItemStack crossbow = new ItemStack(Items.CROSSBOW);
-            var enchReg = registry.registryOrThrow(Registries.ENCHANTMENT);
-            crossbow.enchant(enchReg.getHolderOrThrow(Enchantments.QUICK_CHARGE), 3);
-            crossbow.enchant(enchReg.getHolderOrThrow(Enchantments.MULTISHOT), 1);
-            crossbow.enchant(enchReg.getHolderOrThrow(Enchantments.PIERCING), 4);
+            var enchReg = registry.lookupOrThrow(Registries.ENCHANTMENT);
+            crossbow.enchant(enchReg.getOrThrow(Enchantments.QUICK_CHARGE), 3);
+            crossbow.enchant(enchReg.getOrThrow(Enchantments.MULTISHOT), 1);
+            crossbow.enchant(enchReg.getOrThrow(Enchantments.PIERCING), 4);
             return crossbow;
         };
     }

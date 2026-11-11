@@ -4,7 +4,6 @@ import com.jgeted.sagadyssey.npc.entity.NpcBase;
 import net.minecraft.world.item.BowItem;
 import net.minecraft.world.item.CrossbowItem;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.SwordItem;
 import net.minecraft.world.item.AxeItem;
 
 /**
@@ -35,6 +34,6 @@ public class NpcWeaponSwapHandler {
     }
 
     private static boolean isMeleeWeapon(ItemStack stack) {
-        return stack.getItem() instanceof SwordItem || stack.getItem() instanceof AxeItem;
+        return stack.is(net.minecraft.tags.ItemTags.SWORDS) || stack.getItem() instanceof AxeItem;
     }
 }

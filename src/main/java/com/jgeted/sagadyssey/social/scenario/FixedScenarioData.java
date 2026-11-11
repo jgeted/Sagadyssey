@@ -1,12 +1,14 @@
 package com.jgeted.sagadyssey.social.scenario;
 
+import com.jgeted.sagadyssey.core.MinecraftApi;
+
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.world.level.saveddata.SavedData;
+import com.jgeted.sagadyssey.worldsim.NbtSavedData;
 
 import javax.annotation.Nullable;
 import java.nio.charset.StandardCharsets;
@@ -18,7 +20,7 @@ import java.util.Map;
 import java.util.UUID;
 
 /** 固定世界部署任务和完成标记。 */
-public final class FixedScenarioData extends SavedData {
+public final class FixedScenarioData extends NbtSavedData {
     private static final String DATA_NAME = "sagadyssey_fixed_scenarios";
     private static final Factory<FixedScenarioData> FACTORY =
             new Factory<>(FixedScenarioData::new, FixedScenarioData::load);
@@ -27,7 +29,7 @@ public final class FixedScenarioData extends SavedData {
     private final Map<UUID, FixedScenarioDeployment> deployments = new HashMap<>();
 
     public static FixedScenarioData get(MinecraftServer server) {
-        return server.overworld().getDataStorage().computeIfAbsent(FACTORY, DATA_NAME);
+        return server.overworld().getDataStorage().computeIfAbsent(FACTORY.type(DATA_NAME));
     }
 
     public List<FixedScenarioDeployment> deployments() {
@@ -116,9 +118,9 @@ public final class FixedScenarioData extends SavedData {
 
     private static FixedScenarioData load(CompoundTag tag, HolderLookup.Provider registries) {
         FixedScenarioData data = new FixedScenarioData();
-        ListTag list = tag.getList("Deployments", Tag.TAG_COMPOUND);
+        ListTag list = MinecraftApi.listOfType(tag, "Deployments", Tag.TAG_COMPOUND);
         for (int i = 0; i < list.size(); i++) {
-            FixedScenarioDeployment deployment = FixedScenarioDeployment.load(list.getCompound(i));
+            FixedScenarioDeployment deployment = FixedScenarioDeployment.load(list.getCompoundOrEmpty(i));
             if (deployment != null && FixedScenarioDefinition.get(deployment.scenarioId()) != null)
                 data.deployments.put(deployment.id(), deployment);
         }

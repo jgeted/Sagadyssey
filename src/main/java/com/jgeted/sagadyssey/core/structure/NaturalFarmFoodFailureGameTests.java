@@ -1,5 +1,10 @@
 package com.jgeted.sagadyssey.core.structure;
 
+import com.jgeted.sagadyssey.gametest.PortedGameTests.*;
+
+import com.jgeted.sagadyssey.core.MinecraftApi;
+import net.minecraft.core.UUIDUtil;
+
 import com.google.gson.Gson;
 import com.jgeted.sagadyssey.Sagadyssey;
 import com.jgeted.sagadyssey.npc.brain.execution.NpcBrainRuntime;
@@ -13,14 +18,13 @@ import com.jgeted.sagadyssey.worldsim.rights.*;
 import com.jgeted.sagadyssey.worldsim.transfer.*;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTestHelper;
-import net.minecraft.gametest.framework.TestFunction;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.Container;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.Items;
-import net.minecraft.world.level.GameRules;
+import net.minecraft.world.level.gamerules.GameRules;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.CropBlock;
 import net.minecraft.world.level.block.state.BlockState;
@@ -52,7 +56,7 @@ public final class NaturalFarmFoodFailureGameTests {
                     }
                     if (readyAt[0] < 0) {
                         h.getLevel().setDayTime(1000);
-                        h.getLevel().getGameRules().getRule(GameRules.RULE_RANDOMTICKING).set(0, h.getLevel().getServer());
+                        h.getLevel().getGameRules().set(GameRules.RANDOM_TICK_SPEED, 0, h.getLevel().getServer());
                         readyAt[0] = h.getLevel().getGameTime();
                     }
                     // A newly created entity has not necessarily completed its first physics/navigation tick.
@@ -99,7 +103,7 @@ public final class NaturalFarmFoodFailureGameTests {
             log = l.getServer().getWorldPath(LevelResource.ROOT).resolve(priority
                     ? "natural-farm-failure-pantry-priority.jsonl" : "natural-farm-failure-bag-cargo.jsonl");
         }
-        boolean ready() { var row = NaturalVillageLifeData.get(l.getServer()).village(b.buildingKey()); return row != null && row.getBoolean("Ready"); }
+        boolean ready() { var row = NaturalVillageLifeData.get(l.getServer()).village(b.buildingKey()); return row != null && row.getBooleanOr("Ready", false); }
         boolean priorityReadyToFreeze() {
             require(h.getTick() < 1100, "third and final priority setup attempt: original actors must naturally land and have paths before1100; no relocation of farmer/courier");
             var pantry = NaturalVillageLayout.at(b, NaturalVillageLayout.PANTRY);
@@ -289,7 +293,7 @@ public final class NaturalFarmFoodFailureGameTests {
         void verifyActualConsumption() {
             var data = FieldworkData.get(l.getServer());
             var consumed = data.outputConsumptions(actor(0).getUUID());
-            require(data.save(new CompoundTag(), l.registryAccess()).getInt("Schema") == 2,
+            require(data.save(new CompoundTag(), l.registryAccess()).getIntOr("Schema", 0) == 2,
                     "actual consumption persists in Schema2 rather than a fake delivery");
             require(consumed.size() == bagMeals, "one durable event per actual normal BAG meal");
             int actual = 0, output = 0;
@@ -314,12 +318,12 @@ public final class NaturalFarmFoodFailureGameTests {
         }
         int recordedDeposits() {
             var encoded = FieldworkData.get(l.getServer()).save(new CompoundTag(), l.registryAccess()); int quantity = 0;
-            for (var item : encoded.getList("Deliveries", Tag.TAG_COMPOUND)) {
+            for (var item : MinecraftApi.listOfType(encoded, "Deliveries", Tag.TAG_COMPOUND)) {
                 var row = (CompoundTag) item;
-                if (row.getUUID("NpcId").equals(actor(0).getUUID()) && row.getString("Fingerprint").equals("minecraft:carrot#0")) {
-                    var receipt = TransferLedgerData.get(l.getServer()).receipt(row.getUUID("TransferId"));
+                if (row.read("NpcId", UUIDUtil.CODEC).orElseThrow().equals(actor(0).getUUID()) && row.getStringOr("Fingerprint", "").equals("minecraft:carrot#0")) {
+                    var receipt = TransferLedgerData.get(l.getServer()).receipt(row.read("TransferId", UUIDUtil.CODEC).orElseThrow());
                     require(receipt != null && receipt.successful() && receipt.lawful(), "actual output deposit has lawful transfer receipt");
-                    quantity += row.getInt("Quantity");
+                    quantity += row.getIntOr("Quantity", 0);
                 }
             }
             return quantity;
@@ -378,7 +382,7 @@ public final class NaturalFarmFoodFailureGameTests {
     private static int count(Container c) { int n = 0; if (c != null) for (int i = 0; i < c.getContainerSize(); i++) if (c.getItem(i).is(Items.CARROT)) n += c.getItem(i).getCount(); return n; }
     private static void removeCarrots(Container c) { for (int i = 0; i < c.getContainerSize(); i++) if (c.getItem(i).is(Items.CARROT)) c.removeItemNoUpdate(i); c.setChanged(); }
     private static void save(ServerLevel l) {
-        try { l.getServer().saveEverything(true, true, true); net.neoforged.neoforge.common.IOUtilities.waitUntilIOWorkerComplete(); }
+        try { l.getServer().saveEverything(true, true, true);  }
         catch (Exception ex) { throw new IllegalStateException("cannot preserve diagnostic world", ex); }
     }
 }

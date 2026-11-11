@@ -1,4 +1,6 @@
 package com.jgeted.sagadyssey.npc.brain.command;
+
+import com.jgeted.sagadyssey.core.MinecraftApi;
 import net.minecraft.nbt.*;
 import org.junit.jupiter.api.Test;
 import java.util.*;
@@ -9,6 +11,6 @@ class NpcDutyEvidenceDataTest {
     @Test void originalPatientMayRevokeAndRevocationSurvives(){var d=new NpcDutyEvidenceData();var e=proof();d.put(e);assertTrue(d.revoke(e.principal(),e.duty()));assertTrue(NpcDutyEvidenceData.load(d.save(new CompoundTag(),null),null).find(e.duty()).revoked());}
     @Test void EmployerAndDoctorCannotOverridePatient(){var d=new NpcDutyEvidenceData();var e=proof();d.put(e);assertFalse(d.revoke(e.agent(),e.duty()));assertFalse(d.find(e.duty()).revoked());}
     @Test void cannotSubstituteNewProofOrReviveConsent(){var d=new NpcDutyEvidenceData();var e=proof();d.put(e);d.revoke(e.principal(),e.duty());assertThrows(IllegalStateException.class,()->d.put(e));}
-    @Test void missingRevocationStateFailsClosed(){var d=new NpcDutyEvidenceData();d.put(proof());var tag=d.save(new CompoundTag(),null);tag.getList("Evidence",Tag.TAG_COMPOUND).getCompound(0).remove("Revoked");assertThrows(IllegalArgumentException.class,()->NpcDutyEvidenceData.load(tag,null));}
-    @Test void duplicateProofDoesNotSilentlyOverwrite(){var d=new NpcDutyEvidenceData();d.put(proof());var tag=d.save(new CompoundTag(),null);var list=tag.getList("Evidence",Tag.TAG_COMPOUND);list.add(list.getCompound(0).copy());assertThrows(IllegalArgumentException.class,()->NpcDutyEvidenceData.load(tag,null));}
+    @Test void missingRevocationStateFailsClosed(){var d=new NpcDutyEvidenceData();d.put(proof());var tag=d.save(new CompoundTag(),null);MinecraftApi.listOfType(tag, "Evidence",Tag.TAG_COMPOUND).getCompoundOrEmpty(0).remove("Revoked");assertThrows(IllegalArgumentException.class,()->NpcDutyEvidenceData.load(tag,null));}
+    @Test void duplicateProofDoesNotSilentlyOverwrite(){var d=new NpcDutyEvidenceData();d.put(proof());var tag=d.save(new CompoundTag(),null);var list=MinecraftApi.listOfType(tag, "Evidence",Tag.TAG_COMPOUND);list.add(list.getCompoundOrEmpty(0).copy());assertThrows(IllegalArgumentException.class,()->NpcDutyEvidenceData.load(tag,null));}
 }
