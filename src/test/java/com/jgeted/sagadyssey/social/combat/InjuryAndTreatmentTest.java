@@ -9,6 +9,7 @@ import net.minecraft.world.item.Items;
 import org.junit.jupiter.api.Test;
 
 import java.util.UUID;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -46,6 +47,19 @@ class InjuryAndTreatmentTest {
         assertThrows(IllegalStateException.class, () -> MedicalService.treat(injuries, rights,
                 UUID.randomUUID(), woundId, healer, bagId, bag, TreatmentType.BANDAGE, 200L));
         assertEquals(revision, injuries.wound(woundId).revision());
+    }
+
+    @Test
+    void advancingOnePatientPreservesTheOtherPatientsCurrentWounds() {
+        var injuries = new InjuryData();
+        var first = UUID.randomUUID();
+        var second = UUID.randomUUID();
+        var old = InjuryService.recordHit(injuries, UUID.randomUUID(), first, null, WoundType.CUT, 8, 0, 0, null);
+        var other = InjuryService.recordHit(injuries, UUID.randomUUID(), second, null, WoundType.CUT, 8, 0, 0, null);
+        assertEquals(List.of(old.progress(6_000)), injuries.woundsOf(first, 6_000));
+        assertEquals(other, injuries.wound(other.id()));
+        assertEquals(1, injuries.observeTriage(first).activeWounds());
+        assertEquals(0, injuries.observeTriage(UUID.randomUUID()).activeWounds());
     }
 
     @Test

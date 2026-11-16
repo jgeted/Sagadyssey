@@ -35,8 +35,8 @@ public final class LifePlanProvider {
         var level=(ServerLevel)npc.level(); var life=NpcLifeData.get(MinecraftApi.server(npc));var record=life.record(npc.getCharacterId());
         String dimension=level.dimension().identifier().toString();if(record==null||!dimension.equals(record.dimension()))return Optional.empty();
         var needs=life.ensureNeeds(npc.getCharacterId(),now);
-        if(needs.hunger()>=350) {
-            var shared=HouseholdData.get(MinecraftApi.server(npc)).forMember(npc.getCharacterId());
+        if(needs.hunger()>=350 && !com.jgeted.sagadyssey.social.work.ServiceProvisionRuntime.ownsNeeds(npc)) {
+            var shared=HouseholdData.get(npc.getServer()).forMember(npc.getCharacterId());
             if(com.jgeted.sagadyssey.core.structure.NaturalFarmRules.forResident(npc)!=null&&shared!=null&&dimension.equals(shared.dimension())
                     &&hasPlannedFood(npc,shared.sharedStorage(),"HOUSEHOLD",true))
                 return plan(npc,"EAT",shared.sharedStorage(),40,now,Map.of("source","HOUSEHOLD"));

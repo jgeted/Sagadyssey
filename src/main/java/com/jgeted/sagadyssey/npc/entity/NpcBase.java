@@ -101,6 +101,12 @@ public class NpcBase extends PathfinderMob implements IFactionInteractable {
 
 
     public static final String WORK_OUTPUT_OWNER_TAG = "SagadysseyWorkOutputOwner";
+    private static final EntityDataAccessor<String> DATA_CLOTHING_OUTFIT =
+            SynchedEntityData.defineId(NpcBase.class, EntityDataSerializers.STRING);
+    private static final EntityDataAccessor<String> DATA_CLOTHING_FACTION =
+            SynchedEntityData.defineId(NpcBase.class, EntityDataSerializers.STRING);
+    private static final EntityDataAccessor<String> DATA_CLOTHING_PALETTE =
+            SynchedEntityData.defineId(NpcBase.class, EntityDataSerializers.STRING);
 
     private static final EntityDataAccessor<Integer> DATA_PROFESSION =
             SynchedEntityData.defineId(NpcBase.class, EntityDataSerializers.INT);
@@ -111,6 +117,12 @@ public class NpcBase extends PathfinderMob implements IFactionInteractable {
     private static final EntityDataAccessor<Integer> DATA_GENDER =
             SynchedEntityData.defineId(NpcBase.class, EntityDataSerializers.INT);
     private static final EntityDataAccessor<Integer> DATA_FACE_VARIANT =
+            SynchedEntityData.defineId(NpcBase.class, EntityDataSerializers.INT);
+    private static final EntityDataAccessor<Integer> DATA_HEAD_SHAPE =
+            SynchedEntityData.defineId(NpcBase.class, EntityDataSerializers.INT);
+    private static final EntityDataAccessor<Integer> DATA_HAIR_STYLE =
+            SynchedEntityData.defineId(NpcBase.class, EntityDataSerializers.INT);
+    private static final EntityDataAccessor<Integer> DATA_SKIN_TONE =
             SynchedEntityData.defineId(NpcBase.class, EntityDataSerializers.INT);
     private static final EntityDataAccessor<Integer> DATA_ACTION =
             SynchedEntityData.defineId(NpcBase.class, EntityDataSerializers.INT);
@@ -139,6 +151,8 @@ public class NpcBase extends PathfinderMob implements IFactionInteractable {
     private NpcOffice office = NpcOffice.NONE;
     private NpcGender gender = NpcGender.MALE;
     private NpcFaceVariant faceVariant = NpcFaceVariant.YOUNG;
+    private com.jgeted.sagadyssey.npc.appearance.NpcAppearanceProfile appearanceProfile =
+            com.jgeted.sagadyssey.npc.appearance.NpcAppearanceProfile.LEGACY;
 
     /** 动作是瞬时表现，不写入存档。服务端结束 tick 仅负责复位同步状态。 */
     private int serverActionEndTick = -1;
@@ -324,6 +338,7 @@ public class NpcBase extends PathfinderMob implements IFactionInteractable {
             this.faceVariant = faces[this.random.nextInt(faces.length)];
             this.entityData.set(DATA_GENDER, this.gender.ordinal());
             this.entityData.set(DATA_FACE_VARIANT, this.faceVariant.ordinal());
+            setAppearanceProfile(com.jgeted.sagadyssey.npc.appearance.NpcAppearanceProfile.forIdentity(getUUID()));
         }
     }
 
@@ -335,6 +350,9 @@ public class NpcBase extends PathfinderMob implements IFactionInteractable {
         builder.define(DATA_OFFICE, NpcOffice.NONE.ordinal());
         builder.define(DATA_GENDER, NpcGender.MALE.ordinal());
         builder.define(DATA_FACE_VARIANT, NpcFaceVariant.YOUNG.ordinal());
+        builder.define(DATA_HEAD_SHAPE, 0);
+        builder.define(DATA_HAIR_STYLE, 0);
+        builder.define(DATA_SKIN_TONE, 0);
         builder.define(DATA_ACTION, NpcAction.NONE.ordinal());
         builder.define(DATA_ACTION_DURATION, 0);
         builder.define(DATA_ACTION_SEQUENCE, 0);
@@ -344,9 +362,27 @@ public class NpcBase extends PathfinderMob implements IFactionInteractable {
         builder.define(DATA_LOGISTICS_REQUESTED, 0);
         builder.define(DATA_LOGISTICS_CARGO, 0);
         builder.define(DATA_OWNER_UUID, "");
+        builder.define(DATA_CLOTHING_OUTFIT, "");
+        builder.define(DATA_CLOTHING_FACTION, "");
+        builder.define(DATA_CLOTHING_PALETTE, "");
     }
 
     // === Getter / Setter ===
+
+    public String getClothingOutfit() { return entityData.get(DATA_CLOTHING_OUTFIT); }
+    public String getClothingFactionId() { return entityData.get(DATA_CLOTHING_FACTION); }
+    public String getClothingPaletteOverride() { return entityData.get(DATA_CLOTHING_PALETTE); }
+    public boolean hasMilitaryClothing() {
+        return com.jgeted.sagadyssey.npc.appearance.NpcMilitaryOutfit.find(getClothingOutfit()).isPresent()
+                || com.jgeted.sagadyssey.npc.appearance.NpcMilitaryRole.find(getClothingOutfit()).isPresent();
+    }
+    /** 仅同步外观投影，不更改职业、身份、物品、属性和服役事实。 */
+    public void setClothingVisual(String outfit, String faction, String palette) {
+        if (level().isClientSide()) throw new IllegalStateException("Clothing projection is server-owned");
+        entityData.set(DATA_CLOTHING_OUTFIT, outfit);
+        entityData.set(DATA_CLOTHING_FACTION, faction);
+        entityData.set(DATA_CLOTHING_PALETTE, palette);
+    }
 
     public String getNpcName() { return customName; }
     public void setNpcName(String name) {
@@ -378,6 +414,25 @@ public class NpcBase extends PathfinderMob implements IFactionInteractable {
         this.faceVariant = faceVariant == null ? NpcFaceVariant.YOUNG : faceVariant;
         this.entityData.set(DATA_GENDER, this.gender.ordinal());
         this.entityData.set(DATA_FACE_VARIANT, this.faceVariant.ordinal());
+    }
+
+    public com.jgeted.sagadyssey.npc.appearance.NpcAppearanceProfile getAppearanceProfile() {
+        if (!level().isClientSide()) return appearanceProfile;
+        var heads=com.jgeted.sagadyssey.npc.appearance.NpcHeadShape.values();
+        var hair=com.jgeted.sagadyssey.npc.appearance.NpcHairStyle.values();
+        var skin=com.jgeted.sagadyssey.npc.appearance.NpcSkinTone.values();
+        int h=entityData.get(DATA_HEAD_SHAPE),r=entityData.get(DATA_HAIR_STYLE),s=entityData.get(DATA_SKIN_TONE);
+        return new com.jgeted.sagadyssey.npc.appearance.NpcAppearanceProfile(
+                h>=0&&h<heads.length?heads[h]:heads[0],r>=0&&r<hair.length?hair[r]:hair[0],
+                s>=0&&s<skin.length?skin[s]:skin[0]);
+    }
+
+    public void setAppearanceProfile(com.jgeted.sagadyssey.npc.appearance.NpcAppearanceProfile profile) {
+        if (level().isClientSide()) throw new IllegalStateException("Appearance is server-owned");
+        this.appearanceProfile=java.util.Objects.requireNonNull(profile);
+        entityData.set(DATA_HEAD_SHAPE,profile.head().ordinal());
+        entityData.set(DATA_HAIR_STYLE,profile.hair().ordinal());
+        entityData.set(DATA_SKIN_TONE,profile.skin().ordinal());
     }
 
     public NpcProfession getProfession() {
@@ -637,6 +692,16 @@ public class NpcBase extends PathfinderMob implements IFactionInteractable {
 
     @Override
     public void tick() {
+        // The use flag can arrive before equipment when a held NPC enters tracking range.
+        // Resume the same native client state once the actual held stack is available.
+        if(level().isClientSide()&&isUsingItem()&&useItem.isEmpty()) {
+            ItemStack held=getItemInHand(getUsedItemHand());
+            if(!held.isEmpty()) {useItem=held;useItemRemaining=held.getUseDuration(this);}
+        }
+        // Passenger ticks bypass NeoForge's ordinary EntityTickEvent.Post. Refresh
+        // the same read-only clothing projection after loading a mounted NPC, too.
+        if(!level().isClientSide()&&isPassenger()&&(tickCount<=1||(tickCount+getId())%20==0))
+            com.jgeted.sagadyssey.npc.appearance.NpcClothingVisualEvents.refresh(this);
         if(!level().isClientSide()&&getServer()!=null){
             com.jgeted.sagadyssey.social.growth.SettlementSafetyRuntime.maintain(this);
             com.jgeted.sagadyssey.npc.brain.command.NpcDutyTask.emergency(this);
@@ -660,19 +725,20 @@ public class NpcBase extends PathfinderMob implements IFactionInteractable {
             tickAmbientProfessionAction();
             tickMerchantRestock();
         }
-        tickCombatProfessionRole();
+        boolean primaryWork = com.jgeted.sagadyssey.npc.brain.execution.NpcPrimaryWorkRuntime.reserved(this);
+        if (!primaryWork) tickCombatProfessionRole();
         tickMoraleRecovery();
         com.jgeted.sagadyssey.social.life.NpcLifeBehavior.tick(this);
 
         // === 武器变更检测（主手物品变化 → 切换近战/远程 AI） ===
         ItemStack currentHeld = getMainHandItem();
-        if (!ItemStack.matches(currentHeld, lastCheckedWeapon)) {
+        if (!primaryWork && !ItemStack.matches(currentHeld, lastCheckedWeapon)) {
             com.jgeted.sagadyssey.npc.ai.NpcWeaponSwapHandler.onWeaponChanged(this, currentHeld);
             lastCheckedWeapon = currentHeld.copy();
         }
 
         // === 弓箭手补箭自动切回远程（弹药放背包时不经过 setArrowSlot，需轮询兜底）===
-        if (!this.isRangedMode && this.profession == NpcProfession.ARCHER
+        if (!primaryWork && !this.isRangedMode && this.profession == NpcProfession.ARCHER
                 && this.tickCount % 10 == 0) {
             if (hasRangedWeaponAvailable() && hasAmmoAvailable()) {
                 ensureRangedMode();
@@ -680,7 +746,7 @@ public class NpcBase extends PathfinderMob implements IFactionInteractable {
         }
 
         // === 自动上下马检测 ===
-        if (!plannedBehavior
+        if (!plannedBehavior && !primaryWork
                 && this.tickCount % SagadysseyConfig.MOUNT_CHECK_INTERVAL.get() == 0) {
             if (this.isPassenger()) {
                 if (shouldDismount()) {
@@ -707,7 +773,7 @@ public class NpcBase extends PathfinderMob implements IFactionInteractable {
         }
 
         // === 喂马逻辑（服务端，每 100 tick ≈ 5 秒） ===
-        if (!plannedBehavior && this.tickCount % 100 == 0 && this.hasMount()) {
+        if (!plannedBehavior && !primaryWork && this.tickCount % 100 == 0 && this.hasMount()) {
             Entity mount = getMount();
             if (mount instanceof LivingEntity livingMount && livingMount.isAlive()) {
                 float hpRatio = livingMount.getHealth() / livingMount.getMaxHealth();
@@ -724,7 +790,7 @@ public class NpcBase extends PathfinderMob implements IFactionInteractable {
 
         // === 牵马步行逻辑（服务端） ===
         // NPC 的牵马是 AI 行为驱动，不依赖原版拴绳系统，因此不检查 isLeashed()
-        if (!plannedBehavior && this.hasMount() && !this.isPassenger()) {
+        if (!plannedBehavior && !primaryWork && this.hasMount() && !this.isPassenger()) {
             Entity mount = getMount();
             if (mount instanceof AbstractHorse horse && horse.isAlive()) {
                 boolean npcMoving = this.getNavigation().isInProgress() || this.zza > 0;
@@ -747,12 +813,12 @@ public class NpcBase extends PathfinderMob implements IFactionInteractable {
         // 原因：AbstractHorse.getControllingPassenger() 只认 Player，NPC 乘客不产生前进输入。
         // MoveControl.setWantedPosition() 只设 speed 不设 zza，travel() 得不到前进力。
         // 改为直接 setDeltaMovement 驱动，可靠且速度可控。
-        if (plannedBehavior && this.isPassenger()
+        if (plannedBehavior && !primaryWork && this.isPassenger()
                 && (this.getTarget() == null || !this.getTarget().isAlive())
                 && this.getVehicle() instanceof AbstractHorse horse) {
             horse.setDeltaMovement(0, horse.getDeltaMovement().y, 0);
         }
-        if (this.isPassenger() && (!plannedBehavior
+        if (!primaryWork && this.isPassenger() && (!plannedBehavior
                 || this.getTarget() != null && this.getTarget().isAlive())) {
             Entity vehicle = this.getVehicle();
             if (vehicle instanceof AbstractHorse horse) {
@@ -1273,6 +1339,19 @@ public class NpcBase extends PathfinderMob implements IFactionInteractable {
     }
 
     // === 坐骑绑定 ===
+
+    @Override
+    public Vec3 getVehicleAttachmentPoint(Entity vehicle) {
+        Vec3 attachment = super.getVehicleAttachmentPoint(vehicle);
+        if (vehicle instanceof AbstractHorse horse && !horse.isBaby()) {
+            double visualScale = com.jgeted.sagadyssey.npc.appearance.NpcRidingSeat.modelScale(horse);
+            double seat = horse.getAttachments().get(net.minecraft.world.entity.EntityAttachment.PASSENGER, 0, 0).y;
+            double height = com.jgeted.sagadyssey.npc.appearance.NpcRidingSeat.attachmentHeight(
+                    seat, visualScale * horse.getScale(), getScale());
+            return new Vec3(attachment.x, height, attachment.z);
+        }
+        return attachment;
+    }
 
     /** 绑定坐骑 */
     public void bindMount(Entity mount) {
@@ -1990,6 +2069,7 @@ public class NpcBase extends PathfinderMob implements IFactionInteractable {
     @Override
     protected void registerGoals() {
         this.goalSelector.addGoal(0, new FloatGoal(this));
+        this.goalSelector.addGoal(0, new com.jgeted.sagadyssey.npc.brain.execution.NpcPrimaryWorkGoal(this));
         this.goalSelector.addGoal(0, new com.jgeted.sagadyssey.npc.ai.LowHpRetreatGoal(this));
         this.goalSelector.addGoal(0, new com.jgeted.sagadyssey.npc.ai.NpcHomeSleepGoal(this));
         // 新行为桥只在单个 NPC 被管理员显式切为 PLANNED 后运行。
@@ -2234,6 +2314,7 @@ public class NpcBase extends PathfinderMob implements IFactionInteractable {
         tag.putString("Office", this.office.name());
         tag.putString("Gender", this.gender.name());
         tag.putString("FaceVariant", this.faceVariant.name());
+        this.appearanceProfile.save(tag);
         tag.putInt("Experience", this.experience);
         tag.putInt("MerchantSeed", this.merchantTradeSeed);
         tag.putLong("MerchantRestockAt", this.merchantRestockAt);
@@ -2318,6 +2399,7 @@ public class NpcBase extends PathfinderMob implements IFactionInteractable {
 
     private void readNpcData(CompoundTag tag) {
         equipmentInventory.clearContent();
+        this.appearanceProfile=com.jgeted.sagadyssey.npc.appearance.NpcAppearanceProfile.read(tag);
         this.characterId = NpcCharacterIdentityMigration.resolve(tag, getUUID());
         if (tag.contains("NpcName")) {
             this.customName = tag.getStringOr("NpcName", "");
@@ -2548,6 +2630,7 @@ public class NpcBase extends PathfinderMob implements IFactionInteractable {
         this.entityData.set(DATA_OFFICE, this.office.ordinal());
         this.entityData.set(DATA_GENDER, this.gender.ordinal());
         this.entityData.set(DATA_FACE_VARIANT, this.faceVariant.ordinal());
+        setAppearanceProfile(this.appearanceProfile);
         this.getAttribute(Attributes.KNOCKBACK_RESISTANCE)
                 .setBaseValue(this.profession == NpcProfession.HEAVY ? 0.65D : 0.0D);
         syncVisibleName();

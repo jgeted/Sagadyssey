@@ -111,6 +111,33 @@ class ServiceRelationshipDataTest {
     }
 
     @Test
+    void indexedHistoryAndScopesPreservePriorPrincipalsAfterReloadAndRevocation() {
+        var data = new ServiceRelationshipData();
+        var previous = UUID.randomUUID();
+        var current = UUID.randomUUID();
+        var agent = UUID.randomUUID();
+        var other = UUID.randomUUID();
+        data.beginVoluntaryEmployment(previous, agent, 10);
+        data.beginVoluntaryEmployment(previous, other, 10);
+        data.beginVoluntaryEmployment(current, agent, 12);
+        data.endActive(previous, agent, ServiceStatus.CANCELLED, "原关系解除", 13);
+
+        var restored = ServiceRelationshipData.load(data.save(new net.minecraft.nbt.CompoundTag(), null), null);
+        assertTrue(restored.hasHistory(agent));
+        assertFalse(restored.hasHistory(UUID.randomUUID()));
+        assertFalse(restored.hasActiveBetween(previous, agent, 14));
+        assertTrue(restored.hasActiveBetween(previous, other, 14));
+        assertFalse(restored.hasScope(current, agent, AuthorityScope.FOLLOW, 11));
+        assertTrue(restored.hasScope(current, agent, AuthorityScope.FOLLOW, 14));
+        assertEquals("原关系解除", restored.authorize(previous, agent, AuthorityScope.FOLLOW, false, 14).reason());
+
+        restored.endActiveForAgent(agent, ServiceStatus.CANCELLED, "停役", 15);
+        assertTrue(restored.hasHistory(agent));
+        assertFalse(restored.hasActiveBetween(current, agent, 16));
+        assertTrue(restored.hasScope(previous, other, AuthorityScope.FOLLOW, 16));
+    }
+
+    @Test
     void unknownScopeIsNotSilentlyDiscarded() {
         var data = new ServiceRelationshipData();
         var relationship = data.beginVoluntaryEmployment(UUID.randomUUID(), UUID.randomUUID(), 10);

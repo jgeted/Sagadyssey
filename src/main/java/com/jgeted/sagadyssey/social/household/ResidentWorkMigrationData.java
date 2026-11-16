@@ -95,6 +95,10 @@ public final class ResidentWorkMigrationData extends NbtSavedData {
         applications.put(person,t);setDirty();history(s,t,"resident_move_applied");return "WAITING";
     }
     public static String obligations(MinecraftServer s,UUID person,UUID body){
+        return obligations(s,person,body,null);
+    }
+    public static String obligations(MinecraftServer s,UUID person,UUID body,UUID requestingOperation){
+        if(com.jgeted.sagadyssey.social.work.WorkCommitmentRuntime.blocksOther(s,person,requestingOperation))return "共享主劳动已占用，等待原责任正式释放";
         var f=FieldworkData.get(s);long now=s.overworld().getGameTime();
         if(f.pendingDelivery(body).isPresent()||f.pendingCargo(body).values().stream().anyMatch(q->q>0)||!f.outstandingScaffolds(body).isEmpty())return "田作交付、真实产出或脚手架义务未结清";
         if(SupplyFlowData.get(s).routes().stream().anyMatch(r->!r.closed()&&(person.equals(r.carrierCharacter())||body.equals(r.carrierEntity()))))return "原承运路线尚未结清";
@@ -171,7 +175,7 @@ public final class ResidentWorkMigrationData extends NbtSavedData {
         n.getNavigation().stop();NpcBrainRuntime.cancel(n,PlanCancellationReason.AUTHORIZED_COMMAND,"已抵达并提交，交由原生产计划器接续");
         t.putLong("Completed",now);t.putLong("ArrivalPosition",n.blockPosition().asLong());state(t,"DONE","原人物已迁入并接替实际林地，新产出按原规则贡献家庭；劳动回执另行验证");history(s,t,"resident_move_completed");
     }}
-    public static boolean tickActor(NpcBase n){var d=existing(MinecraftApi.server(n));var t=d==null?null:d.applications.get(n.getCharacterId());if(t==null||!moving(MinecraftApi.server(n),n.getCharacterId()))return false;
+    public static boolean tickActor(NpcBase n){if(com.jgeted.sagadyssey.social.work.WorkCommitmentRuntime.blocksCivil(n))return false;var d=existing(n.getServer());var t=d==null?null:d.applications.get(n.getCharacterId());if(t==null||!moving(n.getServer(),n.getCharacterId()))return false;
         if(t.getStringOr("State", "").equals("REVIEW")){n.getNavigation().stop();return true;}
         var b=to(t);var target=NaturalVillageLayout.at(b,NaturalVillageLayout.PANTRY);
         if(!n.isAlive()||n.getTarget()!=null||n.getCommand()!=NpcCommand.WORK||n.blockPosition().distSqr(target)<49){n.getNavigation().stop();return true;}

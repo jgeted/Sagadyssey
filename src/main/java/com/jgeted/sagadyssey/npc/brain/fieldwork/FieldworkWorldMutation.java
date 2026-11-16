@@ -36,9 +36,16 @@ public final class FieldworkWorldMutation implements FieldworkCommitService.Muta
     private final long now;
     private final FieldworkActionReceipt receipt;
     private FieldworkCommitService.Blocker blocker;
+    private final java.util.function.BooleanSupplier workAuthority;
 
     public FieldworkWorldMutation(NpcEntityExecutionContext context, FieldworkAction action,
                                   Map<String, String> params, long now) {
+        this(context,action,params,now,()->FieldworkDiscovery.allowed(context.npc(),action.target()));
+    }
+    /** Explicit server-side work-scope binding; original inventory, rights, target lease and rollback remain mandatory. */
+    public FieldworkWorldMutation(NpcEntityExecutionContext context, FieldworkAction action,
+                                  Map<String,String> params,long now,java.util.function.BooleanSupplier workAuthority){
+        this.workAuthority=Objects.requireNonNull(workAuthority);
         npc = context.npc(); level = context.level(); this.action = action; this.now = now;
         if (!level.getServer().isSameThread()) throw new IllegalStateException("fieldwork must run on server thread");
         try {
@@ -60,7 +67,7 @@ public final class FieldworkWorldMutation implements FieldworkCommitService.Muta
         List<FieldworkActionReceipt.ItemDelta> deltas = new ArrayList<>();
         int wear = 0;
         boolean breaking = action.operation() == FieldworkAction.Operation.MINE
-                || action.operation() == FieldworkAction.Operation.CHOP || action.operation() == FieldworkAction.Operation.HARVEST;
+                || action.operation() == FieldworkAction.Operation.CHOP || action.operation() == FieldworkAction.Operation.HARVEST||action.operation()==FieldworkAction.Operation.EXCAVATE;
         int toolSlot = toolSlot(action.operation(), before);
         if (needsTool(action.operation()) && toolSlot < 0) block("MISSING_TOOL", "缺少适用工具或使用权");
         if (before.hasBlockEntity() || after.hasBlockEntity()) block("BLOCK_ENTITY_FORBIDDEN", "不能把储物或功能方块当作普通材料作业");
@@ -107,7 +114,7 @@ public final class FieldworkWorldMutation implements FieldworkCommitService.Muta
         if (!action.dimension().equals(level.dimension().identifier().toString())) return denied("WRONG_DIMENSION", "目标维度已变化");
         if (!level.hasChunkAt(action.target())) return denied("CHUNK_UNLOADED", "目标区块未加载");
         boolean recovery = action.operation() == FieldworkAction.Operation.RECOVER_SCAFFOLD;
-        if (action.operation() == FieldworkAction.Operation.PLACE_SCAFFOLD
+        if ((action.operation() == FieldworkAction.Operation.PLACE_SCAFFOLD||action.operation()==FieldworkAction.Operation.PLACE_BLOCK)
                 && !level.getEntitiesOfClass(net.minecraft.world.entity.LivingEntity.class,
                 new net.minecraft.world.phys.AABB(action.target())).isEmpty()) {
             return denied("PLACEMENT_OCCUPIED", "放置格仍有活体，不能把承重材料放进身体");
@@ -115,7 +122,7 @@ public final class FieldworkWorldMutation implements FieldworkCommitService.Muta
         if (recovery && FieldworkData.get(level.getServer()).outstandingScaffolds(npc.getUUID()).stream()
                 .noneMatch(value -> value.action().target().equals(action.target()) && value.action().dimension().equals(action.dimension())
                         && value.resultingState().equals(action.expectedState()))) return denied("NO_SCAFFOLD_RECEIPT", "不能回收没有本劳动者放置回执的方块");
-        if (!recovery && !FieldworkDiscovery.allowed(npc, action.target())) return denied("OUTSIDE_WORK_AREA", "工作范围已变化");
+        if (!recovery && !workAuthority.getAsBoolean()) return denied("OUTSIDE_WORK_AREA", "工作范围或原授权已变化");
         if (recovery && !level.getEntitiesOfClass(net.minecraft.world.entity.LivingEntity.class,
                 new net.minecraft.world.phys.AABB(action.target()).move(0, 1, 0)).isEmpty()) {
             return denied("SCAFFOLD_OCCUPIED", "承重方块上仍有活体，不能拆除");
@@ -196,12 +203,18 @@ public final class FieldworkWorldMutation implements FieldworkCommitService.Muta
             ItemStack tool = working[slot];
             boolean suitable = operation == FieldworkAction.Operation.TILL ? tool.getItem() instanceof HoeItem
                     : operation == FieldworkAction.Operation.CHOP ? tool.getItem() instanceof AxeItem || tool.getItem() instanceof ShearsItem
+                    : operation == FieldworkAction.Operation.EXCAVATE ? excavationTool(tool,state)
                     : operation == FieldworkAction.Operation.MINE ? tool.is(net.minecraft.tags.ItemTags.PICKAXES)
                     || !FieldworkDiscovery.mineTarget(state) && tool.getItem() instanceof ShovelItem : true;
             if (!tool.isEmpty() && suitable && (!state.requiresCorrectToolForDrops() || tool.isCorrectToolForDrops(state))
                     && permitted(slot, AssetRight.USE)) return slot;
         }
         return -1;
+    }
+    /** Shared tool classification; shears are admitted only for an actual cobweb, never as a stone/soil tool. */
+    public static boolean excavationTool(ItemStack tool,BlockState state){
+        return state.is(Blocks.COBWEB)?tool.getItem() instanceof ShearsItem
+                :tool.is(net.minecraft.tags.ItemTags.PICKAXES)||tool.getItem() instanceof ShovelItem||tool.getItem() instanceof AxeItem;
     }
     private boolean permitted(int slot, AssetRight right) {
         ItemStack stack = original[slot];
@@ -236,7 +249,7 @@ public final class FieldworkWorldMutation implements FieldworkCommitService.Muta
     }
     public static boolean needsTool(FieldworkAction.Operation operation) {
         return operation == FieldworkAction.Operation.MINE || operation == FieldworkAction.Operation.CHOP
-                || operation == FieldworkAction.Operation.TILL;
+                || operation == FieldworkAction.Operation.TILL||operation==FieldworkAction.Operation.EXCAVATE;
     }
     public static String fingerprint(ItemStack stack) {
         ItemFingerprint fingerprint = ItemFingerprint.of(stack);

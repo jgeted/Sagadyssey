@@ -1,5 +1,7 @@
 package com.jgeted.sagadyssey.worldsim.rights;
 
+import net.minecraft.core.UUIDUtil;
+
 import com.jgeted.sagadyssey.core.MinecraftApi;
 
 import net.minecraft.core.HolderLookup;
@@ -28,10 +30,29 @@ public final class RightsStateData extends NbtSavedData {
     private final Map<UUID, ContainerContext> contexts = new HashMap<>();
     private final Map<UUID, RightGrant> grants = new HashMap<>();
     private final Map<UUID, AssetClaim> claims = new HashMap<>();
+    private record ClaimSlot(UUID container, int slot, ItemFingerprint item) {}
+    /** Runtime-only index; repeated equipment observations must not scan every world's claim. */
+    private Map<ClaimSlot, List<AssetClaim>> claimSlots;
     private final Map<UUID, AssetReservation> reservations = new HashMap<>();
+    private final Map<UUID, CompoundTag> itemOperationWitnesses = new HashMap<>();
 
     public static RightsStateData get(MinecraftServer server) {
-        return server.overworld().getDataStorage().computeIfAbsent(FACTORY.type(DATA_NAME));
+        return com.jgeted.sagadyssey.worldsim.PersistentDataAccess.getOrCreate(server, FACTORY, DATA_NAME);
+    }
+
+    /** 与物权变化共同保存的效果凭据；旧消费者保持原接口，新消费者显式采用幂等操作。 */
+    @Nullable public CompoundTag itemOperationWitness(UUID operation) {
+        var proof = itemOperationWitnesses.get(operation); return proof == null ? null : proof.copy();
+    }
+    public boolean canRecordItemOperation(UUID operation) { return itemOperationWitnesses.containsKey(operation) || itemOperationWitnesses.size() < 8192; }
+    public void recordItemOperation(UUID operation, CompoundTag witness) {
+        if (!canRecordItemOperation(operation) || !witness.read("Id", UUIDUtil.CODEC).isPresent() || !operation.equals(witness.read("Id", UUIDUtil.CODEC).orElseThrow())
+                || !witness.keySet().equals(Set.of("Id", "Mode", "Request", "Proof"))
+                || !Set.of("TRANSFER", "CONSUME").contains(witness.getStringOr("Mode", ""))
+                || !MinecraftApi.containsTag(witness, "Request", Tag.TAG_COMPOUND) || !MinecraftApi.containsTag(witness, "Proof", Tag.TAG_COMPOUND)) throw new IllegalArgumentException("invalid/full item operation evidence");
+        var prior = itemOperationWitnesses.putIfAbsent(operation, witness.copy());
+        if (prior != null && !prior.equals(witness)) throw new IllegalStateException("item operation evidence conflict");
+        if (prior == null) setDirty();
     }
 
     public ContainerContext ensureContext(UUID id, String locator, SubjectRef custodian,
@@ -76,11 +97,12 @@ public final class RightsStateData extends NbtSavedData {
     public void putClaim(AssetClaim claim) {
         removeClaimsAt(claim.containerId(), claim.slot(), claim.fingerprint());
         claims.put(claim.claimId(), claim);
+        claimSlots = null;
         setDirty();
     }
 
     public void removeClaim(UUID claimId) {
-        if (claims.remove(claimId) != null) setDirty();
+        if (claims.remove(claimId) != null) { claimSlots = null; setDirty(); }
     }
 
     public void removeClaimsAt(UUID containerId, int slot, ItemFingerprint fingerprint) {
@@ -89,7 +111,7 @@ public final class RightsStateData extends NbtSavedData {
             return claim.containerId().equals(containerId) && claim.slot() == slot
                     && claim.fingerprint().equals(fingerprint);
         });
-        if (changed) setDirty();
+        if (changed) { claimSlots = null; setDirty(); }
     }
 
     public void removeClaimsForSlot(UUID containerId, int slot) {
@@ -97,22 +119,22 @@ public final class RightsStateData extends NbtSavedData {
             AssetClaim claim = entry.getValue();
             return claim.containerId().equals(containerId) && claim.slot() == slot;
         });
-        if (changed) setDirty();
+        if (changed) { claimSlots = null; setDirty(); }
     }
 
     @Nullable
     public AssetClaim claimAt(UUID containerId, int slot, ItemFingerprint fingerprint) {
-        return claims.values().stream()
-                .filter(claim -> claim.containerId().equals(containerId) && claim.slot() == slot
-                        && claim.fingerprint().equals(fingerprint))
-                .findFirst().orElse(null);
+        var values = claimsAt(containerId, slot, fingerprint);
+        return values.isEmpty() ? null : values.getFirst();
     }
 
     public List<AssetClaim> claimsAt(UUID containerId, int slot, ItemFingerprint fingerprint) {
-        return claims.values().stream()
-                .filter(claim -> claim.containerId().equals(containerId) && claim.slot() == slot
-                        && claim.fingerprint().equals(fingerprint))
-                .toList();
+        if (claimSlots == null) {
+            var grouped = new HashMap<ClaimSlot, List<AssetClaim>>();
+            for (var claim : claims.values()) grouped.computeIfAbsent(new ClaimSlot(claim.containerId(), claim.slot(), claim.fingerprint()), key -> new ArrayList<>()).add(claim);
+            grouped.replaceAll((key, values) -> List.copyOf(values)); claimSlots = grouped;
+        }
+        return claimSlots.getOrDefault(new ClaimSlot(containerId, slot, fingerprint), List.of());
     }
 
     public Collection<AssetClaim> claims() { return List.copyOf(claims.values()); }
@@ -225,6 +247,7 @@ public final class RightsStateData extends NbtSavedData {
         contexts.putAll(snapshot.contexts());
         claims.entrySet().removeIf(entry -> snapshot.containerIds().contains(entry.getValue().containerId()));
         claims.putAll(snapshot.claims());
+        claimSlots = null;
         reservations.entrySet().removeIf(entry -> snapshot.containerIds().contains(
                 entry.getValue().containerId()));
         reservations.putAll(snapshot.reservations());
@@ -251,11 +274,24 @@ public final class RightsStateData extends NbtSavedData {
         ListTag reservationList = new ListTag();
         reservations.values().forEach(reservation -> reservationList.add(reservation.save()));
         tag.put("Reservations", reservationList);
+        if (!itemOperationWitnesses.isEmpty()) {
+            tag.putInt("ItemOperationWitnessSchema", 1); var witnesses = new ListTag();
+            itemOperationWitnesses.entrySet().stream().sorted(Map.Entry.comparingByKey()).forEach(entry -> witnesses.add(entry.getValue().copy())); tag.put("ItemOperationWitnesses", witnesses);
+        }
         return tag;
     }
 
     private static RightsStateData load(CompoundTag tag, HolderLookup.Provider registries) {
         RightsStateData data = new RightsStateData();
+        if (tag.contains("ItemOperationWitnessSchema") || tag.contains("ItemOperationWitnesses")) {
+            if (!MinecraftApi.containsTag(tag, "ItemOperationWitnessSchema", Tag.TAG_INT) || tag.getIntOr("ItemOperationWitnessSchema", 0) != 1
+                    || !(tag.get("ItemOperationWitnesses") instanceof ListTag witnesses) || witnesses.size() > 8192
+                    || !witnesses.isEmpty() && MinecraftApi.elementType(witnesses) != Tag.TAG_COMPOUND) throw new IllegalArgumentException("unsupported item operation evidence");
+            for (Tag raw : witnesses) { var proof = (CompoundTag) raw;
+                if (!proof.read("Id", UUIDUtil.CODEC).isPresent() || data.itemOperationWitnesses.containsKey(proof.read("Id", UUIDUtil.CODEC).orElseThrow())) throw new IllegalArgumentException("duplicate item operation evidence");
+                data.recordItemOperation(proof.read("Id", UUIDUtil.CODEC).orElseThrow(), proof);
+            }
+        }
         ListTag contexts = MinecraftApi.listOfType(tag, "Contexts", Tag.TAG_COMPOUND);
         for (int i = 0; i < contexts.size(); i++) {
             ContainerContext context = ContainerContext.load(contexts.getCompoundOrEmpty(i));
@@ -278,6 +314,7 @@ public final class RightsStateData extends NbtSavedData {
                 data.reservations.put(reservation.id(), reservation);
             } catch (RuntimeException ignored) { }
         }
+        data.setDirty(false);
         return data;
     }
 }

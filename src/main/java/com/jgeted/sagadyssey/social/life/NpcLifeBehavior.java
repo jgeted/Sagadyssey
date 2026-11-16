@@ -25,7 +25,8 @@ public final class NpcLifeBehavior {
         int hungerGain = 2;
         if (npc.getTarget() != null) hungerGain += 2;
         if (npc.getNavigation().isInProgress()) hungerGain += 1;
-        data.increaseHunger(npc.getCharacterId(), hungerGain, level.getGameTime());
+        if (!com.jgeted.sagadyssey.social.work.ServiceProvisionRuntime.ownsNeeds(npc))
+            data.increaseHunger(npc.getCharacterId(), hungerGain, level.getGameTime());
         NpcNeedsRecord needs = data.needs(npc.getCharacterId());
         if (needs != null && needs.hunger() >= 900 && npc.tickCount % 1200 == 0) {
             npc.adjustMoral(-2);

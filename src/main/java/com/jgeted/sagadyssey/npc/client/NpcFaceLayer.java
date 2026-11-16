@@ -19,13 +19,14 @@ public final class NpcFaceLayer extends RenderLayer<NpcRenderState, NpcModel> {
     @Override
     public void submit(PoseStack poseStack, SubmitNodeCollector collector, int packedLight,
                        NpcRenderState state, float yRot, float xRot) {
-        coloredCutoutModelCopyLayerRender(model, texture(state), poseStack, collector,
+        if (state.isInvisible) return;
+        coloredCutoutModelCopyLayerRender(model, NpcAppearanceTextures.face(state), poseStack, collector,
                 packedLight, state, 0xFFFFFFFF, 1);
     }
 
     private static Identifier texture(NpcRenderState state) {
         String name = state.gender.id() + "_" + state.face.id();
         return Identifier.fromNamespaceAndPath(
-                "sagadyssey", "textures/entity/npc/face/" + name + ".png");
+                "sagadyssey", "textures/entity/npc/revision_v2/face/" + name + ".png");
     }
 }

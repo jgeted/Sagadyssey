@@ -8,7 +8,6 @@
         "JigsawPlacementMixin",
         "StructureCollisionMixin",
         "StructureMixin",
-        "AbstractHorsePassengerMixin",
         "CocoaBlockMixin",
         "StructureStartPlacementMixin",
         "PoolElementPlacementMixin",

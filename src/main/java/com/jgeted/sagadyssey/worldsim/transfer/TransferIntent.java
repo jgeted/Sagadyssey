@@ -1,6 +1,6 @@
 package com.jgeted.sagadyssey.worldsim.transfer;
 
-/** Six lawful intents plus an explicit unlawful possession change used by theft/looting systems. */
+/** RELOCATE only rearranges one custodian's assets without changing title or loan provenance. */
 public enum TransferIntent {
-    GIFT, ISSUE, DELIVERY, PAYMENT, LOAN, RETURN, THEFT
+    GIFT, ISSUE, DELIVERY, PAYMENT, LOAN, RETURN, THEFT, RELOCATE
 }

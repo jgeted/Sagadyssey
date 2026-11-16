@@ -24,7 +24,7 @@ public final class SupplyTransportTask implements NpcTaskExecutor {
     public static final Identifier PROVIDER=Identifier.parse("sagadyssey:supply");
     private final Map<UUID,MovementProgress> movement=new HashMap<>();
     private final Map<String,net.minecraft.core.BlockPos> regionalWaypoints=new HashMap<>();
-    public static boolean eligible(NpcBase npc){return npc.isAlive()&&NpcBrainRuntime.isPlanned(npc)
+    public static boolean eligible(NpcBase npc){return !com.jgeted.sagadyssey.social.work.WorkCommitmentRuntime.blocksCivil(npc)&&npc.isAlive()&&NpcBrainRuntime.isPlanned(npc)
             &&npc.getCommand()==NpcCommand.WORK&&npc.getTarget()==null&&npc.getTransportSlotLimit()>0;}
     public static boolean accepts(NpcBase npc,SupplyFlowData.Route route){
         if(route.carrierEntity()!=null){

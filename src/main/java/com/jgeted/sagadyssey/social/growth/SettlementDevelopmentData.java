@@ -71,6 +71,7 @@ public final class SettlementDevelopmentData extends NbtSavedData {
             var hint=chars.bodyOf(m.characterId());
             var body=hint!=null&&hint.dimensionId().equals(h.dimension())?l.getEntity(hint.entityId()):null;
             if(body instanceof NpcBase n&&n.isAlive()&&!n.isBaby()&&!n.isNoAi()&&n.getCommand()==NpcCommand.WORK&&n.getTarget()==null
+                    &&!com.jgeted.sagadyssey.social.work.WorkCommitmentRuntime.blocksCivil(s,n.getCharacterId())
                     &&r.authority()==NpcWorkAuthority.INSTITUTION&&Objects.equals(r.activeWorkplaceSettlementId(),h.settlementId()))workers++;
         }
         int food=0;var inv=h.sharedStorage()==null?null:box(l,h.sharedStorage());
@@ -462,7 +463,8 @@ public final class SettlementDevelopmentData extends NbtSavedData {
                 &&NaturalPolityData.get(MinecraftApi.server(n)).authorized(MinecraftApi.server(n),b,PoliticalStateData.get(MinecraftApi.server(n)).titleHolder(b.settlementId()))&&!NaturalPolityData.paused(MinecraftApi.server(n),n.getCharacterId());
     }
     public Optional<NpcPlan> choose(NpcBase n,long now){
-        var row=forPerson(MinecraftApi.server(n),n.getCharacterId());if(row==null||row.getBooleanOr("Review", false)||!eligible(n,row)||moving(MinecraftApi.server(n),n.getCharacterId()))return Optional.empty();
+        if(com.jgeted.sagadyssey.social.work.WorkCommitmentRuntime.blocksCivil(n))return Optional.empty();
+        var row=forPerson(n.getServer(),n.getCharacterId());if(row==null||row.getBooleanOr("Review", false)||!eligible(n,row)||moving(n.getServer(),n.getCharacterId()))return Optional.empty();
         if(n.getProfession()!=NpcProfession.WORKER&&n.getProfession()!=NpcProfession.COURIER)return Optional.empty();
         var p=current(row);if(p==null||!Set.of("BUILDING","READY","CANCEL_PENDING").contains(p.getStringOr("State", "")))return Optional.empty();
         if(!p.getStringOr("State", "").equals("CANCEL_PENDING")&&!capacity(MinecraftApi.server(n),HouseholdData.get(MinecraftApi.server(n)).forMember(n.getCharacterId())).stableFloor())return Optional.empty();
@@ -530,9 +532,10 @@ public final class SettlementDevelopmentData extends NbtSavedData {
                 &&(!t.read("Person", UUIDUtil.CODEC).isPresent()||t.read("Person", UUIDUtil.CODEC).orElseThrow().equals(n.getCharacterId()));
     }
     public String work(NpcBase n,String project,String kind,UUID plan,long now){
-        var row=forPerson(MinecraftApi.server(n),n.getCharacterId());var p=row==null?null:projectFor(row,project);if(p==null||!eligible(n,row))return "YIELD";
+        if(com.jgeted.sagadyssey.social.work.WorkCommitmentRuntime.blocksCivil(n))return "YIELD";
+        var row=forPerson(n.getServer(),n.getCharacterId());var p=row==null?null:projectFor(row,project);if(p==null||!eligible(n,row))return "YIELD";
         var t=task(p,kind);if(!t.read("Plan", UUIDUtil.CODEC).isPresent()||!t.read("Plan", UUIDUtil.CODEC).orElseThrow().equals(plan)||!t.read("Person", UUIDUtil.CODEC).orElseThrow().equals(n.getCharacterId())||t.getLongOr("LastTick", 0L)==now)return "YIELD";
-        if(!p.getStringOr("State", "").equals("CANCEL_PENDING")&&!NaturalPolityData.get(MinecraftApi.server(n)).authorized(MinecraftApi.server(n),village(row),p.read("ApprovedBy", UUIDUtil.CODEC).orElseThrow())){t.putString("Reason","原工程批准权失效，保留已领材料和原责任");setDirty();return "YIELD";}
+        if(!p.getStringOr("State", "").equals("CANCEL_PENDING")&&!NaturalPolityData.get(n.getServer()).authorized(n.getServer(),village(row),p.read("ApprovedBy", UUIDUtil.CODEC).orElseThrow())){t.putString("Reason","原工程批准权失效，保留已领材料和原责任");setDirty();return "YIELD";}
         t.putLong("LastTick",now);t.putString("State","WORKING");
         int oldWork=t.getIntOr("Work", 0),oldPlaced=t.getIntOr("Placed", 0),oldCycle=t.getIntOr("Cycle", 0);String oldTransfer=t.read("LastTransfer", UUIDUtil.CODEC).isPresent()?t.read("LastTransfer", UUIDUtil.CODEC).orElseThrow().toString():"";
         setDirty();String result;
@@ -704,7 +707,8 @@ public final class SettlementDevelopmentData extends NbtSavedData {
         p.putLong("Built",now);state(p,"READY","独立三床住宅与实物粮仓建成，尚未入住",now);return true;
     }
     public static boolean travel(NpcBase n){
-        var d=existing(MinecraftApi.server(n));var a=d==null?null:d.moveFor(MinecraftApi.server(n),n.getCharacterId());if(a==null||!moving(MinecraftApi.server(n),n.getCharacterId()))return false;
+        if(com.jgeted.sagadyssey.social.work.WorkCommitmentRuntime.blocksCivil(n))return false;
+        var d=existing(n.getServer());var a=d==null?null:d.moveFor(n.getServer(),n.getCharacterId());if(a==null||!moving(n.getServer(),n.getCharacterId()))return false;
         var b=village(a);var dest=SettlementDevelopmentLayout.entrance(b,a.getIntOr("Lot", 0));
         if(!n.isAlive()||n.getTarget()!=null||n.getCommand()!=NpcCommand.WORK)return true;
         if(n.blockPosition().distSqr(dest)<16){n.getNavigation().stop();return true;}

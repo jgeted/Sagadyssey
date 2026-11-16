@@ -21,10 +21,13 @@ public final class PersistentDataAccess {
         T existing = storage.get(factory.type(name));
         if (existing != null) return existing;
         var directory = server.getWorldPath(LevelResource.ROOT).resolve("data");
-        if (Files.exists(directory.resolve(name + ".dat"))
-                || Files.exists(directory.resolve(name + ".dat_old")))
-            throw new IllegalStateException("Unreadable ledger " + name
-                    + "; original data retained, recovery required");
+        for (String suffix : java.util.List.of(".dat", ".dat_old", ".dat.old")) {
+            try {
+                Files.readAttributes(directory.resolve(name + suffix), java.nio.file.attribute.BasicFileAttributes.class, java.nio.file.LinkOption.NOFOLLOW_LINKS);
+                throw new IllegalStateException("Unreadable ledger " + name + "; original data retained, recovery required");
+            } catch (java.nio.file.NoSuchFileException absent) { /* Only confirmed absence permits creation. */ }
+            catch (java.io.IOException failure) { throw new IllegalStateException("Cannot verify ledger absence: " + name, failure); }
+        }
         T created = factory.constructor().get();
         storage.set(factory.type(name), created);
         return created;

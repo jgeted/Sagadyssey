@@ -65,6 +65,8 @@ public final class InstitutionData extends NbtSavedData {
     public List<InstitutionMembership> memberships() { return List.copyOf(memberships.values()); }
 
     public List<InstitutionOffice> offices() { return List.copyOf(offices.values()); }
+    /** Exact identity lookup; adapters need not copy or scan all institutions' offices. */
+    @Nullable public InstitutionOffice office(UUID id) { return offices.get(id); }
 
     public List<InstitutionMembership> membershipsOf(SubjectRef member) {
         return memberships.values().stream().filter(value -> value.active()

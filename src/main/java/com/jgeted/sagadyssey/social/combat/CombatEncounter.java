@@ -18,6 +18,8 @@ public record CombatEncounter(UUID id, @Nullable UUID settlementId,
                               long startedAt, long endedAt, EncounterStatus status,
                               List<CombatSide> sides, List<EncounterEvent> events,
                               int revision) {
+    public static final int MAX_EVENTS = 1024;
+
     public CombatEncounter {
         if (id == null || dimension == null || dimension.isBlank() || center == null
                 || radius <= 0 || status == null || sides == null || sides.size() < 2
@@ -25,7 +27,7 @@ public record CombatEncounter(UUID id, @Nullable UUID settlementId,
                 || revision < 0) throw new IllegalArgumentException("invalid combat encounter");
         sides = List.copyOf(sides);
         events = List.copyOf(events == null ? List.of() : events);
-        if(events.size()>256) throw new IllegalArgumentException("combat event budget exceeded");
+        if(events.size()>MAX_EVENTS) throw new IllegalArgumentException("combat event budget exceeded");
     }
 
     @Nullable
@@ -42,7 +44,7 @@ public record CombatEncounter(UUID id, @Nullable UUID settlementId,
         if (!event.encounterId().equals(id)) throw new IllegalArgumentException("foreign event");
         if (events.stream().anyMatch(value -> value.id().equals(event.id()))) return this;
         if(status==EncounterStatus.ENDED) throw new IllegalStateException("ended encounter cannot accept new events");
-        if(events.size()>=256) throw new IllegalStateException("combat event budget exceeded");
+        if(events.size()>=MAX_EVENTS) throw new IllegalStateException("combat event budget exceeded");
         List<EncounterEvent> updated = new ArrayList<>(events);
         updated.add(event);
         EncounterStatus next = event.type() == EncounterEventType.ROUTED

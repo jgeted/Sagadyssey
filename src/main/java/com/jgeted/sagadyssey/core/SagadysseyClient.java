@@ -18,15 +18,17 @@ import com.jgeted.sagadyssey.npc.client.NpcModel;
 import com.jgeted.sagadyssey.npc.client.NpcFaceModel;
 import com.jgeted.sagadyssey.npc.client.NpcIdentityClothingModel;
 import com.jgeted.sagadyssey.npc.client.NpcRenderer;
+import com.jgeted.sagadyssey.npc.client.NpcUniformModel;
+import com.jgeted.sagadyssey.npc.client.NpcClothingDetailsModel;
+import com.jgeted.sagadyssey.npc.client.NpcClothingReliefModel;
+import com.jgeted.sagadyssey.npc.client.NpcArmorModels;
+import com.jgeted.sagadyssey.npc.client.NpcOutfitTextures;
 import com.jgeted.sagadyssey.npc.faction.gui.ReputationChartScreen;
 import com.jgeted.sagadyssey.npc.registry.NpcEntityTypes;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.model.HumanoidModel;
 import net.minecraft.client.renderer.entity.ArmorModelSet;
 import net.minecraft.client.model.geom.ModelLayerLocation;
-import net.minecraft.client.model.geom.builders.CubeDeformation;
-import net.minecraft.client.model.geom.builders.LayerDefinition;
 import net.minecraft.resources.Identifier;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
@@ -48,6 +50,14 @@ public class SagadysseyClient {
             new ModelLayerLocation(Identifier.fromNamespaceAndPath("sagadyssey", "npc"), "face");
     public static final ModelLayerLocation NPC_IDENTITY_CLOTHING_LAYER =
             new ModelLayerLocation(Identifier.fromNamespaceAndPath("sagadyssey", "npc"), "identity_clothing");
+    public static final ModelLayerLocation NPC_UNIFORM_LAYER =
+            new ModelLayerLocation(Identifier.fromNamespaceAndPath("sagadyssey", "npc"), "uniform");
+    public static final ModelLayerLocation NPC_CLOTHING_DETAILS_LAYER =
+            new ModelLayerLocation(Identifier.fromNamespaceAndPath("sagadyssey", "npc"), "clothing_details");
+    public static final ModelLayerLocation NPC_CLOTHING_RELIEF_LAYER =
+            new ModelLayerLocation(Identifier.fromNamespaceAndPath("sagadyssey", "npc"), "clothing_relief");
+    public static final ModelLayerLocation NPC_MILITARY_ROLE_LAYER =
+            new ModelLayerLocation(Identifier.fromNamespaceAndPath("sagadyssey", "npc"), "military_role");
     public static final ArmorModelSet<ModelLayerLocation> NPC_ARMOR_LAYERS = new ArmorModelSet<>(
             armorLayer("head"), armorLayer("chest"), armorLayer("legs"), armorLayer("feet"));
 
@@ -96,8 +106,11 @@ public class SagadysseyClient {
         event.registerLayerDefinition(NPC_MODEL_LAYER, NpcModel::createBodyLayer);
         event.registerLayerDefinition(NPC_FACE_LAYER, NpcFaceModel::createBodyLayer);
         event.registerLayerDefinition(NPC_IDENTITY_CLOTHING_LAYER, NpcIdentityClothingModel::createBodyLayer);
-        var mesh = HumanoidModel.createArmorMeshSet(new CubeDeformation(0.35F), new CubeDeformation(0.68F))
-                .map(part -> LayerDefinition.create(part, 64, 32));
+        event.registerLayerDefinition(NPC_UNIFORM_LAYER, NpcUniformModel::createBodyLayer);
+        event.registerLayerDefinition(NPC_CLOTHING_DETAILS_LAYER, NpcClothingDetailsModel::createBodyLayer);
+        event.registerLayerDefinition(NPC_CLOTHING_RELIEF_LAYER, NpcClothingReliefModel::createBodyLayer);
+        event.registerLayerDefinition(NPC_MILITARY_ROLE_LAYER, com.jgeted.sagadyssey.npc.client.NpcMilitaryRoleModel::createBodyLayer);
+        var mesh = NpcArmorModels.createLayers();
         event.registerLayerDefinition(NPC_ARMOR_LAYERS.head(), mesh::head);
         event.registerLayerDefinition(NPC_ARMOR_LAYERS.chest(), mesh::chest);
         event.registerLayerDefinition(NPC_ARMOR_LAYERS.legs(), mesh::legs);
@@ -109,6 +122,11 @@ public class SagadysseyClient {
         event.registerEntityRenderer(NpcEntityTypes.NPC_BASE.get(), NpcRenderer::new);
     }
 
+
+    @SubscribeEvent
+    public static void registerOutfitReload(net.neoforged.neoforge.client.event.AddClientReloadListenersEvent event) {
+        event.addListener(Identifier.fromNamespaceAndPath("sagadyssey", "npc_outfits"), new NpcOutfitTextures());
+    }
 
     @EventBusSubscriber(value = Dist.CLIENT)
     public static class KeyHandler {

@@ -83,6 +83,16 @@ public final class TransferService {
         }
 
         Map<UUID, ItemStack[]> original = new LinkedHashMap<>();
+        for (TransferLeg leg : request.legs()) {
+            if (leg.sourceSlot() >= endpoints.get(leg.sourceContainerId()).container().getContainerSize()
+                    || leg.destinationSlot() >= endpoints.get(leg.destinationContainerId()).container().getContainerSize())
+                return fail(request, TransferReceipt.Status.INVALID, "槽位约束超出真实容器", completedAt);
+            if (request.intent() == TransferIntent.RELOCATE
+                    && (!request.initiatedBy().equals(rights.context(leg.sourceContainerId()).custodian())
+                    || !request.initiatedBy().equals(rights.context(leg.destinationContainerId()).custodian())
+                    || request.sourceAuthorities().values().stream().anyMatch(actor -> !actor.equals(request.initiatedBy()))))
+                return fail(request, TransferReceipt.Status.RIGHTS_DENIED, "内部整理仅限同一保管者的原容器", completedAt);
+        }
         Map<UUID, ItemStack[]> working = new LinkedHashMap<>();
         Map<SlotRef, ClaimMeta> metadata = new HashMap<>();
         Set<SlotRef> changedSlots = new HashSet<>();
@@ -114,11 +124,14 @@ public final class TransferService {
             ItemStack[] source = working.get(leg.sourceContainerId());
             ContainerContext destinationContext = rights.context(leg.destinationContainerId());
             int physicalMatching = 0;
-            for (ItemStack stack : source) {
+            for (int index = 0; index < source.length; index++) {
+                // Quantity reservations cover the whole container; the exact slot is enforced
+                // during extraction below, with its owner's quantity and batch reservations.
+                ItemStack stack = source[index];
                 if (leg.fingerprint().matches(stack)) physicalMatching += stack.getCount();
             }
             int reservedElsewhere = rights.reservedQuantity(leg.sourceContainerId(),
-                    leg.fingerprint(), request.authority(), request.requestedAt());
+                    leg.fingerprint(), request.intent() == TransferIntent.RELOCATE ? null : request.authority(), request.requestedAt());
             if (physicalMatching - reservedElsewhere < leg.quantity()) {
                 return fail(request, TransferReceipt.Status.RIGHTS_DENIED,
                         "可用数量已被其他生产、交易或交付承诺预留", completedAt);
@@ -127,10 +140,11 @@ public final class TransferService {
             boolean sawDeniedBatch = false;
             boolean sawContestedBatch = false;
             for (int slot = 0; slot < source.length && remaining > 0; slot++) {
+                if (leg.sourceSlot() >= 0 && slot != leg.sourceSlot()) continue;
                 ItemStack stack = source[slot];
                 if (!leg.fingerprint().matches(stack)) continue;
                 if (request.intent() != TransferIntent.THEFT) {
-                    AssetRight required = request.intent() == TransferIntent.RETURN
+                    AssetRight required = request.intent() == TransferIntent.RETURN || request.intent() == TransferIntent.RELOCATE
                             ? AssetRight.POSSESS : AssetRight.TRANSFER;
                     SubjectRef sourceActor = request.sourceAuthorities().getOrDefault(
                             leg.sourceContainerId(), request.initiatedBy());
@@ -149,13 +163,16 @@ public final class TransferService {
                 int moved = Math.min(remaining, stack.getCount());
                 SlotRef sourceRef = new SlotRef(leg.sourceContainerId(), slot);
                 ClaimMeta sourceMeta = metadata.get(sourceRef);
+                if (request.intent() == TransferIntent.RELOCATE && !sourceMeta.custodian().equals(request.initiatedBy())) {
+                    sawDeniedBatch = true; continue;
+                }
                 if (!sourceMeta.reservations().isEmpty()
-                        && !sourceMeta.reservations().contains(request.authority())) {
+                        && (request.intent() == TransferIntent.RELOCATE || !sourceMeta.reservations().contains(request.authority()))) {
                     sawDeniedBatch = true;
                     continue;
                 }
                 int ownerReservedElsewhere = rights.reservedQuantity(leg.sourceContainerId(),
-                        leg.fingerprint(), sourceMeta.owner(), request.authority(), request.requestedAt());
+                        leg.fingerprint(), sourceMeta.owner(), request.intent() == TransferIntent.RELOCATE ? null : request.authority(), request.requestedAt());
                 int ownerPhysical = physicalQuantityForOwner(source, leg.sourceContainerId(),
                         leg.fingerprint(), sourceMeta.owner(), metadata);
                 int ownerAvailable = Math.max(0, ownerPhysical - ownerReservedElsewhere);
@@ -170,7 +187,7 @@ public final class TransferService {
                 if (stack.isEmpty()) metadata.remove(sourceRef);
                 changedSlots.add(sourceRef);
                 pendingInsertions.add(new PendingInsertion(leg.destinationContainerId(),
-                        moving, targetMeta));
+                        moving, targetMeta, leg.destinationSlot()));
                 remaining -= moved;
             }
             if (remaining > 0) {
@@ -192,8 +209,9 @@ public final class TransferService {
         // using the slots vacated by their own outgoing goods.
         for (PendingInsertion pending : pendingInsertions) {
             if (!insert(working.get(pending.destinationContainerId()),
+                    endpoints.get(pending.destinationContainerId()).container(),
                     pending.destinationContainerId(), pending.stack(), pending.metadata(),
-                    metadata, changedSlots)) {
+                    metadata, changedSlots, pending.destinationSlot())) {
                 return fail(request, TransferReceipt.Status.CAPACITY_EXCEEDED,
                         "目标容器空间不足或权利批次不兼容", completedAt);
             }
@@ -208,9 +226,12 @@ public final class TransferService {
                 container.setChanged();
             }
             syncClaims(request, working, metadata, changedSlots);
-            for (TransferLeg leg : request.legs()) {
-                rights.consumeReservation(request.authority(), leg.sourceContainerId(),
-                        leg.fingerprint(), leg.quantity());
+            // Internal rearrangement does not fulfill another business's reservation.
+            if (request.intent() != TransferIntent.RELOCATE) {
+                for (TransferLeg leg : request.legs()) {
+                    rights.consumeReservation(request.authority(), leg.sourceContainerId(),
+                            leg.fingerprint(), leg.quantity());
+                }
             }
             Map<UUID, Long> finalRevisions = new HashMap<>();
             for (UUID id : involved) finalRevisions.put(id, rights.bumpContext(id));
@@ -244,23 +265,27 @@ public final class TransferService {
         return total;
     }
 
-    private boolean insert(ItemStack[] destination, UUID containerId, ItemStack moving,
+    private boolean insert(ItemStack[] destination, Container target, UUID containerId, ItemStack moving,
                            ClaimMeta targetMeta, Map<SlotRef, ClaimMeta> metadata,
-                           Set<SlotRef> changedSlots) {
+                           Set<SlotRef> changedSlots, int destinationSlot) {
         for (int slot = 0; slot < destination.length && !moving.isEmpty(); slot++) {
+            if (destinationSlot >= 0 && slot != destinationSlot) continue;
+            if (!target.canPlaceItem(slot, moving)) continue;
             ItemStack existing = destination[slot];
             SlotRef ref = new SlotRef(containerId, slot);
             if (existing.isEmpty() || !ItemStack.isSameItemSameComponents(existing, moving)
                     || !targetMeta.equals(metadata.get(ref))) continue;
-            int moved = Math.min(moving.getCount(), existing.getMaxStackSize() - existing.getCount());
+            int moved = Math.min(moving.getCount(), Math.min(existing.getMaxStackSize(), target.getMaxStackSize()) - existing.getCount());
             if (moved <= 0) continue;
             existing.grow(moved);
             moving.shrink(moved);
             changedSlots.add(ref);
         }
         for (int slot = 0; slot < destination.length && !moving.isEmpty(); slot++) {
-            if (!destination[slot].isEmpty()) continue;
-            int moved = Math.min(moving.getCount(), moving.getMaxStackSize());
+            if (destinationSlot >= 0 && slot != destinationSlot) continue;
+            if (!destination[slot].isEmpty() || !target.canPlaceItem(slot, moving)) continue;
+            int moved = Math.min(moving.getCount(), Math.min(moving.getMaxStackSize(), target.getMaxStackSize()));
+            if (moved <= 0) continue;
             destination[slot] = moving.copyWithCount(moved);
             SlotRef ref = new SlotRef(containerId, slot);
             metadata.put(ref, targetMeta);
@@ -290,6 +315,7 @@ public final class TransferService {
     private static ClaimMeta targetMetadata(TransferRequest request, ClaimMeta source,
                                             ContainerContext destination) {
         return switch (request.intent()) {
+            case RELOCATE -> source;
             case GIFT, DELIVERY, PAYMENT -> ClaimMeta.defaults(destination);
             case ISSUE -> new ClaimMeta(source.owner(), destination.custodian(),
                     union(source.encumbrances(), "issued"), source.reservations(), request.authority());
@@ -327,7 +353,7 @@ public final class TransferService {
     private record SlotRef(UUID containerId, int slot) {}
 
     private record PendingInsertion(UUID destinationContainerId, ItemStack stack,
-                                    ClaimMeta metadata) {}
+                                    ClaimMeta metadata, int destinationSlot) {}
 
     private record ClaimMeta(SubjectRef owner, SubjectRef custodian, Set<String> encumbrances,
                              Set<String> reservations, String provenance) {

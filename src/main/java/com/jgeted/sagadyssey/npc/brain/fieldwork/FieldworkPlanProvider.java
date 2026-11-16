@@ -30,7 +30,8 @@ public final class FieldworkPlanProvider {
     }
 
     public static Optional<NpcPlan> choose(NpcBase npc, long now) {
-        if(com.jgeted.sagadyssey.social.politics.NaturalPolityData.paused(MinecraftApi.server(npc),npc.getCharacterId()))return Optional.empty();
+        if (com.jgeted.sagadyssey.social.work.WorkCommitmentRuntime.blocksCivil(npc)) return Optional.empty();
+        if(com.jgeted.sagadyssey.social.politics.NaturalPolityData.paused(npc.getServer(),npc.getCharacterId()))return Optional.empty();
         if (!FieldworkDiscovery.producer(npc) || npc.getCommand() != NpcCommand.WORK || npc.getTarget() != null) return Optional.empty();
         // 导航在落地前不能给出可靠路径；这不是工作区不可达，不能写入长时失败记忆。
         if (!npc.onGround()) {
@@ -133,6 +134,7 @@ public final class FieldworkPlanProvider {
 
     /** One registered mature cell (including its real replant/deposit), never a general night shift. */
     public static Optional<NpcPlan> chooseEmergency(NpcBase npc,long now){
+        if (com.jgeted.sagadyssey.social.work.WorkCommitmentRuntime.blocksCivil(npc)) return Optional.empty();
         if(!com.jgeted.sagadyssey.core.structure.NaturalFarmRules.isFarmer(npc)
                 ||!com.jgeted.sagadyssey.core.structure.NaturalFarmRules.foodEmergency(npc)
                 ||npc.getCommand()!=NpcCommand.WORK||npc.getTarget()!=null||!npc.isAlive()

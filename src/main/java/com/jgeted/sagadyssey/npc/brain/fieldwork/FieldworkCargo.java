@@ -94,6 +94,7 @@ public final class FieldworkCargo {
                 }
                 // 所有投入都会消耗已有产出额度；恢复原有脚手架不会凭空成为新产出。
                 if (delta.quantity() < 0 || operation == FieldworkAction.Operation.MINE
+                        || operation == FieldworkAction.Operation.EXCAVATE
                         || operation == FieldworkAction.Operation.CHOP || operation == FieldworkAction.Operation.HARVEST
                         || operation == FieldworkAction.Operation.IRRIGATE && !delta.fingerprint().startsWith("minecraft:bucket")) {
                     change(cargo, delta.fingerprint(), delta.quantity());

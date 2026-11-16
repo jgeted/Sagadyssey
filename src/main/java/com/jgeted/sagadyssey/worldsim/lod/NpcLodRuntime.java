@@ -102,6 +102,7 @@ public final class NpcLodRuntime {
     }
     public static int restingHunger(long from,long until) {if(from<0||until<from)throw new IllegalArgumentException("invalid summary time");return (int)Math.min(1000,(until-from)/200*2);}
     private static void advanceNeeds(MinecraftServer server,LodCheckpoint row,long until) {
+        if(com.jgeted.sagadyssey.social.work.ServiceProvisionRuntime.ownsNeeds(server,row.person()))return;
         if(NaturalVillageEconomyData.controls(server,row.person()))return;
         var life=NpcLifeData.get(server);var needs=life.needs(row.person());
         if(needs!=null&&until>=needs.lastUpdatedAt())life.increaseHunger(row.person(),restingHunger(Math.max(row.summarizedAt(),needs.lastUpdatedAt()),until),until);

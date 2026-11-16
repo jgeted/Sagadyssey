@@ -9,6 +9,15 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class FieldworkCargoTest {
     private final UUID npc = UUID.randomUUID(), plan = UUID.randomUUID();
+    @Test void engineeringExcavationAndLaterConstructionShareOriginalCargoAccounting() {
+        var dig = receipt(0, 10, FieldworkAction.Operation.EXCAVATE, "minecraft:cobblestone#0", 3);
+        var build = receipt(1, 20, FieldworkAction.Operation.PLACE_BLOCK, "minecraft:cobblestone#0", -1);
+        var delivery = new FieldworkCargo.Delivery(UUID.randomUUID(), npc, "minecraft:cobblestone#0", 2, 30);
+        assertEquals(Map.of("minecraft:cobblestone#0", 3), FieldworkCargo.pending(List.of(dig), List.of()));
+        assertEquals(Map.of("minecraft:cobblestone#0", 2), FieldworkCargo.pending(List.of(build, dig), List.of()));
+        assertTrue(FieldworkCargo.pending(List.of(dig, build), List.of(delivery)).isEmpty());
+        assertTrue(FieldworkCargo.pending(List.of(build), List.of()).isEmpty(), "original private material never becomes labor output");
+    }
     @Test void originallyOwnedScaffoldingIsNotNewCargoAfterRecovery() {
         var place = receipt(0, 10, FieldworkAction.Operation.PLACE_SCAFFOLD, "minecraft:dirt#0", -1);
         var recover = receipt(1, 20, FieldworkAction.Operation.RECOVER_SCAFFOLD, "minecraft:dirt#0", 1);

@@ -20,18 +20,26 @@ public class NpcRenderer extends HumanoidMobRenderer<NpcBase, NpcRenderState, Np
 
     private static final Map<NpcProfession, Identifier> PROFESSION_TEXTURES = createTextureMap();
     private static final Identifier FALLBACK = texture("none");
+    private final NpcRoleItemInHandLayer heldItems;
 
     public NpcRenderer(EntityRendererProvider.Context context) {
         super(context, new NpcModel(context.bakeLayer(SagadysseyClient.NPC_MODEL_LAYER)), 0.5F);
+        this.layers.removeIf(layer -> layer instanceof net.minecraft.client.renderer.entity.layers.ItemInHandLayer);
+        heldItems=new NpcRoleItemInHandLayer(this,context);
+        this.addLayer(heldItems);
         this.addLayer(new NpcFaceLayer(
                 this, new NpcFaceModel(context.bakeLayer(SagadysseyClient.NPC_FACE_LAYER), getModel())));
         this.addLayer(new NpcIdentityClothingLayer(
                 this, new NpcIdentityClothingModel(
                         context.bakeLayer(SagadysseyClient.NPC_IDENTITY_CLOTHING_LAYER), getModel())));
+        this.addLayer(new NpcUniformLayer(this, new NpcUniformModel(context.bakeLayer(SagadysseyClient.NPC_UNIFORM_LAYER), getModel())));
+        this.addLayer(new NpcClothingDetailsLayer(this, new NpcClothingDetailsModel(context.bakeLayer(SagadysseyClient.NPC_CLOTHING_DETAILS_LAYER), getModel())));
+        this.addLayer(new NpcClothingReliefLayer(this, new NpcClothingReliefModel(context.bakeLayer(SagadysseyClient.NPC_CLOTHING_RELIEF_LAYER), getModel())));
+        this.addLayer(new NpcMilitaryRoleLayer(this, new NpcMilitaryRoleModel(context.bakeLayer(SagadysseyClient.NPC_MILITARY_ROLE_LAYER), getModel())));
         this.addLayer(new NpcLogisticsStatusLayer(this));
         // 人物脸、身份服装与职业服饰均在护甲之下；装备槽护甲始终使用原版护甲层。
         this.addLayer(new HumanoidArmorLayer<>(this,
-                SagadysseyClient.NPC_ARMOR_LAYERS.map(layer -> new HumanoidModel<NpcRenderState>(context.bakeLayer(layer))),
+                SagadysseyClient.NPC_ARMOR_LAYERS.map(layer -> new NpcArmorModel(context.bakeLayer(layer), getModel())),
                 context.getEquipmentRenderer()));
     }
 
@@ -56,13 +64,32 @@ public class NpcRenderer extends HumanoidMobRenderer<NpcBase, NpcRenderState, Np
         super.extractRenderState(npc, state, partialTick);
         state.gender = npc.getGender();
         state.face = npc.getFaceVariant();
+        var appearance = npc.getAppearanceProfile();
+        state.headShape = appearance.head();
+        state.hairStyle = appearance.hair();
+        state.skinTone = appearance.skin();
         state.socialStatus = npc.getSocialStatus();
         state.profession = npc.getProfession();
         state.action = npc.getVisualAction();
         state.actionProgress = npc.getActionProgress(partialTick);
         state.helmeted = !npc.getItemBySlot(EquipmentSlot.HEAD).isEmpty();
         state.mounted = npc.isPassenger();
+        state.chestArmored = !npc.getItemBySlot(EquipmentSlot.CHEST).isEmpty();
+        state.legArmored = !npc.getItemBySlot(EquipmentSlot.LEGS).isEmpty();
+        state.militaryClothing = npc.hasMilitaryClothing();
+        state.clothingOutfit = npc.getClothingOutfit();
+        state.clothingFaction = npc.getClothingFactionId();
+        state.clothingPalette = npc.getClothingPaletteOverride();
+        if (npc.getVehicle() instanceof net.minecraft.world.entity.animal.equine.AbstractHorse mount && mount.shouldRiderSit()) {
+            state.bodyRot = com.jgeted.sagadyssey.npc.appearance.NpcRidingAngles.bodyYaw(mount.yBodyRotO, mount.yBodyRot, partialTick);
+            state.yRot = com.jgeted.sagadyssey.npc.appearance.NpcRidingAngles.headYaw(npc.yHeadRotO, npc.yHeadRot, state.bodyRot, partialTick);
+        }
         state.resting = npc.isSleeping();
+        state.standardInOffhand = npc.getOffhandItem().getItem() instanceof net.minecraft.world.item.BannerItem;
+        state.carryingStandard = !state.resting
+                && com.jgeted.sagadyssey.npc.appearance.NpcMilitaryRole.find(state.clothingOutfit)
+                    .filter(role -> role == com.jgeted.sagadyssey.npc.appearance.NpcMilitaryRole.STANDARD_BEARER).isPresent()
+                && (state.standardInOffhand || npc.getMainHandItem().getItem() instanceof net.minecraft.world.item.BannerItem);
         if (state.resting) {
             state.leftHandItemState.clear();
             state.rightHandItemState.clear();
@@ -85,7 +112,11 @@ public class NpcRenderer extends HumanoidMobRenderer<NpcBase, NpcRenderState, Np
 
     @Override
     public Identifier getTextureLocation(NpcRenderState state) {
-        return PROFESSION_TEXTURES.getOrDefault(state.profession, FALLBACK);
+        return NpcAppearanceTextures.body(state);
+    }
+    NpcCarriedStandard carriedStandard(){return heldItems.standard();}
+    static Identifier professionTexture(NpcProfession profession) {
+        return PROFESSION_TEXTURES.getOrDefault(profession, FALLBACK);
     }
 
     private static Map<NpcProfession, Identifier> createTextureMap() {
@@ -99,6 +130,6 @@ public class NpcRenderer extends HumanoidMobRenderer<NpcBase, NpcRenderState, Np
 
     private static Identifier texture(String name) {
         return Identifier.fromNamespaceAndPath(
-                "sagadyssey", "textures/entity/npc/" + name + ".png");
+                "sagadyssey", "textures/entity/npc/revision_v2/profession/" + name + ".png");
     }
 }

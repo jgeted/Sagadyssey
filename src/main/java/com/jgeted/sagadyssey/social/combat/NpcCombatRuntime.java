@@ -11,6 +11,7 @@ import java.util.*;
 
 /** Real entity evidence bridge. It never grants attack permission or sends backend results to ordinary players. */
 public final class NpcCombatRuntime {
+    private static final org.slf4j.Logger LOG = org.slf4j.LoggerFactory.getLogger(NpcCombatRuntime.class);
     private NpcCombatRuntime(){}
     public static void wounded(NpcBase npc,UUID attacker,UUID wound){
         long now=npc.level().getGameTime();var encounters=CombatEncounterData.get(MinecraftApi.server(npc));var e=encounters.activeFor(npc.getCharacterId(),now);
@@ -23,15 +24,28 @@ public final class NpcCombatRuntime {
         if(e!=null)record(npc,e,wound,EncounterEventType.WOUNDED,wound,attacker,"真实受击伤口，不是命令授权");
     }
     public static void shot(NpcBase npc,UUID arrow){var e=CombatEncounterData.get(MinecraftApi.server(npc)).activeFor(npc.getCharacterId(),npc.level().getGameTime());
-        if(e!=null){record(npc,e,arrow,EncounterEventType.SHOT,arrow,null,"消耗实体箭矢并生成对应投射物");
+        if(e!=null){e=record(npc,e,arrow,EncounterEventType.SHOT,arrow,null,"消耗实体箭矢并生成对应投射物");
             if(!npc.getPersonalInventory().contains(s->s.getItem() instanceof net.minecraft.world.item.ArrowItem))record(npc,e,named(arrow+":last"),EncounterEventType.AMMUNITION_EXHAUSTED,arrow,null,"最后一根真实箭矢已发射");}}
     public static void retreat(NpcBase npc,UUID receipt){var e=CombatEncounterData.get(MinecraftApi.server(npc)).activeFor(npc.getCharacterId(),npc.level().getGameTime());if(e!=null)record(npc,e,receipt,EncounterEventType.RETREATED,receipt,null,"真实撤离意图；不自动回血、不宣告胜利");}
     public static void cargoDropped(NpcBase npc,net.minecraft.world.entity.item.ItemEntity drop){var e=CombatEncounterData.get(MinecraftApi.server(npc)).activeFor(npc.getCharacterId(),npc.level().getGameTime());if(e!=null)
         record(npc,e,drop.getUUID(),EncounterEventType.CARGO_DROPPED,drop.getUUID(),null,"真实掉落 "+drop.getItem().getCount()+" "+com.jgeted.sagadyssey.worldsim.rights.ItemFingerprint.of(drop.getItem())+"；不是交付或永久销毁");}
     public static void death(NpcBase npc){var e=CombatEncounterData.get(MinecraftApi.server(npc)).activeFor(npc.getCharacterId(),npc.level().getGameTime());if(e!=null)record(npc,e,named(e.id()+":death:"+npc.getCharacterId()),EncounterEventType.KILLED,null,null,"实体死亡事件；遗产仍由人物生命周期模块处理");}
-    private static void record(NpcBase npc,CombatEncounter e,UUID id,EncounterEventType type,UUID source,UUID other,String text){
-        CombatEncounterService.record(CombatEncounterData.get(MinecraftApi.server(npc)),CombatMoraleData.get(MinecraftApi.server(npc)),e.id(),
-                new EncounterEvent(id,e.id(),type,npc.getCharacterId(),other,source,npc.level().getGameTime(),text));}
+    private static CombatEncounter record(NpcBase npc,CombatEncounter e,UUID id,EncounterEventType type,UUID source,UUID other,String text){
+        var server = MinecraftApi.server(npc);
+        var data = CombatEncounterData.get(server);
+        long now = npc.level().getGameTime();
+        e = data.encounter(e.id());
+        if (e.events().size() == CombatEncounter.MAX_EVENTS && e.events().stream().noneMatch(event -> event.id().equals(id))) {
+            if (!data.canContinue(e)) {
+                if (data.reportCapacityOnce(e.id())) LOG.error("Combat encounter {} requires archival before recording further events", e.id());
+                return e;
+            }
+            finish((ServerLevel) npc.level(), e.id(), now);
+            e = data.continueAfter(e, now);
+        }
+        return CombatEncounterService.record(data,CombatMoraleData.get(server),e.id(),
+                new EncounterEvent(id,e.id(),type,npc.getCharacterId(),other,source,now,text));
+    }
     public static void maintain(NpcBase npc){if(npc.level().isClientSide()||MinecraftApi.server(npc)==null||npc.tickCount%20!=0)return;
         if(NaturalConflictData.engaged(MinecraftApi.server(npc),npc.getCharacterId()))return;
         long now=npc.level().getGameTime();var data=CombatEncounterData.get(MinecraftApi.server(npc));var e=data.activeFor(npc.getCharacterId(),now);if(e==null)return;
@@ -46,8 +60,11 @@ public final class NpcCombatRuntime {
         var homes=HouseholdData.get(level.getServer());var life=NpcLifeData.get(level.getServer());
         var impacts=data.freeze(encounter,()->{
             var snapshot=new ArrayList<CombatImpact>();
+            var eventsByPerson = new HashMap<UUID, List<EncounterEvent>>();
+            for (var event : e.events())
+                eventsByPerson.computeIfAbsent(event.subjectCharacterId(), ignored -> new ArrayList<>()).add(event);
             for(var side:e.sides())for(var character:side.members()){
-            var home=homes.forMember(character);var contract=life.contract(character);var personal=e.events().stream().filter(v->v.subjectCharacterId().equals(character)).toList();
+            var home=homes.forMember(character);var contract=life.contract(character);var personal=eventsByPerson.getOrDefault(character,List.of());
             var impact=new CombatImpact(e.id(),character,home==null?null:home.id(),contract==null?null:contract.employerCharacterId(),e.settlementId(),
                     (int)personal.stream().filter(v->v.type()==EncounterEventType.WOUNDED).count(),(int)personal.stream().filter(v->v.type()==EncounterEventType.SHOT).count(),
                     (int)personal.stream().filter(v->v.type()==EncounterEventType.CARGO_DROPPED).count(),personal.stream().anyMatch(v->v.type()==EncounterEventType.RETREATED||v.type()==EncounterEventType.ROUTED),now);

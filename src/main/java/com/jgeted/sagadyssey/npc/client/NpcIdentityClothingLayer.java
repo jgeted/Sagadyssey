@@ -20,13 +20,12 @@ public final class NpcIdentityClothingLayer extends RenderLayer<NpcRenderState, 
     @Override
     public void submit(PoseStack poseStack, SubmitNodeCollector collector, int packedLight,
                        NpcRenderState state, float yRot, float xRot) {
+        if (state.isInvisible || state.militaryClothing) return;
         coloredCutoutModelCopyLayerRender(model, texture(state), poseStack, collector,
                 packedLight, state, 0xFFFFFFFF, 2);
     }
 
     private static Identifier texture(NpcRenderState state) {
-        String name = state.socialStatus.id() + "_" + state.gender.id();
-        return Identifier.fromNamespaceAndPath(
-                "sagadyssey", "textures/entity/npc/identity/" + name + ".png");
+        return NpcOutfitTextures.civilian(state);
     }
 }

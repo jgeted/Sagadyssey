@@ -12,6 +12,7 @@ import net.minecraft.client.model.geom.builders.CubeListBuilder;
 import net.minecraft.client.model.geom.builders.LayerDefinition;
 import net.minecraft.client.model.geom.builders.MeshDefinition;
 import net.minecraft.client.model.geom.builders.PartDefinition;
+import net.minecraft.world.entity.EquipmentSlot;
 
 /** 覆盖完整躯干、袖子和下装的身份服装模型。 */
 public final class NpcIdentityClothingModel extends HumanoidModel<NpcRenderState> {
@@ -41,6 +42,7 @@ public final class NpcIdentityClothingModel extends HumanoidModel<NpcRenderState
         this.femaleApronLower = body.getChild("female_apron_lower");
         this.mantle = body.getChild("mantle");
         this.cloak = body.getChild("cloak");
+        NpcSkinSleeves.configure(this,false);
     }
 
     public static LayerDefinition createBodyLayer() {
@@ -102,6 +104,7 @@ public final class NpcIdentityClothingModel extends HumanoidModel<NpcRenderState
                         .addBox(-4.1F, 0.0F, 2.28F, 8.2F, 16.0F, 1.0F,
                                 new CubeDeformation(0.05F)), PartPose.ZERO);
         // 男女身份服装统一使用 128x128 资源配合 64x64 UV 基准，取得相同的织物/饰边密度。
+        NpcSkinSleeves.add(root,cloth);
         return LayerDefinition.create(mesh, 64, 64);
     }
 
@@ -109,18 +112,24 @@ public final class NpcIdentityClothingModel extends HumanoidModel<NpcRenderState
     public void setupAnim(NpcRenderState state) {
         super.setupAnim(state);
         parent.setupAnim(state);
-        head.loadPose(parent.head.storePose());
-        body.loadPose(parent.body.storePose());
-        leftArm.loadPose(parent.leftArm.storePose());
-        rightArm.loadPose(parent.rightArm.storePose());
-        leftLeg.loadPose(parent.leftLeg.storePose());
-        rightLeg.loadPose(parent.rightLeg.storePose());
-        NpcSocialStatus status = state.socialStatus;
-        boolean female = state.gender == NpcGender.FEMALE;
+        configureFromParent(state);
+    }
+
+    void configureFromParent(NpcRenderState state) {
+        configureFromParent(state.gender,state.socialStatus,state.profession,state.mounted,
+                state.chestArmored,state.legArmored,state.skinTone);
+    }
+
+    void configureFromParent(NpcGender gender,NpcSocialStatus status,NpcProfession profession,
+                             boolean mounted,boolean chestArmor,boolean legArmor,
+                             com.jgeted.sagadyssey.npc.appearance.NpcSkinTone skinTone) {
+        parent.copyPoseTo(this);
+        NpcSkinSleeves.configure(this,skinTone!=com.jgeted.sagadyssey.npc.appearance.NpcSkinTone.ORIGINAL);
+        boolean female = gender == NpcGender.FEMALE;
         int tier = status.ordinal();
-        boolean militaryCut = state.profession == NpcProfession.WARRIOR
-                || state.profession == NpcProfession.ARCHER
-                || state.profession == NpcProfession.HEAVY;
+        boolean militaryCut = profession == NpcProfession.WARRIOR
+                || profession == NpcProfession.ARCHER
+                || profession == NpcProfession.HEAVY;
         boolean longDress = female && !militaryCut;
 
         collar.visible = tier >= NpcSocialStatus.FREEMAN.ordinal();
@@ -132,7 +141,7 @@ public final class NpcIdentityClothingModel extends HumanoidModel<NpcRenderState
         boolean workDress = longDress && tier <= NpcSocialStatus.FREEMAN.ordinal();
         femaleApronUpper.visible = workDress;
         // 骑乘时下摆分片随腿展开，长围裙下片则视为束起，避免贯穿马背。
-        femaleApronLower.visible = workDress && !state.mounted;
+        femaleApronLower.visible = workDress && !mounted;
         mantle.visible = status == NpcSocialStatus.LORD
                 || status == NpcSocialStatus.DUKE || status == NpcSocialStatus.KING;
         cloak.visible = status == NpcSocialStatus.DUKE || status == NpcSocialStatus.KING;
@@ -142,20 +151,25 @@ public final class NpcIdentityClothingModel extends HumanoidModel<NpcRenderState
         mantle.xScale = female ? 0.90F : 1.0F;
         mantle.zScale = female ? 0.92F : 1.0F;
         cloak.xScale = female ? 0.95F : 1.0F;
+        // Keep loose cloth beneath the applicable armor shell without suppressing its texture.
+        cloak.zScale = legArmor ? .72F : chestArmor ? .84F : 1;
+        malePanel.zScale = legArmor ? .98F : 1;
+        femaleApronUpper.zScale = legArmor ? .94F : 1;
+        femaleApronLower.zScale = legArmor ? .92F : 1;
 
         if (longDress) {
-            copySkirtTransform(femaleSkirtLeft, leftLeg, state.mounted);
-            copySkirtTransform(femaleSkirtRight, rightLeg, state.mounted);
+            copySkirtTransform(femaleSkirtLeft, leftLeg, mounted, legArmor);
+            copySkirtTransform(femaleSkirtRight, rightLeg, mounted, legArmor);
         }
     }
 
-    private static void copySkirtTransform(ModelPart skirt, ModelPart leg, boolean riding) {
-        skirt.loadPose(leg.storePose());
+    private static void copySkirtTransform(ModelPart skirt, ModelPart leg, boolean riding, boolean legArmor) {
+        NpcModel.copyTransform(leg, skirt);
         float motionScale = riding ? 0.72F : 0.34F;
         skirt.xRot = leg.xRot * motionScale;
         skirt.yRot = leg.yRot * (riding ? 0.82F : 0.35F);
         skirt.zRot = leg.zRot * 0.35F;
         skirt.xScale *= 1.02F;
-        skirt.zScale *= 1.04F;
+        skirt.zScale *= legArmor ? 1.02F : 1.04F;
     }
 }

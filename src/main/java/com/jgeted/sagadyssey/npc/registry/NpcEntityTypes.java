@@ -22,6 +22,7 @@ public class NpcEntityTypes {
             () -> EntityType.Builder.of(NpcBase::new, MobCategory.CREATURE)
                     .sized(0.6F, 1.8F)
                     .eyeHeight(1.62F)
+                    .vehicleAttachment(com.jgeted.sagadyssey.npc.appearance.NpcRidingSeat.DEFAULT_ATTACHMENT)
                     .clientTrackingRange(8)
                     .build(net.minecraft.resources.ResourceKey.create(Registries.ENTITY_TYPE,
                             net.minecraft.resources.Identifier.fromNamespaceAndPath(Sagadyssey.MOD_ID, "npc_base")))

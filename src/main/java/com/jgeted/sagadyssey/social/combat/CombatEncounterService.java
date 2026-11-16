@@ -7,6 +7,30 @@ import java.util.UUID;
 
 public final class CombatEncounterService {
     private CombatEncounterService() { }
+    public static CombatEncounter startHosted(CombatEncounterData encounters,UUID encounter,UUID settlement,String dimension,BlockPos center,int radius,
+                                              List<CombatSide> sides,CombatEncounterBinding binding,long now){
+        ensureExclusiveMembership(sides);var value=new CombatEncounter(encounter,settlement,dimension,center,radius,now,0,EncounterStatus.FORMING,sides,List.of(),0);
+        if(!encounters.add(value,binding))throw new IllegalStateException("encounter already exists");return value;
+    }
+    /** Adds currently verified participants to one side, preserving events and all original rules. */
+    public static boolean enlist(CombatEncounterData encounters,CombatEncounter expected,CombatEncounterBinding binding,java.util.Set<UUID> members,long now){
+        return enlist(encounters,expected,binding.side(),binding,members,now);
+    }
+    /** Trusted host roster edit. This does not authorize its caller to attack anyone. */
+    public static boolean enlist(CombatEncounterData encounters,CombatEncounter expected,UUID side,java.util.Set<UUID> members,long now){
+        return enlist(encounters,expected,side,null,members,now);
+    }
+    private static boolean enlist(CombatEncounterData encounters,CombatEncounter expected,UUID sideId,CombatEncounterBinding binding,java.util.Set<UUID> members,long now){
+        if(!expected.activeAt(now)||encounters.settling(expected.id())||members.isEmpty()||members.size()>256)return false;
+        if(!expected.equals(encounters.encounter(expected.id())))return false;
+        var side=expected.sides().stream().filter(s->s.id().equals(sideId)).findFirst().orElseThrow();
+        if(members.stream().anyMatch(m->expected.sideOf(m)!=null&&!expected.sideOf(m).id().equals(side.id())))return false;
+        if(members.stream().anyMatch(m->encounters.activeEncounters(m,now).stream().anyMatch(e->!e.id().equals(expected.id()))))return false;
+        var combined=new java.util.HashSet<>(side.members());combined.addAll(members);if(combined.size()>256)return false;
+        if(combined.equals(side.members())&&(binding==null||binding.equals(encounters.binding(expected.id(),binding.ownerKind(),binding.owner()))))return true;
+        var sides=expected.sides().stream().map(s->s.id().equals(side.id())?new CombatSide(s.id(),s.name(),s.institutionId(),combined,s.rule()):s).toList();
+        return encounters.enlist(expected,new CombatEncounter(expected.id(),expected.settlementId(),expected.dimension(),expected.center(),expected.radius(),expected.startedAt(),expected.endedAt(),expected.status(),sides,expected.events(),expected.revision()+1),binding);
+    }
 
     public static CombatEncounter start(CombatEncounterData encounters, UUID encounterId,
                                         UUID settlementId, String dimension, BlockPos center,
