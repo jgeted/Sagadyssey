@@ -40,6 +40,31 @@ import net.neoforged.neoforge.registries.RegisterEvent;
 public final class PortedGameTests {
     private static final Identifier TYPE = Identifier.fromNamespaceAndPath("sagadyssey", "java_test");
     private static final List<String> SUITES = List.of(
+            "com.jgeted.sagadyssey.social.war.adapter.minecraft.WarPersistenceGameTests",
+            "com.jgeted.sagadyssey.social.war.adapter.minecraft.WarMobilizationGameTests",
+            "com.jgeted.sagadyssey.social.war.adapter.minecraft.WarCandidateGameTests",
+            "com.jgeted.sagadyssey.social.war.adapter.minecraft.WarNativeMobilizationGameTests",
+            "com.jgeted.sagadyssey.social.war.adapter.minecraft.WarFieldGameTests",
+            "com.jgeted.sagadyssey.social.war.adapter.minecraft.WarRangedGameTests",
+            "com.jgeted.sagadyssey.social.war.adapter.minecraft.WarCohesionGameTests",
+            "com.jgeted.sagadyssey.social.war.adapter.minecraft.WarMountedGameTests",
+            "com.jgeted.sagadyssey.social.war.adapter.minecraft.WarCommandMediaGameTests",
+            "com.jgeted.sagadyssey.social.war.adapter.minecraft.WarCavalryGameTests",
+            "com.jgeted.sagadyssey.social.war.adapter.minecraft.WarMapGameTests",
+            "com.jgeted.sagadyssey.social.war.adapter.minecraft.WarMusterGameTests",
+            "com.jgeted.sagadyssey.social.war.adapter.minecraft.WarBattleGameTests",
+            "com.jgeted.sagadyssey.social.war.adapter.minecraft.WarBattleRecoveryGameTests",
+            "com.jgeted.sagadyssey.social.war.adapter.minecraft.WarClientCopyGameTests",
+            "com.jgeted.sagadyssey.social.war.adapter.minecraft.WarCivilRecoveryGameTests",
+            "com.jgeted.sagadyssey.social.war.adapter.minecraft.WarIndustryRecoveryGameTests",
+            "com.jgeted.sagadyssey.social.war.adapter.minecraft.WarStaffGameTests",
+            "com.jgeted.sagadyssey.social.war.adapter.minecraft.WarCampaignGameTests",
+            "com.jgeted.sagadyssey.social.war.adapter.minecraft.WarSpearGameTests",
+            "com.jgeted.sagadyssey.social.war.adapter.minecraft.WarEngineeringGameTests",
+            "com.jgeted.sagadyssey.social.war.adapter.minecraft.WarHazardGameTests",
+            "com.jgeted.sagadyssey.social.war.adapter.minecraft.WarScaleGameTests",
+            "com.jgeted.sagadyssey.social.war.adapter.minecraft.WarMaintenanceGameTests",
+            "com.jgeted.sagadyssey.social.war.adapter.minecraft.WarSpearCavalryGameTests",
             "com.jgeted.sagadyssey.core.structure.BoundedExchangeP5GameTests",
             "com.jgeted.sagadyssey.core.structure.CharterDiplomacyP6GameTests",
             "com.jgeted.sagadyssey.core.structure.LimitedConflictP7GameTests",
@@ -120,6 +145,7 @@ public final class PortedGameTests {
             "com.jgeted.sagadyssey.worldsim.lod.LodPerformanceGameTests"
     );
     private static Map<Identifier, Consumer<GameTestHelper>> cases = Map.of();
+    private static final long TEST_PAUSE_NANOS = Long.getLong("sagadyssey.gametest.pauseNanos", 0L);
     private static Map<String, Consumer<ServerLevel>> setups = Map.of();
     private static Map<String, Consumer<ServerLevel>> teardowns = Map.of();
 
@@ -129,6 +155,14 @@ public final class PortedGameTests {
         return (T) helper.getLevel().getBlockEntity(helper.absolutePos(relative));
     }
     private PortedGameTests() {}
+
+    /** Vanilla GameTestServer skips normal tick waiting. Opt-in pacing leaves time for real asynchronous journal I/O. */
+    @SubscribeEvent
+    public static void paceTestServer(net.neoforged.neoforge.event.tick.ServerTickEvent.Post event) {
+        if (!(event.getServer() instanceof GameTestServer) || TEST_PAUSE_NANOS == 0) return;
+        if (TEST_PAUSE_NANOS < 0 || TEST_PAUSE_NANOS > 50_000_000L) throw new IllegalArgumentException("invalid GameTest pacing");
+        java.util.concurrent.locks.LockSupport.parkNanos(TEST_PAUSE_NANOS);
+    }
 
     @SubscribeEvent(priority = EventPriority.HIGHEST)
     public static void restoreTestWorld(ServerAboutToStartEvent event) throws IOException {

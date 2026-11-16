@@ -29,14 +29,7 @@ public class NpcEquipMenu extends AbstractContainerMenu {
     private final ContainerLevelAccess access;
 
     /** 装备槽 → EquipmentSlot 映射 */
-    private static final EquipmentSlot[] EQUIP_SLOTS = {
-            EquipmentSlot.HEAD,
-            EquipmentSlot.CHEST,
-            EquipmentSlot.LEGS,
-            EquipmentSlot.FEET,
-            EquipmentSlot.MAINHAND,
-            EquipmentSlot.OFFHAND
-    };
+    private static final EquipmentSlot[] EQUIP_SLOTS = com.jgeted.sagadyssey.npc.inventory.NpcEquipmentInventory.SLOTS.toArray(EquipmentSlot[]::new);
 
     // === 客户端构造函数（MenuType 工厂调用） ===
     public NpcEquipMenu(int containerId, Inventory playerInventory, FriendlyByteBuf buf) {
@@ -62,7 +55,7 @@ public class NpcEquipMenu extends AbstractContainerMenu {
         this.access = ContainerLevelAccess.create(npc.level(), npc.blockPosition());
 
         // NPC 装备槽适配器：将 Container 操作映射到实体装备
-        Container equipContainer = new EquipContainer(npc);
+        Container equipContainer = new com.jgeted.sagadyssey.npc.inventory.NpcEquipmentInventory(npc);
 
         // === NPC 装备槽 (0-5) ===
         for (int i = 0; i < 6; i++) {
@@ -125,11 +118,12 @@ public class NpcEquipMenu extends AbstractContainerMenu {
 
     @Override
     public boolean stillValid(Player player) {
-        return npc.isAlive() && player.distanceTo(npc) <= 8.0D;
+        return npc.isAlive() && player.distanceTo(npc) <= 8.0D && !com.jgeted.sagadyssey.social.work.WorkCommitmentRuntime.blocksCivil(npc);
     }
 
     @Override
     public ItemStack quickMoveStack(Player player, int index) {
+        if (com.jgeted.sagadyssey.social.work.WorkCommitmentRuntime.blocksCivil(npc)) return ItemStack.EMPTY;
         Slot slot = this.slots.get(index);
         if (!slot.hasItem()) return ItemStack.EMPTY;
 
@@ -199,63 +193,4 @@ public class NpcEquipMenu extends AbstractContainerMenu {
 
     // === 装备槽 ← → 实体装备 适配器 ===
 
-    private static class EquipContainer implements Container {
-        private final NpcBase npc;
-
-        EquipContainer(NpcBase npc) {
-            this.npc = npc;
-        }
-
-        @Override
-        public int getContainerSize() { return 6; }
-
-        @Override
-        public boolean isEmpty() {
-            for (EquipmentSlot es : EQUIP_SLOTS) {
-                if (!npc.getItemBySlot(es).isEmpty()) return false;
-            }
-            return true;
-        }
-
-        @Override
-        public ItemStack getItem(int index) {
-            return npc.getItemBySlot(EQUIP_SLOTS[index]);
-        }
-
-        @Override
-        public ItemStack removeItem(int index, int amount) {
-            ItemStack current = npc.getItemBySlot(EQUIP_SLOTS[index]).copy();
-            if (current.isEmpty()) return ItemStack.EMPTY;
-            ItemStack split = current.split(amount);
-            npc.setItemSlot(EQUIP_SLOTS[index], current.isEmpty() ? ItemStack.EMPTY : current);
-            return split;
-        }
-
-        @Override
-        public ItemStack removeItemNoUpdate(int index) {
-            ItemStack current = npc.getItemBySlot(EQUIP_SLOTS[index]).copy();
-            npc.setItemSlot(EQUIP_SLOTS[index], ItemStack.EMPTY);
-            return current;
-        }
-
-        @Override
-        public void setItem(int index, ItemStack stack) {
-            LOGGER.debug("EquipContainer.setItem: index={}, item={}", index,
-                    stack.isEmpty() ? "EMPTY" : stack.getItem().getDescriptionId());
-            npc.setItemSlot(EQUIP_SLOTS[index], stack);
-        }
-
-        @Override
-        public void setChanged() {}
-
-        @Override
-        public boolean stillValid(Player player) { return npc.isAlive(); }
-
-        @Override
-        public void clearContent() {
-            for (EquipmentSlot es : EQUIP_SLOTS) {
-                npc.setItemSlot(es, ItemStack.EMPTY);
-            }
-        }
-    }
 }

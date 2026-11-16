@@ -245,6 +245,8 @@ public final class FieldworkData extends NbtSavedData implements FieldworkCommit
     public synchronized Optional<FieldworkActionReceipt> receipt(String key) {
         return Optional.ofNullable(receipts.get(Objects.requireNonNull(key, "key")));
     }
+    /** Read-only original action facts for cross-module recovery; callers must not reconstruct missing effects. */
+    public synchronized List<FieldworkActionReceipt> receipts(){return List.copyOf(receipts.values());}
 
     /** 先验证冲突再写入；失败不能留下半个回执。 */
     @Override

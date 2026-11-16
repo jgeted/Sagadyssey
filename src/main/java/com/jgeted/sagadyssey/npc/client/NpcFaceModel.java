@@ -30,6 +30,7 @@ public final class NpcFaceModel extends HumanoidModel<NpcRenderState> {
     private final ModelPart veilBack;
     private final ModelPart veilLeft;
     private final ModelPart veilRight;
+    private final ModelPart cranium, jaw, neatTop, hairSides, partedFringe, bun, tail;
 
     private final NpcModel parent;
 
@@ -51,6 +52,9 @@ public final class NpcFaceModel extends HumanoidModel<NpcRenderState> {
         this.veilBack = head.getChild("veil_back");
         this.veilLeft = head.getChild("veil_left");
         this.veilRight = head.getChild("veil_right");
+        cranium=head.getChild("sculpted_cranium"); jaw=head.getChild("sculpted_jaw");
+        neatTop=head.getChild("neat_top"); hairSides=head.getChild("hair_sides");
+        partedFringe=head.getChild("parted_fringe"); bun=head.getChild("hair_bun"); tail=head.getChild("hair_tail");
     }
 
     public static LayerDefinition createBodyLayer() {
@@ -109,6 +113,23 @@ public final class NpcFaceModel extends HumanoidModel<NpcRenderState> {
         head.addOrReplaceChild("hat", CubeListBuilder.create().texOffs(32, 0)
                         .addBox(-4.0F, -8.0F, -4.0F, 8.0F, 8.0F, 8.0F,
                                 new CubeDeformation(0.18F)), PartPose.ZERO);
+        // Split at y=-3 so the jaw can taper without stretching the eyes.
+        head.addOrReplaceChild("sculpted_cranium",CubeListBuilder.create().texOffs(0,0)
+                .addBox(-4,-8,-4,8,5,8,new CubeDeformation(.035F,0,.035F)),PartPose.ZERO);
+        head.addOrReplaceChild("sculpted_jaw",CubeListBuilder.create().texOffs(0,5)
+                .addBox(-4,-3,-4,8,3,8,new CubeDeformation(.035F,0,.035F)),PartPose.ZERO);
+        head.addOrReplaceChild("neat_top",CubeListBuilder.create().texOffs(24,16)
+                .addBox(-4.15F,-8.28F,-4.12F,8.3F,1.15F,8.3F),PartPose.ZERO);
+        head.addOrReplaceChild("hair_sides",CubeListBuilder.create().texOffs(24,16)
+                .addBox(-4.18F,-7.15F,-3.9F,.38F,4.5F,7.9F).texOffs(24,16)
+                .addBox(3.8F,-7.15F,-3.9F,.38F,4.5F,7.9F),PartPose.ZERO);
+        head.addOrReplaceChild("parted_fringe",CubeListBuilder.create().texOffs(24,16)
+                .addBox(-4.10F,-7.60F,-4.30F,4.9F,1.55F,.45F).texOffs(24,16)
+                .addBox(.9F,-7.60F,-4.30F,3.20F,.85F,.45F),PartPose.ZERO);
+        head.addOrReplaceChild("hair_bun",CubeListBuilder.create().texOffs(24,16)
+                .addBox(-1.8F,-4.6F,3.80F,3.6F,2.9F,2.1F),PartPose.ZERO);
+        head.addOrReplaceChild("hair_tail",CubeListBuilder.create().texOffs(24,16)
+                .addBox(-.7F,-3.0F,3.9F,1.4F,4.2F,1.15F),PartPose.ZERO);
         addEmptyHumanoidParts(root);
         // 故意保留 64x32 UV 基准：男女脸资源均为 256x128，因此同一头部面采样 32x32 像素。
         // 若把这里同步改成资源尺寸，正脸会重新退回 8x8 的有效密度。
@@ -127,11 +148,19 @@ public final class NpcFaceModel extends HumanoidModel<NpcRenderState> {
     public void setupAnim(NpcRenderState state) {
         super.setupAnim(state);
         parent.setupAnim(state);
-        head.loadPose(parent.head.storePose());
-        NpcGender gender = state.gender;
-        NpcFaceVariant face = state.face;
+        configureFromParent(state);
+    }
+
+    void configureFromParent(NpcRenderState state) {
+        configureFromParent(state.gender,state.face,
+                new com.jgeted.sagadyssey.npc.appearance.NpcAppearanceProfile(state.headShape,state.hairStyle,state.skinTone),
+                state.helmeted);
+    }
+
+    void configureFromParent(NpcGender gender,NpcFaceVariant face,
+            com.jgeted.sagadyssey.npc.appearance.NpcAppearanceProfile appearance,boolean helmeted) {
+        NpcModel.copyTransform(parent.head,head);
         boolean female = gender == NpcGender.FEMALE;
-        boolean helmeted = state.helmeted;
         hat.visible = !helmeted;
 
         // 男女均由同一套 32x32 像素五官表达；禁用旧立体鼻，避免男性退回村民画风。
@@ -173,5 +202,24 @@ public final class NpcFaceModel extends HumanoidModel<NpcRenderState> {
         veilBack.visible = false;
         veilLeft.visible = false;
         veilRight.visible = false;
+        boolean sculpted=appearance.head()!=com.jgeted.sagadyssey.npc.appearance.NpcHeadShape.CLASSIC;
+        head.skipDraw=sculpted;
+        cranium.visible=jaw.visible=sculpted;
+        jaw.xScale=appearance.head().jawWidth();
+        boolean styled=appearance.hair()!=com.jgeted.sagadyssey.npc.appearance.NpcHairStyle.CLASSIC;
+        neatTop.visible=styled&&!helmeted;
+        hairSides.visible=styled&&!helmeted;
+        partedFringe.visible=styled&&!helmeted
+                &&appearance.hair()==com.jgeted.sagadyssey.npc.appearance.NpcHairStyle.PARTED;
+        bun.visible=styled&&!helmeted&&female
+                &&appearance.hair()!=com.jgeted.sagadyssey.npc.appearance.NpcHairStyle.PARTED;
+        tail.visible=styled&&!helmeted&&!female
+                &&appearance.hair()==com.jgeted.sagadyssey.npc.appearance.NpcHairStyle.TIED;
+        if(styled) {
+            hat.visible=false;
+            fringeLeft.visible=fringeRight.visible=sideLockLeft.visible=sideLockRight.visible=false;
+            braidLeft.visible=braidRight.visible=braidLeftMid.visible=braidRightMid.visible=false;
+            braidLeftTip.visible=braidRightTip.visible=false;
+        }
     }
 }

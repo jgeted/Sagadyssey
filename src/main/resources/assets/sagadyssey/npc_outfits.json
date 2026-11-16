@@ -1,0 +1,23 @@
+{
+  "palettes": {
+    "neutral": {"label":"中性亚麻／暖褐", "primary":[126,112,89], "secondary":[212,201,175], "trim":[79,62,43]},
+    "madder_linen": {"label":"茜红／亚麻白", "primary":[132,55,48], "secondary":[219,208,181], "trim":[177,139,73]},
+    "woad_linen": {"label":"菘蓝／亚麻白", "primary":[59,82,112], "secondary":[215,207,184], "trim":[164,131,75]},
+    "forest_flax": {"label":"林绿／麦秆黄", "primary":[69,88,62], "secondary":[195,177,130], "trim":[93,65,42]},
+    "ochre_russet": {"label":"赭黄／铁锈红", "primary":[161,126,63], "secondary":[116,57,43], "trim":[221,205,164]},
+    "ivory_blue": {"label":"象牙白／深蓝", "primary":[214,207,186], "secondary":[62,79,101], "trim":[142,117,73]},
+    "plum_grey": {"label":"暗梅紫／暖灰", "primary":[100,65,89], "secondary":[183,177,164], "trim":[207,184,137]},
+    "charcoal_red": {"label":"炭灰／暗红", "primary":[65,63,60], "secondary":[133,60,50], "trim":[174,148,106]},
+    "teal_cream": {"label":"蓝绿／米白", "primary":[49,94,96], "secondary":[221,208,171], "trim":[164,119,64]}
+  },
+  "factions": {
+    "sagadyssey:kingdom":"madder_linen",
+    "sagadyssey:merchant_guild":"woad_linen",
+    "sagadyssey:wilderness":"forest_flax",
+    "sagadyssey:dwarven":"ochre_russet",
+    "sagadyssey:church":"ivory_blue",
+    "sagadyssey:mystic":"plum_grey",
+    "sagadyssey:bandit":"charcoal_red",
+    "sagadyssey:player":"teal_cream"
+  }
+}

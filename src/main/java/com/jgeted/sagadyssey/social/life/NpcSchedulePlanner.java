@@ -64,6 +64,7 @@ public final class NpcSchedulePlanner {
     }
 
     public static boolean allowsWork(NpcBase npc) {
+        if (com.jgeted.sagadyssey.social.work.WorkCommitmentRuntime.blocksCivil(npc)) return false;
         NpcLifeData data = NpcLifeData.from(npc);
         if (data == null || data.record(npc.getCharacterId()) == null) return true;
         NpcScheduleActivity activity = current(npc).activity();
@@ -71,6 +72,7 @@ public final class NpcSchedulePlanner {
     }
 
     public static boolean allowsPatrol(NpcBase npc) {
+        if (com.jgeted.sagadyssey.social.work.WorkCommitmentRuntime.blocksCivil(npc)) return false;
         NpcLifeData data = NpcLifeData.from(npc);
         if (data == null || data.record(npc.getCharacterId()) == null) return true;
         NpcScheduleActivity activity = current(npc).activity();

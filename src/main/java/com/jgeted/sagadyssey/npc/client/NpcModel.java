@@ -5,6 +5,8 @@ import com.google.common.collect.ImmutableList;
 import com.jgeted.sagadyssey.npc.entity.NpcAction;
 import com.jgeted.sagadyssey.npc.entity.NpcBase;
 import com.jgeted.sagadyssey.npc.appearance.NpcGender;
+import com.jgeted.sagadyssey.npc.appearance.NpcRidingAngles;
+import net.minecraft.world.entity.animal.equine.AbstractHorse;
 import net.minecraft.client.model.HumanoidModel;
 import net.minecraft.client.model.geom.ModelPart;
 import net.minecraft.client.model.geom.PartPose;
@@ -181,7 +183,7 @@ public class NpcModel extends HumanoidModel<NpcRenderState> {
         if (stack.isEmpty()) {
             return HumanoidModel.ArmPose.EMPTY;
         }
-        if (entity.getUsedItemHand() == hand && entity.getUseItemRemainingTicks() > 0) {
+        if (entity.isUsingItem() && entity.getUsedItemHand() == hand) {
             ItemUseAnimation useAnim = stack.getUseAnimation();
             if (useAnim == ItemUseAnimation.BOW) {
                 return HumanoidModel.ArmPose.BOW_AND_ARROW;
@@ -189,10 +191,38 @@ public class NpcModel extends HumanoidModel<NpcRenderState> {
             if (useAnim == ItemUseAnimation.CROSSBOW) {
                 return HumanoidModel.ArmPose.CROSSBOW_CHARGE;
             }
+            if (useAnim == ItemUseAnimation.BLOCK) return HumanoidModel.ArmPose.BLOCK;
+            if (useAnim == ItemUseAnimation.SPEAR) return HumanoidModel.ArmPose.SPEAR;
+            if (useAnim == ItemUseAnimation.TRIDENT) return HumanoidModel.ArmPose.THROW_TRIDENT;
+            if (useAnim == ItemUseAnimation.BRUSH) return HumanoidModel.ArmPose.BRUSH;
         } else if (!entity.swinging && stack.getItem() instanceof CrossbowItem && CrossbowItem.isCharged(stack)) {
             return HumanoidModel.ArmPose.CROSSBOW_HOLD;
         }
+        if(stack.is(net.minecraft.tags.ItemTags.SPEARS))return HumanoidModel.ArmPose.SPEAR;
         return HumanoidModel.ArmPose.ITEM;
+    }
+
+    @Override
+    public void translateToHand(NpcRenderState state,HumanoidArm side,PoseStack poses) {
+        // Item submission also uses the current snapshot, never the previous NPC's model pose.
+        setupAnim(state);
+        modelRoot.translateAndRotate(poses);
+        ModelPart arm=side==HumanoidArm.LEFT?leftArm:rightArm;
+        float originalX=arm.x;
+        try {
+            arm.x+=.5F*arm.xScale*(side==HumanoidArm.RIGHT?1:-1);
+            arm.translateAndRotate(poses);
+        } finally { arm.x=originalX; }
+    }
+
+    /** The physical palm center, without the vanilla item-origin/slim-arm compensation. */
+    void translateToPalm(NpcRenderState state, HumanoidArm side, PoseStack poses) {
+        setupAnim(state);
+        modelRoot.translateAndRotate(poses);
+        var arm = side == HumanoidArm.LEFT ? leftArm : rightArm;
+        arm.translateAndRotate(poses);
+        // Slim arm boxes end at y=10; the exposed hand occupies y=8..10.
+        poses.translate((side == HumanoidArm.RIGHT ? -.5F : .5F) / 16, 9F / 16, 0);
     }
 
     @Override
@@ -202,17 +232,26 @@ public class NpcModel extends HumanoidModel<NpcRenderState> {
         this.modelRoot.getAllParts().forEach(ModelPart::resetPose);
         super.setupAnim(state);
         applyGenderShape(state);
+        head.xScale = state.headShape.width();
+        head.yScale = state.headShape.height();
+        head.skipDraw = state.headShape != com.jgeted.sagadyssey.npc.appearance.NpcHeadShape.CLASSIC;
         if (state.mounted) applyMountedPose();
         // 脸和发型由独立 NpcFaceLayer 渲染，避免基础职业贴图的旧头发覆盖新人物层。
         hat.visible = false;
         if (!state.resting) applyProfessionAction(state);
+        if (state.carryingStandard && !state.resting) {
+            var arm = state.standardArm() == HumanoidArm.LEFT ? leftArm : rightArm;
+            arm.xRot = -.5F;
+            arm.yRot = 0;
+            arm.zRot = state.standardArm() == HumanoidArm.LEFT ? -1.02F : 1.02F;
+        }
 
         // outer layer 跟随 inner layer
-        if (jacket != null) jacket.loadPose(body.storePose());
-        if (leftSleeve != null) leftSleeve.loadPose(leftArm.storePose());
-        if (rightSleeve != null) rightSleeve.loadPose(rightArm.storePose());
-        if (leftPants != null) leftPants.loadPose(leftLeg.storePose());
-        if (rightPants != null) rightPants.loadPose(rightLeg.storePose());
+        if (jacket != null) copyTransform(body, jacket);
+        if (leftSleeve != null) copyTransform(leftArm, leftSleeve);
+        if (rightSleeve != null) copyTransform(rightArm, rightSleeve);
+        if (leftPants != null) copyTransform(leftLeg, leftPants);
+        if (rightPants != null) copyTransform(rightLeg, rightPants);
 
         updateProfessionParts(state);
     }
@@ -273,6 +312,9 @@ public class NpcModel extends HumanoidModel<NpcRenderState> {
         medicSash.visible = false;
         traderCoatPanel.visible = false;
 
+        // 军服是独立衣服层；只切换配件显示，原有几何与职业状态不变。
+        if (state.militaryClothing) return;
+
         switch (state.profession) {
             case NONE -> { }
             case WARRIOR -> warriorTabard.visible = true;
@@ -290,16 +332,19 @@ public class NpcModel extends HumanoidModel<NpcRenderState> {
             }
         }
 
-        warriorTabard.loadPose(body.storePose());
-        archerShoulderCape.loadPose(body.storePose());
-        heavyPaddedCollar.loadPose(body.storePose());
-        workerBelt.loadPose(body.storePose());
-        blacksmithApron.loadPose(body.storePose());
-        bardMantle.loadPose(body.storePose());
-        farmerHat.loadPose(head.storePose());
+        copyTransform(body, warriorTabard);
+        copyTransform(body, archerShoulderCape);
+        copyTransform(body, heavyPaddedCollar);
+        copyTransform(body, workerBelt);
+        copyTransform(body, blacksmithApron);
+        copyTransform(body, bardMantle);
+        copyTransform(head, farmerHat);
 
         copyBodyTransform(medicSash, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, -0.28F);
-        traderCoatPanel.loadPose(body.storePose());
+        NpcModel.copyTransform(body, traderCoatPanel);
+        // The old archer cape also protruded beyond chest armor; tuck it inside the same shell.
+        archerShoulderCape.zScale *= state.chestArmored ? .88F : 1;
+        workerBelt.zScale *= state.legArmored ? .89F : 1;
     }
 
     private void copyBodyTransform(ModelPart part, float x, float y, float z,
@@ -485,4 +530,16 @@ public class NpcModel extends HumanoidModel<NpcRenderState> {
         leftArm.yRot = 0.24F;
         head.xRot -= 0.22F + arc * 0.10F;
     }
+    /** Copy each authoritative animated bone, including scale; overlays recompute from the same immutable state. */
+    public void copyPoseTo(HumanoidModel<NpcRenderState> target) {
+        copyTransform(head, target.head); copyTransform(hat, target.hat); copyTransform(body, target.body);
+        copyTransform(leftArm, target.leftArm); copyTransform(rightArm, target.rightArm);
+        copyTransform(leftLeg, target.leftLeg); copyTransform(rightLeg, target.rightLeg);
+    }
+    public static void copyTransform(ModelPart source, ModelPart target) {
+        target.x = source.x; target.y = source.y; target.z = source.z;
+        target.xRot = source.xRot; target.yRot = source.yRot; target.zRot = source.zRot;
+        target.xScale = source.xScale; target.yScale = source.yScale; target.zScale = source.zScale;
+    }
+
 }

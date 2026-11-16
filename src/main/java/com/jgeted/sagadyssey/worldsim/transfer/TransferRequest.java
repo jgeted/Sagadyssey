@@ -36,6 +36,9 @@ public record TransferRequest(UUID transferId, SubjectRef initiatedBy, TransferI
             entry.store("Destination", UUIDUtil.CODEC, leg.destinationContainerId());
             entry.put("Item", leg.fingerprint().save());
             entry.putInt("Quantity", leg.quantity());
+            // Omitted constraints retain the exact legacy identity and replay evidence.
+            if (leg.sourceSlot() >= 0) entry.putInt("SourceSlot", leg.sourceSlot());
+            if (leg.destinationSlot() >= 0) entry.putInt("DestinationSlot", leg.destinationSlot());
             legTags.add(entry);
         }
         tag.put("Legs", legTags);

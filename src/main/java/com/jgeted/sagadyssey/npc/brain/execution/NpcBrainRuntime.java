@@ -60,8 +60,8 @@ public final class NpcBrainRuntime {
     }
 
     public static boolean isPlanned(NpcBase npc) {
-        MinecraftServer server = MinecraftApi.server(npc);
-        return server != null && NpcBrainData.get(server).isPlanned(npc.getUUID());
+        MinecraftServer server = npc.getServer();
+        return server != null && (NpcPrimaryWorkRuntime.reserved(npc) || NpcBrainData.get(server).isPlanned(npc.getUUID()));
     }
 
     public static NpcBehaviorMode mode(NpcBase npc) {
@@ -102,6 +102,13 @@ public final class NpcBrainRuntime {
         if(com.jgeted.sagadyssey.worldsim.lod.NaturalVillageEconomyData.controls(server,npc.getCharacterId())){npc.getNavigation().stop();return NpcPlanExecutionUpdate.idle("聚落尚在远方结算或恢复，保留原作业与实物");}
         RuntimeState state = state(server);
         long now = context(npc).gameTime();
+        if (com.jgeted.sagadyssey.social.work.WorkCommitmentRuntime.blocksCivil(npc)) {
+            var original = state.data.active(npc.getUUID()).orElse(null);
+            if (original != null && (!original.providerId().equals(LifePlanFactory.PROVIDER)
+                    || !Set.of("EAT", "SLEEP", "WAIT", "HOME").contains(original.currentStep().params().getOrDefault("operation", "")))) {
+                return NpcPlanExecutionUpdate.idle("共享主劳动已占用；原任务保留待核对，不并行执行另一份劳动");
+            }
+        }
         if (!com.jgeted.sagadyssey.worldsim.lod.NpcLodRuntime.loaded(npc))
             return NpcPlanExecutionUpdate.idle("LOD 检查点需要管理员核对；不恢复或复制资产");
         // Goal eligibility is refreshed less often than executor ticks. Intercept a new
@@ -203,6 +210,11 @@ public final class NpcBrainRuntime {
     }
 
     private static void chooseNextPlan(NpcBase npc, RuntimeState state, long now) {
+        if (com.jgeted.sagadyssey.social.work.WorkCommitmentRuntime.blocksCivil(npc)) {
+            LifePlanProvider.chooseUrgent(npc, now).or(() -> LifePlanProvider.choose(npc, now, false)).filter(plan -> Set.of("EAT", "SLEEP", "WAIT", "HOME")
+                    .contains(plan.currentStep().params().getOrDefault("operation", ""))).ifPresent(state.lifecycle::save);
+            return;
+        }
         if (state.data.active(npc.getUUID()).isEmpty()) com.jgeted.sagadyssey.social.growth.SettlementSafetyTask.choose(npc,now,true).ifPresent(state.lifecycle::save);
         if (state.data.active(npc.getUUID()).isEmpty()) LifePlanProvider.chooseUrgent(npc,now).ifPresent(state.lifecycle::save);
         if(state.data.active(npc.getUUID()).isEmpty())com.jgeted.sagadyssey.social.household.HouseholdMigrationTask.choose(npc,now).ifPresent(state.lifecycle::save);

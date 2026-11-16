@@ -13,7 +13,8 @@ public enum AuthorityScope {
     ASSIGN_ROLE("协商岗位"),
     MANAGE_ISSUED_EQUIPMENT("管理配发装备"),
     OPERATE_MOUNT("管理工作坐骑"),
-    END_SERVICE("解除服务关系");
+    END_SERVICE("解除服务关系"),
+    RECEIVE_SERVICE_ALLOWANCE("领取约定岗位津贴");
 
     private final String displayName;
 

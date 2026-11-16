@@ -25,7 +25,8 @@ public record FieldworkAction(UUID planId, UUID npcId, int stepIndex, String dim
 
     public enum Operation {
         HARVEST, PLANT, TILL, MINE, CHOP, PLACE_SCAFFOLD, RECOVER_SCAFFOLD,
-        IRRIGATE, REFILL_WATER, FERTILIZE, CRAFT_FERTILIZER
+        IRRIGATE, REFILL_WATER, FERTILIZE, CRAFT_FERTILIZER,
+        PLACE_BLOCK, EXCAVATE
     }
 
     static String requireText(String value, int maxLength, String name) {

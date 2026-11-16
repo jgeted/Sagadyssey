@@ -138,6 +138,8 @@ public final class LifeTaskExecutor implements NpcTaskExecutor {
         }
         var life = NpcLifeData.get(level.getServer());
         var needs = life.ensureNeeds(recipient.getCharacterId(),now);
+        if (com.jgeted.sagadyssey.social.work.ServiceProvisionRuntime.ownsNeeds(level.getServer(), recipient.getCharacterId()))
+            return TaskTickResult.stepSucceeded("需求由显式共享供给协议维护，结束旧进食步骤");
         if (needs.hunger() < 350) return TaskTickResult.stepSucceeded("需求已由其他来源满足，不重复消费");
         if (source == null) return fail(npc,data,plan,now,"食物容器消失");
         var rights = RightsStateData.get(level.getServer());

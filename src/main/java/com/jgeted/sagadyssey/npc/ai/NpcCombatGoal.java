@@ -59,6 +59,7 @@ public class NpcCombatGoal extends Goal {
 
     @Override
     public boolean canUse() {
+        if(com.jgeted.sagadyssey.npc.brain.execution.NpcPrimaryWorkRuntime.reserved(npc))return false;
         if(com.jgeted.sagadyssey.npc.brain.command.NpcDutyTask.withdrawing(npc))return false;
         // STAY 模式下不主动寻敌（除非自卫/保护主人——即前 4 级源）
         if (npc.getCommand() == NpcCommand.STAY) {
@@ -135,6 +136,7 @@ public class NpcCombatGoal extends Goal {
 
     @Override
     public boolean canContinueToUse() {
+        if(com.jgeted.sagadyssey.npc.brain.execution.NpcPrimaryWorkRuntime.reserved(npc))return false;
         if(com.jgeted.sagadyssey.npc.brain.command.NpcDutyTask.withdrawing(npc))return false;
         LivingEntity target = npc.getTarget();
         if (target == null || !target.isAlive()) return false;

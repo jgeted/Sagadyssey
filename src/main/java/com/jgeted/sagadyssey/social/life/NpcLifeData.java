@@ -36,11 +36,12 @@ public final class NpcLifeData extends NbtSavedData {
     private final Map<UUID, NpcWorkZoneRecord> workZones = new HashMap<>();
     private final Map<UUID, NpcEmploymentContract> contracts = new HashMap<>();
     private final Map<UUID, NpcNeedsRecord> needs = new HashMap<>();
+    private final Map<UUID, NpcMealReceipt> meals = new HashMap<>();
     private final Map<UUID, NpcScheduleRecord> schedules = new HashMap<>();
     private final Map<UUID, Map<String, NpcActionDecisionRecord>> actionDecisions = new HashMap<>();
 
     public static NpcLifeData get(MinecraftServer server) {
-        return server.overworld().getDataStorage().computeIfAbsent(FACTORY.type(DATA_NAME));
+        return com.jgeted.sagadyssey.worldsim.PersistentDataAccess.getOrCreate(server, FACTORY, DATA_NAME);
     }
 
     @Nullable
@@ -72,11 +73,33 @@ public final class NpcLifeData extends NbtSavedData {
 
     public void increaseHunger(UUID npcId, int amount, long gameTime) {
         NpcNeedsRecord current = ensureNeeds(npcId, gameTime);
-        int updated = Math.min(NpcNeedsRecord.MAX_HUNGER,
-                current.hunger() + Math.max(0, amount));
-        if (updated == current.hunger()) return;
-        needs.put(npcId, current.withHunger(updated, gameTime));
+        int updated = (int)Math.min(NpcNeedsRecord.MAX_HUNGER,
+                (long)current.hunger() + Math.max(0, amount));
+        if (gameTime < current.lastAccruedAt()) throw new IllegalArgumentException("hunger time reversed");
+        needs.put(npcId, current.accrued(updated, gameTime, gameTime));
         setDirty();
+    }
+
+    /** 军役等显式持续责任的区间结算；同一tick不重扣，卸载期仅计基础需求。 */
+    public boolean accrueHungerThrough(UUID npcId, long gameTime, int observedActivityExtra) {
+        var current = needs.get(npcId); if (current == null || gameTime < current.lastAccruedAt() || observedActivityExtra < 0 || observedActivityExtra > 3) return false;
+        long periods = (gameTime - current.lastAccruedAt()) / 200; if (periods == 0) return true;
+        long added = Math.min(1000L, periods * 2L + observedActivityExtra);
+        int hunger = (int)Math.min(1000L, current.hunger() + added);
+        needs.put(npcId, current.accrued(hunger, current.lastAccruedAt() + periods * 200, gameTime)); setDirty(); return true;
+    }
+    @Nullable public NpcMealReceipt mealReceipt(UUID operation) { return meals.get(operation); }
+    public boolean canRecordMeal(UUID operation) { return meals.containsKey(operation) || meals.size() < 8192; }
+    /** 只有共享消费已证实后调用；回执与需求写在同一份SavedData中。 */
+    public NpcMealReceipt feedOnce(UUID operation, UUID person, int restored, String source, long consumedAt, long now) {
+        var existing = meals.get(operation);
+        if (existing != null) {
+            if (!existing.sameEffect(person, restored, source, consumedAt)) throw new IllegalStateException("meal operation id conflict"); return existing;
+        }
+        var current = needs.get(person);
+        if (current == null || !canRecordMeal(operation) || now < current.lastUpdatedAt()) throw new IllegalStateException("meal recipient unavailable/time reversed/receipt full");
+        var receipt = new NpcMealReceipt(operation, person, restored, source, consumedAt, now);
+        needs.put(person, current.fed(restored, source, now)); meals.put(operation, receipt); setDirty(); return receipt;
     }
 
     public void setHunger(UUID npcId, int value, long gameTime) {
@@ -580,6 +603,10 @@ public final class NpcLifeData extends NbtSavedData {
         ListTag needsList = new ListTag();
         needs.values().forEach(record -> needsList.add(record.save()));
         tag.put("Needs", needsList);
+        if (!meals.isEmpty()) {
+            tag.putInt("MealReceiptSchema", 1); var mealList = new ListTag();
+            meals.entrySet().stream().sorted(Map.Entry.comparingByKey()).forEach(entry -> mealList.add(entry.getValue().save())); tag.put("MealReceipts", mealList);
+        }
         ListTag scheduleList = new ListTag();
         schedules.values().forEach(record -> scheduleList.add(record.save()));
         tag.put("Schedules", scheduleList);
@@ -619,6 +646,15 @@ public final class NpcLifeData extends NbtSavedData {
             if (!needsTag.read("Npc", UUIDUtil.CODEC).isPresent()) continue;
             NpcNeedsRecord record = NpcNeedsRecord.load(needsTag);
             data.needs.put(record.npcId(), record);
+        }
+        if (tag.contains("MealReceiptSchema") || tag.contains("MealReceipts")) {
+            if (!MinecraftApi.containsTag(tag, "MealReceiptSchema", Tag.TAG_INT) || tag.getIntOr("MealReceiptSchema", 0) != 1
+                    || !(tag.get("MealReceipts") instanceof ListTag mealList) || mealList.size() > 8192
+                    || !mealList.isEmpty() && MinecraftApi.elementType(mealList) != Tag.TAG_COMPOUND) throw new IllegalArgumentException("unsupported meal receipts");
+            for (Tag raw : mealList) {
+                var receipt = NpcMealReceipt.load((CompoundTag)raw);
+                if (data.meals.putIfAbsent(receipt.operationId(), receipt) != null || !data.needs.containsKey(receipt.person())) throw new IllegalArgumentException("duplicate/orphan meal receipt");
+            }
         }
         ListTag scheduleList = MinecraftApi.listOfType(tag, "Schedules", Tag.TAG_COMPOUND);
         for (int index = 0; index < scheduleList.size(); index++) {

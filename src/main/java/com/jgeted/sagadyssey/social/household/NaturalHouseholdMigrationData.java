@@ -58,6 +58,7 @@ public final class NaturalHouseholdMigrationData extends NbtSavedData {
   }
   var individual=ResidentWorkMigrationData.existing(s);if(individual!=null&&individual.applications().stream().anyMatch(t->!Set.of("DONE","REJECTED").contains(t.getStringOr("State", ""))))return "已有个人迁移，等待原义务结束";
   var home=HouseholdData.get(s).byId(NaturalVillageLifeData.home(from));if(home==null||!home.headCharacterId().equals(head))return "仅户主可申请";
+  if(home.members().stream().anyMatch(m->com.jgeted.sagadyssey.social.work.WorkCommitmentRuntime.blocksCivil(s,m.characterId())))return "共享主劳动尚未释放，不能开始迁居";
   if(home.members().stream().anyMatch(m->com.jgeted.sagadyssey.social.combat.NaturalConflictData.engaged(s,m.characterId())))return "先收尾现有机构行动";var region=NaturalVillageEconomyData.existing(s);if(region==null||region.row(from.buildingKey())==null||region.row(to.buildingKey())==null)return "本版只接入已登记的有限区域";
   if(moves.containsKey(home.id()))return "本户已有迁移记录";if(moves.values().stream().anyMatch(t->!t.getStringOr("State", "").equals("DONE")))return "本版同一时刻只支持一户迁移";
   if(!Objects.equals(home.settlementId(),from.settlementId())||!Objects.equals(home.sharedStorage(),NaturalVillageLayout.at(from,NaturalVillageLayout.PANTRY))||home.members().size()!=3||!from.dimension().equals(to.dimension())||from.settlementId().equals(to.settlementId())||from.buildingOrigin().distSqr(to.buildingOrigin())>1024*1024)return "迁移对象不在本版范围";
@@ -70,7 +71,7 @@ public final class NaturalHouseholdMigrationData extends NbtSavedData {
   flows.removePolicy("natural-diet:"+home.id());for(var need:NeedRequestData.get(s).requests())if(need.key().requester().equals(home.id())&&!need.status().terminal()&&need.reserved()==0&&need.inTransit()==0)NeedRequestData.get(s).transition(need.id(),NeedRequestStatus.CANCELLED,s.overworld().getGameTime(),"家庭迁移，旧住址不再请求新增补货");
   moves.put(home.id(),t);for(int i=0;i<3;i++)NpcBrainRuntime.cancel(actor(s,from,i),PlanCancellationReason.AUTHORIZED_COMMAND,"家庭迁移接续，已确认没有未了运输");setDirty();return "ACCEPTED";
  }
- public static boolean tickActor(NpcBase n){if(com.jgeted.sagadyssey.social.growth.SettlementDevelopmentData.travel(n))return true;var s=MinecraftApi.server(n);var d=existing(s);var t=d==null?null:d.move(n.getCharacterId(),s);if(t==null||t.getStringOr("State", "").equals("DONE"))return false;if(t.getStringOr("State", "").equals("REVIEW")){n.getNavigation().stop();return true;}
+ public static boolean tickActor(NpcBase n){if(com.jgeted.sagadyssey.social.work.WorkCommitmentRuntime.blocksCivil(n))return false;if(com.jgeted.sagadyssey.social.growth.SettlementDevelopmentData.travel(n))return true;var s=n.getServer();var d=existing(s);var t=d==null?null:d.move(n.getCharacterId(),s);if(t==null||t.getStringOr("State", "").equals("DONE"))return false;if(t.getStringOr("State", "").equals("REVIEW")){n.getNavigation().stop();return true;}
   var to=destination(t);var l=SupplyFlowService.level(s,to.dimension());var target=NaturalVillageLayout.at(to,NaturalVillageLayout.ARRIVAL_PANTRY);
   if(!n.isAlive()||n.getTarget()!=null||n.getCommand()!=NpcCommand.WORK){n.getNavigation().stop();return true;}
   if(n.blockPosition().distSqr(target)<49){n.getNavigation().stop();return true;}

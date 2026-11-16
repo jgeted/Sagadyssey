@@ -58,6 +58,7 @@ public final class NpcEatGoal extends Goal {
     public boolean canUse() {
         clearTarget();
         if (!(npc.level() instanceof ServerLevel level) || !npc.isAlive() || npc.isSleeping()
+                || com.jgeted.sagadyssey.social.work.ServiceProvisionRuntime.ownsNeeds(npc)
                 || com.jgeted.sagadyssey.npc.brain.execution.NpcBrainRuntime.isPlanned(npc)
                 || npc.getTarget() != null || (npc.tickCount - npc.getId()) % 40 != 0) return false;
         NpcLifeData data = NpcLifeData.get(level.getServer());
@@ -114,6 +115,7 @@ public final class NpcEatGoal extends Goal {
     @Override
     public boolean canContinueToUse() {
         return !finished && source != null && npc.isAlive() && npc.getTarget() == null
+                && !com.jgeted.sagadyssey.social.work.ServiceProvisionRuntime.ownsNeeds(npc)
                 && !com.jgeted.sagadyssey.npc.brain.execution.NpcBrainRuntime.isPlanned(npc);
     }
 

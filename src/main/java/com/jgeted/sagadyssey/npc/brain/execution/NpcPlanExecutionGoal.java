@@ -55,6 +55,7 @@ public final class NpcPlanExecutionGoal extends Goal {
 
     private boolean shouldRun() {
         return !npc.level().isClientSide()
+                && !NpcPrimaryWorkRuntime.reserved(npc)
                 && NpcBrainRuntime.isPlanned(npc)
                 && (NpcBrainRuntime.data(MinecraftApi.server(npc)).active(npc.getUUID()).isPresent()
                 || urgentHunger()

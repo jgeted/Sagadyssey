@@ -20,6 +20,9 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.Set;
+import java.util.HashMap;
+import java.util.LinkedHashSet;
 
 /** Durable authority source. Legacy entity owner fields are only a compatibility projection. */
 public final class ServiceRelationshipData extends NbtSavedData {
@@ -29,6 +32,7 @@ public final class ServiceRelationshipData extends NbtSavedData {
             new Factory<>(ServiceRelationshipData::new, ServiceRelationshipData::load);
 
     private final Map<UUID, ServiceRelationship> relationships = new LinkedHashMap<>();
+    private final Map<UUID, Set<UUID>> byAgent = new HashMap<>();
     private final Deque<ServiceAuthorityAudit> audits = new ArrayDeque<>();
 
     public static ServiceRelationshipData get(MinecraftServer server) {
@@ -38,35 +42,89 @@ public final class ServiceRelationshipData extends NbtSavedData {
     public Collection<ServiceRelationship> relationships() {
         return List.copyOf(relationships.values());
     }
+    @Nullable public ServiceRelationship relationship(UUID id) { return relationships.get(id); }
+    public static final String OFFICE_ALLOWANCE_PREFIX="sagadyssey:office_allowance/v1/";
+    /** Accepted supplementary payment terms. Grants no work, command, stock access or fiscal authority. */
+    public ServiceRelationship recordAcceptedOfficeAllowance(UUID id,UUID principal,UUID agent,UUID parent,long parentRevision,int daily,long startsAt,long endsAt,long now){
+        var source=relationships.get(parent);
+        if(daily<1||daily>16||startsAt>now||endsAt<=startsAt||endsAt-startsAt>30L*24000||source==null||source.revision()!=parentRevision||!source.activeAt(now)||startsAt<source.startedAt()||!source.principalId().equals(principal)||!source.agentId().equals(agent)||source.endsAt()!=null&&endsAt>source.endsAt())throw new IllegalArgumentException("current accepted parent payment agreement required");
+        var description=OFFICE_ALLOWANCE_PREFIX+parent+"/"+id;
+        var created=new ServiceRelationship(id,principal,agent,ServiceBasis.INSTITUTIONAL_OFFICE,Set.of(AuthorityScope.RECEIVE_SERVICE_ALLOWANCE),List.of(new ServiceObligation(ObligationParty.PRINCIPAL,"office_allowance_daily",description,daily,"minecraft:emerald",Math.min(endsAt,startsAt+24000),ObligationStatus.PENDING)),new ServiceLimits(source.limits().workplaceSettlementId(),source.limits().dimension(),false,false),ServiceStatus.ACTIVE,startsAt,endsAt,0,description);
+        var old=relationships.get(id);if(old!=null){if(!old.equals(created))throw new IllegalStateException("allowance agreement identity occupied");return old;}
+        if(relationships.size()>=16384)throw new IllegalStateException("service relationship capacity");insert(created);setDirty();return created;
+    }
+    /** Ending accrual preserves the principal's historical payment obligation and its exact stopping time. */
+    public ServiceRelationship stopOfficeAllowance(UUID id,long at){
+        var old=relationships.get(id);if(old==null||old.basis()!=ServiceBasis.INSTITUTIONAL_OFFICE||!old.scopes().equals(Set.of(AuthorityScope.RECEIVE_SERVICE_ALLOWANCE))||!old.statusReason().startsWith(OFFICE_ALLOWANCE_PREFIX)||at<old.startedAt()||old.endsAt()==null)throw new IllegalArgumentException("original allowance agreement required");
+        if(!old.status().grantsAuthority())return old;
+        if(at>old.endsAt())throw new IllegalArgumentException("allowance stop exceeds original term");
+        var stopped=old.withStatus(ServiceStatus.CANCELLED,old.statusReason()+";accrual_stopped",at);relationships.put(id,stopped);setDirty();return stopped;
+    }
+    /** Indexed read, without audit writes or allocating a whole-world relationship snapshot. */
+    public boolean permits(UUID principal,UUID agent,Set<AuthorityScope> scopes,boolean dangerous,String dimension,UUID workplace,long now) {
+        for (UUID id : byAgent.getOrDefault(agent, Set.of())) {
+            if (permits(relationships.get(id), principal, agent, scopes, dangerous, dimension, workplace, now)) return true;
+        }
+        return false;
+    }
+    public static boolean permits(ServiceRelationship r,UUID principal,UUID agent,Set<AuthorityScope> scopes,boolean dangerous,String dimension,UUID workplace,long now) {
+        return r!=null&&r.principalId().equals(principal)&&r.agentId().equals(agent)&&r.activeAt(now)&&r.scopes().containsAll(scopes)
+                &&(!dangerous||r.limits().dangerousOrdersAllowed())&&(r.limits().dimension().isBlank()||r.limits().dimension().equals(dimension))
+                &&(r.limits().workplaceSettlementId()==null||r.limits().workplaceSettlementId().equals(workplace));
+    }
+    /** Trusted accepted-proposal writer. Adds one bounded delegation; ordinary employment and private title remain separate. Historical/revoked IDs never reactivate. */
+    public ServiceRelationship acceptRiskDelegation(UUID id,UUID principal,UUID agent,UUID parent,long parentRevision,Set<AuthorityScope> scopes,
+            ServiceLimits limits,long now,long endsAt,com.jgeted.sagadyssey.social.life.NpcAgencyDecision.ServiceOfferDecision decision) {
+        var old=relationships.get(id);if(old!=null){if(!old.principalId().equals(principal)||!old.agentId().equals(agent)||old.basis()!=ServiceBasis.TEMPORARY_DELEGATION||!old.scopes().equals(scopes)||!old.limits().equals(limits)||!java.util.Objects.equals(old.endsAt(),endsAt))throw new IllegalStateException("delegation identity conflict");return old;}
+        var source=relationships.get(parent);
+        if(!decision.accepted()||source==null||source.revision()!=parentRevision||!source.activeAt(now)||!source.principalId().equals(principal)||!source.agentId().equals(agent)
+                ||!source.scopes().containsAll(scopes)||!limits.dangerousOrdersAllowed()||limits.privateInventoryAccess()||limits.dimension().isBlank()||endsAt<=now
+                ||!source.limits().dimension().isBlank()&&!source.limits().dimension().equals(limits.dimension())
+                ||!java.util.Objects.equals(source.limits().workplaceSettlementId(),limits.workplaceSettlementId()))throw new IllegalArgumentException("accepted current parent and scoped risk agreement required");
+        if(relationships.size()>=16384)throw new IllegalStateException("service relationship capacity");
+        var created=new ServiceRelationship(id,principal,agent,ServiceBasis.TEMPORARY_DELEGATION,scopes,List.of(),limits,ServiceStatus.ACTIVE,now,endsAt,0,"明确接受的限定职责提议 "+id);
+        insert(created);setDirty();return created;
+    }
+    public boolean endDelegation(UUID id,UUID principal,UUID agent,String reason,long now) {
+        var r=relationships.get(id);if(r==null)return false;
+        if(r.basis()!=ServiceBasis.TEMPORARY_DELEGATION||!r.principalId().equals(principal)||!r.agentId().equals(agent))throw new IllegalArgumentException("foreign delegation");
+        if(!r.status().grantsAuthority())return true;relationships.put(id,r.withStatus(ServiceStatus.CANCELLED,reason,now));setDirty();return true;
+    }
+    private void insert(ServiceRelationship value) { relationships.put(value.id(),value);byAgent.computeIfAbsent(value.agentId(),ignored->new LinkedHashSet<>()).add(value.id()); }
 
     public List<ServiceAuthorityAudit> audits() { return List.copyOf(audits); }
 
     public List<ServiceRelationship> activeForAgent(UUID agentId, long gameTime) {
-        return relationships.values().stream().filter(relationship -> relationship.agentId().equals(agentId)
+        return byAgent.getOrDefault(agentId,Set.of()).stream().map(relationships::get).filter(relationship -> relationship.agentId().equals(agentId)
                         && relationship.activeAt(gameTime))
                 .sorted(Comparator.comparingLong(ServiceRelationship::startedAt).reversed()).toList();
     }
 
     public boolean hasHistory(UUID agentId) {
-        return relationships.values().stream().anyMatch(value -> value.agentId().equals(agentId));
+        return byAgent.containsKey(agentId);
     }
 
     public boolean hasActiveBetween(UUID principalId, UUID agentId, long gameTime) {
-        return relationships.values().stream().anyMatch(value -> value.principalId().equals(principalId)
-                && value.agentId().equals(agentId) && value.activeAt(gameTime));
+        for (UUID id : byAgent.getOrDefault(agentId, Set.of())) {
+            var relationship = relationships.get(id);
+            if (relationship.principalId().equals(principalId) && relationship.activeAt(gameTime)) return true;
+        }
+        return false;
     }
 
     public boolean hasScope(UUID principalId, UUID agentId, AuthorityScope scope, long gameTime) {
-        return relationships.values().stream().anyMatch(value -> value.principalId().equals(principalId)
-                && value.agentId().equals(agentId) && value.activeAt(gameTime)
-                && value.scopes().contains(scope));
+        for (UUID id : byAgent.getOrDefault(agentId, Set.of())) {
+            var relationship = relationships.get(id);
+            if (relationship.principalId().equals(principalId) && relationship.activeAt(gameTime)
+                    && relationship.scopes().contains(scope)) return true;
+        }
+        return false;
     }
 
     /** One-time import of an old owner link. It grants old commands, never private inventory title. */
     public ServiceRelationship ensureLegacyRecruitment(UUID principalId, UUID agentId, long gameTime) {
-        ServiceRelationship existing = relationships.values().stream()
-                .filter(value -> value.principalId().equals(principalId)
-                        && value.agentId().equals(agentId) && value.status().grantsAuthority())
+        ServiceRelationship existing = byAgent.getOrDefault(agentId, Set.of()).stream().map(relationships::get)
+                .filter(value -> value.principalId().equals(principalId) && value.status().grantsAuthority())
                 .findFirst().orElse(null);
         if (existing != null) return existing;
         UUID id = named("legacy:" + principalId + ':' + agentId);
@@ -82,7 +140,7 @@ public final class ServiceRelationshipData extends NbtSavedData {
                                 Long.MAX_VALUE, ObligationStatus.PENDING)),
                 ServiceLimits.ordinary(), ServiceStatus.ACTIVE, gameTime, null, 0L,
                 "由旧版 owner 字段迁移；只保留旧命令范围");
-        relationships.put(id, created);
+        insert(created);
         setDirty();
         return created;
     }
@@ -102,7 +160,7 @@ public final class ServiceRelationshipData extends NbtSavedData {
                                 ObligationStatus.PENDING)),
                 ServiceLimits.ordinary(), ServiceStatus.ACTIVE, gameTime, null, 0L,
                 "双方以签约礼建立可解除的服务关系");
-        relationships.put(id, created);
+        insert(created);
         setDirty();
         return created;
     }
@@ -128,7 +186,7 @@ public final class ServiceRelationshipData extends NbtSavedData {
                 new ServiceLimits(contract.settlementId(), dimension, false, false),
                 ServiceStatus.ACTIVE, contract.startedAt(), contract.endsAt(), 0L,
                 "有期限实物工资合同");
-        relationships.put(id, created);
+        insert(created);
         setDirty();
         return created;
     }
@@ -153,9 +211,9 @@ public final class ServiceRelationshipData extends NbtSavedData {
     public boolean endActive(UUID principalId, UUID agentId, ServiceStatus status,
                              String reason, long gameTime) {
         boolean changed = false;
-        for (ServiceRelationship relationship : List.copyOf(relationships.values())) {
+        for (UUID id : byAgent.getOrDefault(agentId, Set.of())) {
+            var relationship = relationships.get(id);
             if (!relationship.principalId().equals(principalId)
-                    || !relationship.agentId().equals(agentId)
                     || !relationship.activeAt(gameTime)) continue;
             relationships.put(relationship.id(), relationship.withStatus(status, reason, gameTime));
             changed = true;
@@ -166,8 +224,9 @@ public final class ServiceRelationshipData extends NbtSavedData {
 
     public void endActiveForAgent(UUID agentId, ServiceStatus status, String reason, long gameTime) {
         boolean changed = false;
-        for (ServiceRelationship relationship : List.copyOf(relationships.values())) {
-            if (!relationship.agentId().equals(agentId) || !relationship.activeAt(gameTime)) continue;
+        for (UUID id : byAgent.getOrDefault(agentId, Set.of())) {
+            var relationship = relationships.get(id);
+            if (!relationship.activeAt(gameTime)) continue;
             relationships.put(relationship.id(), relationship.withStatus(status, reason, gameTime));
             changed = true;
         }
@@ -188,14 +247,13 @@ public final class ServiceRelationshipData extends NbtSavedData {
 
     public ServiceAuthorityVerdict authorize(UUID principalId, UUID agentId, AuthorityScope scope,
                                              boolean dangerous, long gameTime) {
-        List<ServiceRelationship> active = relationships.values().stream()
-                .filter(value -> value.principalId().equals(principalId)
-                        && value.agentId().equals(agentId) && value.activeAt(gameTime)).toList();
+        var candidates = byAgent.getOrDefault(agentId, Set.of());
+        List<ServiceRelationship> active = candidates.stream().map(relationships::get)
+                .filter(value -> value.principalId().equals(principalId) && value.activeAt(gameTime)).toList();
         ServiceAuthorityVerdict verdict;
         if (active.isEmpty()) {
-            String priorReason = relationships.values().stream()
-                    .filter(value -> value.principalId().equals(principalId)
-                            && value.agentId().equals(agentId))
+            String priorReason = candidates.stream().map(relationships::get)
+                    .filter(value -> value.principalId().equals(principalId))
                     .max(Comparator.comparingLong(ServiceRelationship::startedAt))
                     .map(ServiceRelationship::statusReason).orElse("双方没有生效中的服务关系");
             verdict = new ServiceAuthorityVerdict(ServiceAuthorityVerdict.Status.DENY,
@@ -224,16 +282,16 @@ public final class ServiceRelationshipData extends NbtSavedData {
     }
 
     private void putLoaded(ServiceRelationship relationship) {
-        if (relationships.putIfAbsent(relationship.id(), relationship) != null)
+        if (relationships.containsKey(relationship.id()))
             throw new IllegalArgumentException("Duplicate service relationship: " + relationship.id());
+        insert(relationship);
     }
     private void putLoaded(ServiceAuthorityAudit audit) { audits.addLast(audit); }
 
     @Nullable
     private ServiceRelationship latestContract(UUID agentId, UUID principalId) {
-        return relationships.values().stream()
-                .filter(value -> value.agentId().equals(agentId)
-                        && value.principalId().equals(principalId)
+        return byAgent.getOrDefault(agentId, Set.of()).stream().map(relationships::get)
+                .filter(value -> value.principalId().equals(principalId)
                         && value.basis() == ServiceBasis.WAGE_CONTRACT)
                 .max(Comparator.comparingLong(ServiceRelationship::startedAt)).orElse(null);
     }

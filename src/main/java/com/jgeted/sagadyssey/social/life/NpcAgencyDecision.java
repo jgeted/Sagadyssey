@@ -20,6 +20,19 @@ public final class NpcAgencyDecision {
     }
 
     private NpcAgencyDecision() { }
+    public record ServiceOfferDecision(boolean accepted,double probability,String reason) {}
+    /** Read-only evaluation of an explicit service proposal. The calling workflow must durably record the sampled decision before granting authority. */
+    public static ServiceOfferDecision evaluateServiceOffer(NpcBase npc,UUID principal,double benefit,double risk,double draw) {
+        if(!(npc.level() instanceof ServerLevel level)||!npc.isAlive()||principal==null||!Double.isFinite(benefit)||!Double.isFinite(risk)||!Double.isFinite(draw)||draw<0||draw>=1||benefit<0||benefit>256||risk<0||risk>256)throw new IllegalArgumentException("invalid service offer evaluation");
+        var data=NpcLifeData.get(level.getServer());var life=data.record(npc.getCharacterId());
+        if(life==null)return new ServiceOfferDecision(false,0,"没有可核对的原人物生活记录");
+        double utility=benefit+needBenefit(npc,life,data,Action.PROTECT)+personalityBenefit(life,Action.PROTECT)
+                +relationshipBenefit(life,Action.PROTECT,principal)+valuesBenefit(npc,life,Action.PROTECT)
+                +memoryBenefit(life,Action.PROTECT,principal,level.getGameTime())-risk-18*Math.log1p(life.fatigue()/180D);
+        double probability=Math.clamp(1/(1+Math.exp(-(utility-52)/12)),.04,.97);
+        boolean accepted=draw<probability;
+        return new ServiceOfferDecision(accepted,probability,accepted?"愿按本次约定承担危险职责":"暂不愿按本次条件承担危险职责");
+    }
 
     public static boolean choose(NpcBase npc, Action action, double situationBenefit,
                                  double risk, boolean urgent) {

@@ -1,0 +1,64 @@
+gradle.beforeProject { project ->
+    if (project == project.rootProject) {
+        project.layout.buildDirectory.set(project.file('run/war-foreground/build'))
+    }
+}
+
+gradle.rootProject { project ->
+    project.afterEvaluate {
+        def label = project.findProperty('warForegroundRun')
+        def players = project.findProperty('warForegroundPlayers')
+        def port = project.findProperty('warForegroundPort')
+        if (!(label ==~ /[a-zA-Z0-9-]{1,55}/) || !(players in ['A', 'B', 'C', 'AB', 'AC', 'BC', 'ABC', 'server'])
+                || !(port ==~ /[0-9]{1,5}/) || port.toInteger() < 1024 || port.toInteger() > 65535) {
+            throw new GradleException('Supply an isolated foreground run, player set and loopback port.')
+        }
+
+        def run = project.file("run/war-foreground/sessions/${label}")
+        def roles = ['Server'] + (players == 'server' ? [] : players.collect { it.toString() })
+        roles.each { role ->
+            def directory = new File(run, role)
+            project.neoForge.runs.create("warForeground${role}") {
+                gameDirectory = directory
+                logLevel = org.slf4j.event.Level.INFO
+                systemProperty 'sagadyssey.society.phase', 'disabled'
+                if (role == 'Server') {
+                    server()
+                    programArgument '--nogui'
+                    jvmArguments.addAll(['-XX:ActiveProcessorCount=2', '-Xms512m', '-Xmx2560m'])
+                } else {
+                    client()
+                    programArguments.addAll(['--username', "Campaign${role}".toString(), '--width', '960',
+                                             '--height', '640', '--quickPlayMultiplayer', "127.0.0.1:${port}".toString()])
+                    jvmArguments.addAll(['-XX:ActiveProcessorCount=2', '-Xms256m', '-Xmx1792m'])
+                }
+            }
+        }
+
+        project.tasks.register('prepareWarForeground') {
+            dependsOn('classes')
+            dependsOn(roles.collect { "prepareWarForeground${it}Run" })
+            doLast {
+                // Use the ModDevGradle launch configuration so this entry follows the project's NeoForge version.
+                def launcherArg = { String arg -> '"' + arg.replace('\\', '\\\\').replace('"', '\\"') + '"' }
+                def argFile = { String arg -> new File(arg.substring(1).replace('\\\\', '\\')) }
+                roles.each { role ->
+                    def task = project.tasks.named("runWarForeground${role}").get()
+                    def programArgs = task.args
+                    if (programArgs.size() != 1 || !programArgs[0].startsWith('@')) {
+                        throw new GradleException("Expected ModDevGradle program arguments file for ${role}.")
+                    }
+                    def directory = new File(run, role)
+                    def vmArgs = task.allJvmArgs.collect { arg ->
+                        arg.startsWith('@') ? argFile(arg).getText('UTF-8') : launcherArg(arg)
+                    }
+                    vmArgs += ['-cp', launcherArg(task.classpathProvider.files.collect { it.absolutePath }.join(File.pathSeparator))]
+                    new File(directory, 'launcher-vm.txt').setText(vmArgs.join('\n') + '\n', 'UTF-8')
+                    new File(directory, 'launcher-program.txt').bytes = argFile(programArgs[0]).bytes
+                    def manifest = [mainClass: task.mainClass.get(), environment: task.environmentProperty.get()]
+                    new File(directory, 'launcher.json').setText(groovy.json.JsonOutput.toJson(manifest), 'UTF-8')
+                }
+            }
+        }
+    }
+}
